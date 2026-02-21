@@ -11,18 +11,16 @@ app.use(express.static('public'));
 const players = {}; 
 const serverStartTime = Date.now(); 
 
-// MEMORIA DEL SERVIDOR: Guarda los cambios del mundo para los que entran tarde
 const worldState = { 
     blocks: [], 
     droppedItems: [], 
     removedTrees: [], 
-    removedRocks: [] 
+    removedRocks: [],
+    stumpedTrees: [] // NUEVO: Memoria de tocones
 };
 
 io.on('connection', (socket) => {
     socket.emit('timeSync', Date.now() - serverStartTime);
-    
-    // Al entrar, enviamos cómo quedó el mundo
     socket.emit('initWorldState', worldState);
 
     socket.on('joinGame', (playerData) => {
@@ -38,13 +36,17 @@ io.on('connection', (socket) => {
     });
 
     socket.on('worldUpdate', (data) => {
-        // Guardar cambios en la memoria del servidor
         if (data.action === 'place_block') { worldState.blocks.push(data.payload.block); }
         if (data.action === 'remove_old_bed') { worldState.blocks = worldState.blocks.filter(b => b.type !== 'bed' || b.owner !== data.payload.owner); }
         if (data.action === 'hit_block' && data.payload.destroyed) { worldState.blocks = worldState.blocks.filter(b => !(b.x === data.payload.x && b.y === data.payload.y)); }
         if (data.action === 'interact_door') { let d = worldState.blocks.find(b => b.x === data.payload.x && b.y === data.payload.y); if(d) d.open = !d.open; }
         if (data.action === 'update_box' || data.action === 'update_campfire') { let b = worldState.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y); if (b) Object.assign(b, data.payload); }
-        if (data.action === 'destroy_tree') { worldState.removedTrees.push(data.payload.x); }
+        
+        // ECOLOGÍA DE ÁRBOLES
+        if (data.action === 'stump_tree') { worldState.stumpedTrees.push(data.payload.x); }
+        if (data.action === 'destroy_tree') { worldState.removedTrees.push(data.payload.x); worldState.stumpedTrees = worldState.stumpedTrees.filter(x => x !== data.payload.x); }
+        if (data.action === 'grow_tree') { worldState.stumpedTrees = worldState.stumpedTrees.filter(x => x !== data.payload.x); }
+        
         if (data.action === 'destroy_rock') { worldState.removedRocks.push(data.payload.x); }
         if (data.action === 'destroy_grave') { worldState.blocks = worldState.blocks.filter(b => b.id !== data.payload.id); }
 

@@ -9,12 +9,12 @@ window.lightCtx = window.lightCanvas.getContext('2d');
 
 window.socket = null; window.otherPlayers = {}; 
 
-window.game = { gravity: 0.5, blockSize: 30, groundLevel: 660, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false };
+window.game = { gravity: 0.5, blockSize: 30, groundLevel: 660, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false };
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 
 window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
-window.removedTrees = []; window.removedRocks = []; // Memoria de destrucción
+window.removedTrees = []; window.removedRocks = []; window.stumpedTrees = [];
 window.currentOpenBox = null; window.currentCampfire = null;
 
 window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Mart.' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };
