@@ -6,54 +6,17 @@
     <title>Survival RPG - Modular</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* NUEVO: ESTILOS PARA LOS 10 SLOTS Y TOOLTIPS */
         #inventory-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 45px);
-            gap: 8px;
-            justify-content: center;
-            margin-bottom: 10px;
+            display: grid; grid-template-columns: repeat(5, 45px); gap: 8px; justify-content: center; margin-bottom: 10px;
         }
         .inv-slot {
-            position: relative;
-            width: 45px;
-            height: 45px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
+            position: relative; width: 45px; height: 45px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer;
         }
-        .inv-slot:hover .custom-tooltip {
-            display: block;
-        }
+        .inv-slot:hover .custom-tooltip { display: block; }
         .custom-tooltip {
-            display: none;
-            position: absolute;
-            bottom: 110%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.9);
-            color: #FFD700;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            z-index: 100;
-            pointer-events: none;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2);
         }
-        .inv-amount {
-            position: absolute;
-            bottom: 2px;
-            right: 4px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            color: white;
-            text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
-        }
+        .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
     </style>
 </head>
 <body>
@@ -62,25 +25,14 @@
             <div class="menu-box glass-panel">
                 <h1 class="menu-title">SURVIVAL RPG</h1>
                 <p class="menu-subtitle">Alpha Multijugador</p>
-
-                <input type="text" id="player-name" class="menu-input" placeholder="Tu Nombre (ej: El Juancho)">
-
-                <button id="btn-single" class="action-btn" style="padding: 10px; margin-bottom: 10px;">🕹️ Jugar Solo (Offline)</button>
-
-                <div style="background: rgba(76, 175, 80, 0.1); padding: 10px; border-radius: 8px; border: 1px solid var(--accent-green); margin-bottom: 15px;">
-                    <button id="btn-online" class="action-btn" style="margin-bottom: 8px;">🌐 Jugar Online (Global)</button>
-                    <div id="online-url-area" style="display:none; font-size: 0.75rem; color: #aaa;">
-                        Link para amigos: <br>
-                        <code id="current-url" style="color: var(--accent-green); display:block; margin-top:4px; background: #000; padding: 4px;">cargando...</code>
-                    </div>
-                </div>
-
-                <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                    <button id="btn-host" class="action-btn" style="background: #e67e22; margin-bottom: 5px;">🏠 Crear Servidor Local (LAN)</button>
-                    <div style="display:flex; gap:10px;">
-                        <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0; flex: 2; padding: 8px;" placeholder="IP del Amigo">
-                        <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
-                    </div>
+                <input type="text" id="player-name" class="menu-input" placeholder="Tu Nombre (ej: El Juancho)" maxlength="15">
+                
+                <button id="btn-single" class="action-btn" style="padding: 12px; font-size: 1.1rem; margin-bottom: 15px;">Jugar Solo</button>
+                <div style="border-top: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;"></div>
+                <button id="btn-host" class="action-btn" style="background: #e67e22; padding: 10px; margin-bottom: 5px;">Crear Servidor Local</button>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0; flex: 2; padding: 8px;" placeholder="IP Amigo">
+                    <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
                 </div>
 
                 <div id="server-list" style="margin-top: 15px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); text-align: left;">

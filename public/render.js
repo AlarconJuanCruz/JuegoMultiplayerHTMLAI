@@ -31,7 +31,6 @@ window.drawCharacter = function(charData, isLocal) {
         let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
         if (Math.abs(dy) > 0.5) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
         isJumping = charData.isJumpingFrames > 0; isRunning = charData.isMovingFrames > 0 && !isJumping;
-        // FIX 2: La velocidad de interpolación se redujo un 66% (de 0.15 a 0.05) para ser realista
         if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.05; 
         else charData.renderAnimTime = 0;
     }
@@ -94,11 +93,8 @@ window.draw = function() {
     let hourFloat = (totalFrames / 3600) % 24; 
     let darkness = (Math.cos((hourFloat / 24) * Math.PI * 2) + 1) / 2;
     
-    // FIX 3: Colores oscuros y grises si hay Lluvia
     let r = Math.floor(135 - (130 * darkness)); let g = Math.floor(206 - (200 * darkness)); let b = Math.floor(235 - (215 * darkness)); 
-    if (window.game.isRaining) {
-        r = Math.max(30, r - 60); g = Math.max(40, g - 60); b = Math.max(50, b - 40);
-    }
+    if (window.game.isRaining) { r = Math.max(30, r - 60); g = Math.max(40, g - 60); b = Math.max(50, b - 40); }
     
     window.ctx.fillStyle = `rgb(${r},${g},${b})`; window.ctx.fillRect(0, 0, window.canvas.width, window.canvas.height);
     window.ctx.save(); 
@@ -121,20 +117,10 @@ window.draw = function() {
         window.ctx.beginPath(); window.ctx.arc(c.x, c.y, 30*c.s, 0, Math.PI*2); window.ctx.arc(c.x + 25*c.s, c.y - 15*c.s, 35*c.s, 0, Math.PI*2); window.ctx.arc(c.x + 50*c.s, c.y, 25*c.s, 0, Math.PI*2); window.ctx.fill();
     });
 
-    // FIX 3: Sistema de Lluvia y Rayos
     if (window.game.isRaining) {
-        window.ctx.save();
-        window.ctx.strokeStyle = 'rgba(150, 180, 220, 0.5)';
-        window.ctx.lineWidth = 1;
-        window.ctx.beginPath();
-        for(let i=0; i<300; i++) {
-            let rx = (i * 137 + window.game.frameCount * 8) % window.canvas.width;
-            let ry = (i * 93 + window.game.frameCount * 25) % window.canvas.height;
-            window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 3, ry + 25);
-        }
-        window.ctx.stroke();
-        window.ctx.restore();
-
+        window.ctx.save(); window.ctx.strokeStyle = 'rgba(150, 180, 220, 0.5)'; window.ctx.lineWidth = 1; window.ctx.beginPath();
+        for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window.canvas.width; let ry = (i * 93 + window.game.frameCount * 25) % window.canvas.height; window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 3, ry + 25); }
+        window.ctx.stroke(); window.ctx.restore();
         if (Math.random() < 0.005) { window.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; window.ctx.fillRect(0, 0, window.canvas.width, window.canvas.height); }
     }
 
@@ -167,23 +153,16 @@ window.draw = function() {
 
     window.trees.forEach(t => {
         if (t.x + t.width > window.camera.x && t.x < window.camera.x + window.canvas.width) {
-            let isHitColor = t.isHit ? '#ff4444' : null; 
-            window.ctx.save(); 
-            window.ctx.translate(t.x + t.width/2, t.y + t.height); 
-            
+            let isHitColor = t.isHit ? '#ff4444' : null; window.ctx.save(); window.ctx.translate(t.x + t.width/2, t.y + t.height); 
             let hw = t.width / 2; let th = t.height; 
-
-            // FIX 2: RENDERIZADO DEL TOCÓN (STUMP)
             if (t.isStump) {
-                let stumpH = 15 + t.width * 0.2;
-                let trunkGrad = window.ctx.createLinearGradient(-hw, 0, hw, 0); 
+                let stumpH = 15 + t.width * 0.2; let trunkGrad = window.ctx.createLinearGradient(-hw, 0, hw, 0); 
                 trunkGrad.addColorStop(0, '#3E2723'); trunkGrad.addColorStop(1, '#5D4037');
                 window.ctx.fillStyle = isHitColor || trunkGrad; window.ctx.fillRect(-hw*0.6, -stumpH, hw*1.2, stumpH);
                 window.ctx.fillStyle = isHitColor || '#D2B48C'; window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.6, 3, 0, 0, Math.PI*2); window.ctx.fill();
                 if (t.hp < t.maxHp) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(-hw-5, -stumpH - 15, t.width + 10, 6); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -stumpH - 14, (t.hp / t.maxHp) * (t.width + 8), 4); }
-                window.ctx.restore(); return; // Si es tocón, terminamos aquí para no dibujar las hojas
+                window.ctx.restore(); return; 
             }
-            
             if (t.type === 0) { 
                 let trunkGrad = window.ctx.createLinearGradient(-hw, 0, hw, 0); trunkGrad.addColorStop(0, '#3E2723'); trunkGrad.addColorStop(1, '#5D4037');
                 window.ctx.fillStyle = isHitColor || trunkGrad; window.ctx.fillRect(-hw*0.6, -th, hw*1.2, th); 
@@ -192,11 +171,8 @@ window.draw = function() {
             } else if (t.type === 1) { 
                 window.ctx.fillStyle = isHitColor || '#3E2723'; window.ctx.fillRect(-hw*0.5, -th, hw*1.0, th);
                 window.ctx.fillStyle = isHitColor || '#1B5E20'; 
-                // FIX 1: HOJAS DE PINO ADAPTADAS A LA ALTURA REAL
                 let leafH = th * 0.75; let stepY = leafH / 5;
-                for(let i=0; i<5; i++) { 
-                    window.ctx.beginPath(); window.ctx.moveTo(0, -th + (i*stepY)); window.ctx.lineTo(-t.width*1.4 + (i*6), -th + stepY*1.5 + (i*stepY)); window.ctx.lineTo(t.width*1.4 - (i*6), -th + stepY*1.5 + (i*stepY)); window.ctx.fill(); 
-                }
+                for(let i=0; i<5; i++) { window.ctx.beginPath(); window.ctx.moveTo(0, -th + (i*stepY)); window.ctx.lineTo(-t.width*1.4 + (i*6), -th + stepY*1.5 + (i*stepY)); window.ctx.lineTo(t.width*1.4 - (i*6), -th + stepY*1.5 + (i*stepY)); window.ctx.fill(); }
             } else if (t.type === 2) { 
                 window.ctx.fillStyle = isHitColor || '#D7CCC8'; window.ctx.fillRect(-hw*0.6, -th, hw*1.2, th);
                 if(!t.isHit) { window.ctx.fillStyle = '#4E342E'; window.ctx.fillRect(-hw*0.6, -th*0.7, t.width*0.4, 3); window.ctx.fillRect(hw*0.2, -th*0.4, t.width*0.3, 4); }
@@ -270,13 +246,22 @@ window.draw = function() {
         }
     });
 
+    // FIX MODO CONSTRUCCIÓN (COLORES ROJO Y VERDE Y COLISIONES)
     if (window.player.placementMode && !window.player.isDead) {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
+        
+        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true);
+        let validColor = valid ? '#00FF00' : '#FF0000';
+        let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
+
         window.ctx.globalAlpha = 0.6;
         if (window.player.placementMode === 'boxes') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX + 2, gridY + 10, window.game.blockSize - 4, window.game.blockSize - 10); } 
         else if (window.player.placementMode === 'campfire_item') { window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(gridX + 2, gridY + 20, 26, 10); }
         else if (window.player.placementMode === 'bed_item') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX, gridY + 20, 30, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(gridX + 2, gridY + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(gridX + 12, gridY + 16, 18, 4); }
-        window.ctx.strokeStyle = '#FFD700'; window.ctx.lineWidth = 2; window.ctx.strokeRect(gridX, gridY, window.game.blockSize, window.game.blockSize); window.ctx.globalAlpha = 1.0;
+        
+        window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.strokeRect(gridX, gridY, window.game.blockSize, window.game.blockSize); 
+        window.ctx.fillStyle = validFill; window.ctx.fillRect(gridX, gridY, window.game.blockSize, window.game.blockSize);
+        window.ctx.globalAlpha = 1.0;
     }
 
     if (window.player.activeTool === 'hammer' && !window.player.isDead && !window.player.placementMode) {
@@ -284,8 +269,14 @@ window.draw = function() {
         const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoor = window.player.buildMode === 'door'; 
         const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize;
-        window.ctx.globalAlpha = 0.5; window.ctx.strokeStyle = '#00FF00'; window.ctx.lineWidth = 2; window.ctx.setLineDash([4, 2]);
+        
+        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true);
+        let validColor = valid ? '#00FF00' : '#FF0000';
+        let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
+
+        window.ctx.globalAlpha = 0.5; window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.setLineDash([4, 2]);
         window.ctx.strokeRect(gridX, gridY, window.game.blockSize, itemHeight);
+        window.ctx.fillStyle = validFill; window.ctx.fillRect(gridX, gridY, window.game.blockSize, itemHeight);
         window.ctx.setLineDash([]); window.ctx.globalAlpha = 1.0;
     }
 
