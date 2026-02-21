@@ -1,5 +1,25 @@
 // === ui.js - GESTIÓN DE INTERFAZ, MENÚS Y EVENTOS ===
 
+// --- NUEVOS EVENTOS PARA EL MODO ONLINE ---
+
+// Al hacer clic en Online, se conecta a la URL actual (donde está hosteado Render)
+window.getEl('btn-online').addEventListener('click', () => {
+    window.startGame(true); // Sin IP, para que use window.location.origin automáticamente
+});
+
+// Mostrar la URL actual para poder copiarla
+const currentUrlDisplay = window.getEl('current-url');
+const urlArea = window.getEl('online-url-area');
+
+if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // Si estamos en Render u otro hosting, mostramos el link
+    urlArea.style.display = 'block';
+    currentUrlDisplay.innerText = window.location.origin;
+} else {
+    // Si estamos en localhost, ocultamos la zona online porque no hay link global
+    urlArea.style.display = 'none';
+}
+
 // --- EVENTOS INICIALES ---
 window.getEl('btn-single').addEventListener('click', () => window.startGame(false));
 
