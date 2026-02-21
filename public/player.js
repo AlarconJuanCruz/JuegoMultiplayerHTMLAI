@@ -1,3 +1,5 @@
+// === player.js - LÓGICA DE RPG Y JUGADOR ===
+
 window.useTool = function() {
     if (window.player.activeTool === 'hand') return;
     window.player.toolHealth[window.player.activeTool]--;
@@ -55,7 +57,6 @@ window.damagePlayer = function(amount) {
         window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false;
         window.player.isCharging = false; window.player.isAiming = false;
         
-        // BUG 8 FIX: CREAR TUMBA CON INVENTARIO
         let graveId = 'g_' + Math.random().toString(36).substr(2, 9);
         let graveX = Math.floor((window.player.x + window.player.width/2) / window.game.blockSize) * window.game.blockSize;
         let grave = {
@@ -67,7 +68,6 @@ window.damagePlayer = function(amount) {
         window.blocks.push(grave);
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
-        // BUG 5 FIX: PIERDE ITEMS Y XP, PERO CONSERVA NIVEL Y STATS
         window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }; 
         window.player.xp = 0; 
         
