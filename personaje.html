@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personaje Animado 2D - Rigging Perfecto</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #34495e;
+            font-family: sans-serif;
+            color: white;
+        }
+
+        #instrucciones {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        /* Escenario */
+        #world {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        #floor {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 20vh;
+            background-color: #2c3e50;
+            border-top: 10px solid #27ae60;
+        }
+
+        /* --- ESTRUCTURA DEL RIG --- */
+        
+        #player-wrapper {
+            position: absolute;
+            bottom: 20vh;
+            left: 50vw;
+            width: 0; height: 0;
+        }
+
+        #player-rig {
+            position: relative;
+            transform-origin: bottom center;
+            transform: scale(1.6);
+        }
+
+        /* Envoltorio principal de las caderas (Raíz) */
+        .hips-wrapper {
+            position: absolute;
+            bottom: 65px; left: -12px;
+            width: 24px; height: 24px;
+        }
+
+        /* Envoltorio invisible del torso (Para girar cuerpo y brazos a la vez) */
+        .upper-body {
+            position: absolute;
+            bottom: 15px; left: -4px; 
+            width: 32px; height: 55px;
+            transform-origin: bottom center;
+            z-index: 3; /* El torso va por encima de la pierna trasera y detrás de la delantera */
+            transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+
+        /* Estilos visuales comunes (Las "piezas" de color) */
+        .part {
+            position: absolute;
+            background-color: #ecf0f1;
+            transform-origin: top center;
+            box-shadow: inset -3px -3px 8px rgba(0,0,0,0.15);
+            transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+
+        /* Extremidades traseras (Más oscuras) */
+        .back-limb { 
+            background-color: #95a5a6; 
+            box-shadow: inset -2px -2px 5px rgba(0,0,0,0.3); 
+        }
+
+        /* --- MEDIDAS Y Z-INDEX (El secreto de las capas) --- */
+        
+        /* Gráfico de la cadera */
+        .hips-graphic { width: 100%; height: 100%; border-radius: 50%; z-index: 2; }
+        
+        /* Gráfico del torso */
+        .torso-graphic { width: 100%; height: 100%; border-radius: 25px 25px 15px 15px; z-index: 2; }
+        
+        /* Cabeza */
+        .head { bottom: 50px; left: -9px; width: 50px; height: 52px; border-radius: 45% 55% 50% 50% / 50% 50% 45% 55%; transform-origin: bottom center; z-index: 3; }
+
+        /* Brazos y Piernas */
+        .arm { top: 5px; left: 8px; width: 14px; height: 38px; border-radius: 14px; }
+        .forearm { top: 32px; left: 1px; width: 12px; height: 38px; border-radius: 12px; }
+        .thigh { top: 15px; left: 3px; width: 18px; height: 44px; border-radius: 18px; }
+        .leg { top: 38px; left: 1px; width: 16px; height: 42px; border-radius: 16px; }
+
+        /* ORDENAMIENTO DE CAPAS (Z-INDEX) */
+        .thigh.back-limb { z-index: 1; } /* Al fondo del todo */
+        .thigh:not(.back-limb) { z-index: 4; } /* Al frente del todo */
+        
+        .arm.back-limb { z-index: 1; } /* Detrás del torso */
+        .arm:not(.back-limb) { z-index: 4; } /* Delante del torso */
+
+
+        /* ----- ANIMACIONES (Optimizadas) ----- */
+        
+        /* IDLE (Quieto) */
+        .idle .upper-body { animation: idle-torso 2.5s infinite ease-in-out; }
+        .idle .head { animation: idle-head 2.5s infinite ease-in-out -1s; }
+        .idle .arm { animation: idle-arm 2.5s infinite ease-in-out; }
+        .idle .arm.back-limb { animation-delay: -1.25s; } /* Fase invertida para el brazo trasero */
+        .idle .forearm { transform: rotate(-15deg); }
+        .idle .thigh { transform: rotate(0deg); }
+        
+        @keyframes idle-torso {
+            0%, 100% { transform: scaleY(1) rotate(1deg) translateY(0); }
+            50% { transform: scaleY(0.97) rotate(-1deg) translateY(2px); }
+        }
+        @keyframes idle-head {
+            0%, 100% { transform: rotate(-2deg); }
+            50% { transform: rotate(2deg); }
+        }
+        @keyframes idle-arm {
+            0%, 100% { transform: rotate(8deg); }
+            50% { transform: rotate(-4deg); }
+        }
+
+        /* RUN (Correr) */
+        .running .upper-body { transform: rotate(18deg) translateY(4px); }
+        .running .head { transform: rotate(-12deg); }
+        
+        .running .thigh { animation: run-thigh 0.5s infinite linear; }
+        .running .leg { animation: run-leg 0.5s infinite linear; }
+        .running .arm { animation: run-arm 0.5s infinite linear; }
+        .running .forearm { animation: run-forearm 0.5s infinite linear; }
+
+        /* Las extremidades traseras usan la misma animación, pero retrasadas medio ciclo */
+        .running .thigh.back-limb,
+        .running .leg.back-limb,
+        .running .arm.back-limb,
+        .running .forearm.back-limb {
+            animation-delay: -0.25s;
+        }
+
+        @keyframes run-thigh {
+            0% { transform: rotate(-50deg); }
+            50% { transform: rotate(60deg); }
+            100% { transform: rotate(-50deg); }
+        }
+        @keyframes run-leg {
+            0% { transform: rotate(0deg); }
+            30% { transform: rotate(80deg); } 
+            50% { transform: rotate(10deg); } 
+            80% { transform: rotate(0deg); } 
+            100% { transform: rotate(0deg); }
+        }
+        @keyframes run-arm {
+            0% { transform: rotate(60deg); }
+            50% { transform: rotate(-50deg); }
+            100% { transform: rotate(60deg); }
+        }
+        @keyframes run-forearm {
+            0% { transform: rotate(-90deg); }
+            50% { transform: rotate(-40deg); }
+            100% { transform: rotate(-90deg); }
+        }
+
+        /* JUMP (Saltar) */
+        .jumping .upper-body { transform: rotate(5deg) translateY(-5px); }
+        .jumping .head { transform: rotate(-15deg); }
+        
+        .jumping .thigh:not(.back-limb) { transform: rotate(-70deg); }
+        .jumping .leg:not(.back-limb) { transform: rotate(100deg); }
+        .jumping .thigh.back-limb { transform: rotate(20deg); }
+        .jumping .leg.back-limb { transform: rotate(40deg); }
+        
+        .jumping .arm:not(.back-limb) { transform: rotate(-130deg); }
+        .jumping .forearm:not(.back-limb) { transform: rotate(-30deg); }
+        .jumping .arm.back-limb { transform: rotate(45deg); }
+        .jumping .forearm.back-limb { transform: rotate(-90deg); }
+
+    </style>
+</head>
+<body>
+
+    <div id="instrucciones">
+        <h3>Controles V3 (Render Corregido)</h3>
+        <p>⬅️ ➡️ : Correr</p>
+        <p>Espacio : Saltar</p>
+    </div>
+
+    <div id="world">
+        <div id="floor"></div>
+        
+        <div id="player-wrapper">
+            <div id="player-rig" class="idle">
+                
+                <div class="hips-wrapper">
+                    
+                    <div class="thigh back-limb part">
+                        <div class="leg back-limb part"></div>
+                    </div>
+
+                    <div class="hips-graphic part"></div>
+
+                    <div class="upper-body">
+                        <div class="arm back-limb part">
+                            <div class="forearm back-limb part"></div>
+                        </div>
+                        
+                        <div class="torso-graphic part"></div>
+                        
+                        <div class="head part"></div>
+                        
+                        <div class="arm part">
+                            <div class="forearm part"></div>
+                        </div>
+                    </div>
+
+                    <div class="thigh part">
+                        <div class="leg part"></div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const wrapper = document.getElementById('player-wrapper');
+        const rig = document.getElementById('player-rig');
+
+        const keys = { ArrowRight: false, ArrowLeft: false, Space: false };
+
+        let posX = window.innerWidth / 2;
+        let posY = 0;
+        let velocityY = 0;
+        let gravity = 0.7; 
+        let jumpForce = 13; 
+        let isJumping = false;
+        let speedX = 7; 
+        let facing = 1;
+        let justLanded = false;
+
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+                if(e.code === 'Space') e.preventDefault();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+            }
+        });
+
+        function gameLoop() {
+            let isRunning = false;
+
+            if (keys.ArrowRight) {
+                posX += speedX;
+                facing = 1;
+                isRunning = true;
+            } else if (keys.ArrowLeft) {
+                posX -= speedX;
+                facing = -1;
+                isRunning = true;
+            }
+
+            if (keys.Space && !isJumping) {
+                velocityY = jumpForce;
+                isJumping = true;
+                justLanded = false;
+            }
+
+            posY += velocityY;
+
+            if (posY > 0) {
+                velocityY -= gravity;
+                justLanded = false;
+            } else {
+                if(isJumping) justLanded = true; 
+                posY = 0;
+                velocityY = 0;
+                isJumping = false;
+            }
+
+            let currentState = 'idle';
+
+            if (isJumping || justLanded) { 
+                currentState = 'jumping';
+                if(justLanded && posY === 0) justLanded = false; 
+            } else if (isRunning) {
+                currentState = 'running';
+            }
+
+            if (!rig.classList.contains(currentState)) {
+                rig.classList.remove('idle', 'running', 'jumping');
+                rig.classList.add(currentState);
+            }
+
+            posX = Math.max(30, Math.min(window.innerWidth - 30, posX));
+
+            wrapper.style.transform = `translate3d(${posX}px, ${-posY}px, 0)`;
+            rig.style.transform = `scaleX(${facing}) scale(1.6)`;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
