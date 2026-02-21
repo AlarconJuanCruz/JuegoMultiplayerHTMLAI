@@ -68,9 +68,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Usa el puerto de Render o 3000 localmente
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`=== SERVIDOR LOCAL INICIADO ===`);
-    console.log(`Juega en esta PC abriendo: http://localhost:${PORT}`);
-    console.log(`Para que tus amigos entren, dales tu IP de red local por el puerto 3000.`);
+    console.log(`=== SERVIDOR INICIADO EN PUERTO ${PORT} ===`);
 });

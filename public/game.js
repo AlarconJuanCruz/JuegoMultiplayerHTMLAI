@@ -131,21 +131,43 @@ window.startGame = function(multiplayer, ip = null) {
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none';
     let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     
-    window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
+    window.game.isRunning = true; 
+    window.game.isMultiplayer = multiplayer;
 
     if (multiplayer && typeof io !== 'undefined') {
         try {
-            window.socket = io(`http://${ip}:3000`);
+            // Lógica de conexión inteligente:
+            // Si hay IP, conecta a IP:3000 (Local). Si no, usa la URL actual (Render).
+            const connectionURL = ip ? `http://${ip}:3000` : window.location.origin;
+            window.socket = io(connectionURL);
+
             let sInfo = window.getEl('server-info');
-            if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = ip === window.location.hostname ? 'Localhost' : ip; }
+            if(sInfo) { 
+                sInfo.style.display = 'flex'; 
+                window.getEl('sv-ip').innerText = ip ? ip : 'Servidor Web'; 
+            }
             
-            if (ip && ip !== window.location.hostname) {
+            // Guardar en la lista de servidores recientes si es una IP externa
+            if (ip && ip !== window.location.hostname && ip !== 'localhost' && ip !== '127.0.0.1') {
                 let list = JSON.parse(localStorage.getItem('savedServers') || '[]');
-                if (!list.includes(ip)) { list.push(ip); localStorage.setItem('savedServers', JSON.stringify(list)); }
+                if (!list.includes(ip)) { 
+                    list.push(ip); 
+                    localStorage.setItem('savedServers', JSON.stringify(list));
+                    if(window.refreshServerList) window.refreshServerList(); 
+                }
             }
 
-            window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y }); });
-            window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
+            // --- Eventos de Socket ---
+            window.socket.on('connect', () => { 
+                window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y }); 
+            });
+
+            window.socket.on('currentPlayers', (srvPlayers) => { 
+                window.otherPlayers = srvPlayers; 
+                let pCount = window.getEl('sv-players'); 
+                if(pCount) pCount.innerText = Object.keys(srvPlayers).length; 
+            });
+
             window.socket.on('playerMoved', (pInfo) => { 
                 if(window.otherPlayers[pInfo.id]) { 
                     let cText = window.otherPlayers[pInfo.id].chatText || '';
@@ -155,7 +177,11 @@ window.startGame = function(multiplayer, ip = null) {
                     window.otherPlayers[pInfo.id].chatExpires = cExpires;
                 } 
             });
-            window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
+
+            window.socket.on('timeSync', (serverUptimeMs) => { 
+                window.game.serverStartTime = Date.now() - serverUptimeMs; 
+            });
+
             window.socket.on('chatMessage', (data) => {
                 if (window.otherPlayers[data.id]) {
                     window.otherPlayers[data.id].chatText = data.text;
@@ -165,6 +191,7 @@ window.startGame = function(multiplayer, ip = null) {
                     window.player.chatExpires = Date.now() + 6500;
                 }
             });
+
             window.socket.on('worldUpdate', (data) => {
                 if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); if(t.hp <= 0) window.trees = window.trees.filter(tr => tr !== t); } }
                 else if (data.action === 'hit_rock') { let r = window.rocks.find(ro => Math.abs(ro.x - data.payload.x) < 1); if (r) { r.hp -= data.payload.dmg; window.setHit(r); if(r.hp <= 0) window.rocks = window.rocks.filter(ro => ro !== r); } }
@@ -180,9 +207,16 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && window.currentCampfire.x === b.x) if(window.renderCampfireUI) window.renderCampfireUI(); } }
             });
 
-        } catch(e) { console.error("Error Socket:", e); }
+        } catch(e) { 
+            console.error("Error Socket:", e); 
+            alert("No se pudo conectar al servidor. Verifica la IP.");
+        }
     }
-    window.recalculateStats(); window.generateWorldSector(window.game.shoreX, window.game.exploredRight); if(window.updateUI) window.updateUI(); if(window.renderToolbar) window.renderToolbar(); 
+    
+    window.recalculateStats(); 
+    window.generateWorldSector(window.game.shoreX, window.game.exploredRight); 
+    if(window.updateUI) window.updateUI(); 
+    if(window.renderToolbar) window.renderToolbar(); 
 };
 
 // === FIX: EVITAR MENÚ CONTEXTUAL Y DESTRABAR TECLAS ===
