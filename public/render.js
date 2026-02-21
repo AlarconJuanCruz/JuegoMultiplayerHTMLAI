@@ -1,3 +1,5 @@
+// === render.js - LÓGICA DE DIBUJADO Y RIGGING ===
+
 window.roundRect = function(ctx, x, y, width, height, radius) {
     ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius); ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius); ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath(); ctx.fill();
 };
@@ -147,7 +149,6 @@ window.draw = function() {
     window.rocks.forEach(r => {
         if (r.x + r.width > window.camera.x && r.x < window.camera.x + window.canvas.width) {
             window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath(); window.ctx.moveTo(r.x, r.y + r.height); window.ctx.lineTo(r.x + r.width * 0.2, r.y); window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5); window.ctx.lineTo(r.x + r.width, r.y + r.height); window.ctx.fill();
-            // FIX 3: Solo mostrar barra de vida si golpeado recientemente
             if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(r.x, r.y - 10, r.width, 4); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(r.x+1, r.y - 9, (r.hp / r.maxHp) * (r.width-2), 2); }
         }
     });
@@ -171,17 +172,10 @@ window.draw = function() {
                 window.ctx.fillStyle = isHitColor || '#388E3C'; window.ctx.beginPath(); window.ctx.arc(0, -th*0.8, t.width*1.4, 0, Math.PI*2); window.ctx.arc(-t.width*0.8, -th*0.5, t.width*1.1, 0, Math.PI*2); window.ctx.arc(t.width*0.8, -th*0.5, t.width*1.1, 0, Math.PI*2); window.ctx.fill();
                 window.ctx.fillStyle = isHitColor || '#4CAF50'; window.ctx.beginPath(); window.ctx.arc(0, -th*0.9, t.width*1.1, 0, Math.PI*2); window.ctx.arc(-t.width*0.4, -th*0.6, t.width*0.9, 0, Math.PI*2); window.ctx.fill();
             } else if (t.type === 1) { 
-                // FIX 1: Pinos rediseñados, tronco más bajo y hojas más arriba
                 window.ctx.fillStyle = isHitColor || '#3E2723'; window.ctx.fillRect(-hw*0.5, -th*0.7, hw*1.0, th*0.7);
                 window.ctx.fillStyle = isHitColor || '#1B5E20'; 
                 let leafH = th * 0.8; let stepY = leafH / 5;
-                for(let i=0; i<5; i++) { 
-                    window.ctx.beginPath(); 
-                    window.ctx.moveTo(0, -th - 15 + (i*stepY)); 
-                    window.ctx.lineTo(-t.width*1.5 + (i*6), -th - 15 + stepY*1.6 + (i*stepY)); 
-                    window.ctx.lineTo(t.width*1.5 - (i*6), -th - 15 + stepY*1.6 + (i*stepY)); 
-                    window.ctx.fill(); 
-                }
+                for(let i=0; i<5; i++) { window.ctx.beginPath(); window.ctx.moveTo(0, -th - 15 + (i*stepY)); window.ctx.lineTo(-t.width*1.5 + (i*6), -th - 15 + stepY*1.6 + (i*stepY)); window.ctx.lineTo(t.width*1.5 - (i*6), -th - 15 + stepY*1.6 + (i*stepY)); window.ctx.fill(); }
             } else if (t.type === 2) { 
                 window.ctx.fillStyle = isHitColor || '#D7CCC8'; window.ctx.fillRect(-hw*0.6, -th, hw*1.2, th);
                 if(!t.isHit) { window.ctx.fillStyle = '#4E342E'; window.ctx.fillRect(-hw*0.6, -th*0.7, t.width*0.4, 3); window.ctx.fillRect(hw*0.2, -th*0.4, t.width*0.3, 4); }
@@ -189,7 +183,6 @@ window.draw = function() {
                 window.ctx.beginPath(); window.ctx.arc(-t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.arc(t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.fill();
             }
             
-            // FIX 3: Solo mostrar barra de vida si golpeado recientemente
             if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) { 
                 window.ctx.fillStyle = 'black'; window.ctx.fillRect(-hw-5, -th - 20, t.width + 10, 6); 
                 window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 19, (t.hp / t.maxHp) * (t.width + 8), 4); 
@@ -318,8 +311,6 @@ window.draw = function() {
         window.lightCtx.clearRect(0, 0, window.canvas.width, window.canvas.height);
         let ambientDarkness = 0.2 + (0.75 * darkness); 
         window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window.canvas.width, window.canvas.height);
-        
-        // FIX 4: Sombras sólidas de bloques eliminadas temporalmente como pediste
         
         window.lightCtx.globalCompositeOperation = 'destination-out';
         
