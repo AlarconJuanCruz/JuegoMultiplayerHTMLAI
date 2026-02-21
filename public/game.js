@@ -1,5 +1,3 @@
-// === game.js - MOTOR PRINCIPAL E INPUTS ===
-
 window.sendWorldUpdate = function(action, payload) {
     if (window.game.isMultiplayer && window.socket) { window.socket.emit('worldUpdate', { action: action, payload: payload }); }
 };
@@ -15,44 +13,26 @@ window.openChat = function() {
     if (chatContainer && chatInput && !window.player.isDead) { chatContainer.style.display = 'block'; chatInput.focus(); }
 };
 
-// NUEVO: SISTEMA DE VALIDACIÓN DE ESPACIO PARA CONSTRUIR (Hitboxes)
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true) {
     if (y + h > window.game.groundLevel) return false;
-    
-    // No construir sobre uno mismo
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
-    
-    // No construir sobre otros jugadores
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) {
             let op = window.otherPlayers[id];
             if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false;
         }
     }
-    
-    // No superponer bloques existentes
     for (let b of window.blocks) {
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false;
     }
-
-    // No construir sobre árboles (Incluso tocones)
     for (let t of window.trees) {
         let th = t.isStump ? 15 + t.width*0.2 : t.height;
         let ty = t.isStump ? t.y + t.height - th : t.y;
         if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false;
     }
-
-    // No construir sobre rocas
-    for (let r of window.rocks) {
-        if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false;
-    }
-
-    // Debe estar apoyado en el piso o conectado a otro bloque
-    if (requireAdjacency) {
-        if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false;
-    }
-
+    for (let r of window.rocks) { if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false; }
+    if (requireAdjacency) { if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false; }
     return true;
 };
 
@@ -135,7 +115,6 @@ window.generateWorldSector = function(startX, endX) {
 
 window.startGame = function(multiplayer, ip = null) {
     const nameInput = window.getEl('player-name'); 
-    // CORTE DEL NOMBRE A 15 CARACTERES POR SEGURIDAD
     let rawName = (nameInput && nameInput.value) ? nameInput.value.trim() : "Jugador " + Math.floor(Math.random()*1000);
     window.player.name = rawName.substring(0, 15);
 
@@ -215,11 +194,8 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'r' || e.key === 'R') { if(window.player.activeTool === 'hammer') { window.player.buildMode = window.player.buildMode === 'block' ? 'door' : 'block'; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Modo: ${window.player.buildMode}`, '#fff'); } }
 
     if (e.key === 'e' || e.key === 'E') {
-        const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2;
-        // FIX BUG PUERTAS: Aumentamos el aura de interacción con un radio más grande en el checkRectIntersection (-15 y +30)
-        let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && 
-            window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
-        
+        const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2; let actionDone = false;
+        let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
         if (interactables.length > 0) {
             let b = interactables[0];
             if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y });
@@ -271,7 +247,6 @@ window.addEventListener('mousedown', (e) => {
             const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
             
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
-                // Validación para ubicar un mueble
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true)) {
                     let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                     let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
@@ -383,22 +358,18 @@ window.addEventListener('mousedown', (e) => {
     if (!actionDone && treeDmg > 0) {
         for (let i = window.trees.length - 1; i >= 0; i--) {
             const t = window.trees[i];
+            // FIX: LOS TOCONES YA NO SE PUEDEN GOLPEAR
+            if (t.isStump) continue; 
+
             if (window.mouseWorldX >= t.x - 20 && window.mouseWorldX <= t.x + t.width + 20 && window.mouseWorldY >= t.y - 100 && window.mouseWorldY <= t.y + t.height) { 
                 if (Math.hypot(pCX - (t.x + t.width/2), pCY - (t.y + t.height/2)) <= window.player.miningRange) {
                     t.hp -= treeDmg; window.setHit(t); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 8); window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `-${treeDmg}`, '#ff4444');
                     
                     if (t.hp <= 0) {
-                        if (!t.isStump) {
-                            window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
-                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:5, life:1.0};
-                            window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
-                            t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x }); window.gainXP(15);
-                        } else {
-                            window.spawnParticles(t.x + 15, t.y + t.height, '#C19A6B', 15, 1.2);
-                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:2, life:1.0};
-                            window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
-                            window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
-                        }
+                        window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
+                        let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:5, life:1.0};
+                        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
+                        t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x }); window.gainXP(15);
                     } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: treeDmg }); }
                     actionDone = true; break;
                 }
@@ -409,9 +380,7 @@ window.addEventListener('mousedown', (e) => {
     if (!actionDone && window.player.activeTool === 'hammer') {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
-        
-        if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-            // Validación para construir la pared o la puerta
+        if (gridY + itemHeight <= window.game.groundLevel && Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
             if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true)) {
                 let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                 window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
@@ -535,7 +504,6 @@ function update() {
     let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + window.player.height/2;
     let anyItemHovered = false;
 
-    // EL CARTEL ESTÁ AÚN MEJOR DETECTADO GRACIAS AL AURA AMPLIADA EN LA LÍNEA 359 APROX
     let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
     if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
         let hoveringInteractable = interactables[0];
