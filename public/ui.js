@@ -1,33 +1,18 @@
-// === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
-
-// Detectar si abriste el archivo con doble clic (file://), en localhost, o en Render
+// === ui.js - GESTIÓN DE INTERFAZ ===
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
-
 const btnOnline = window.getEl('btn-online');
-if (btnOnline) {
-    btnOnline.addEventListener('click', () => { window.startGame(true); });
-}
+if (btnOnline) btnOnline.addEventListener('click', () => { window.startGame(true); });
 
-const currentUrlDisplay = window.getEl('current-url');
-const urlArea = window.getEl('online-url-area');
-const statusBadge = window.getEl('server-status-badge');
-
+const currentUrlDisplay = window.getEl('current-url'); const urlArea = window.getEl('online-url-area'); const statusBadge = window.getEl('server-status-badge');
 if (!isLocalEnv) {
     if (urlArea) urlArea.style.display = 'block';
     if (currentUrlDisplay) currentUrlDisplay.innerText = window.location.origin;
     if (statusBadge) {
         statusBadge.innerHTML = 'Estado: <span style="color:#f39c12;">🟠 Despertando / Verificando...</span>';
-        fetch(window.location.origin)
-            .then(r => {
-                if (r.ok) statusBadge.innerHTML = 'Estado: <span style="color:#4CAF50;">🟢 En Línea y Listo</span>';
-                else throw new Error();
-            }).catch(e => {
-                statusBadge.innerHTML = 'Estado: <span style="color:#ff4444;">🔴 Error de Conexión</span>';
-            });
+        fetch(window.location.origin).then(r => { if (r.ok) statusBadge.innerHTML = 'Estado: <span style="color:#4CAF50;">🟢 En Línea y Listo</span>'; else throw new Error(); }).catch(e => { statusBadge.innerHTML = 'Estado: <span style="color:#ff4444;">🔴 Error de Conexión</span>'; });
     }
 } else {
-    if (urlArea) urlArea.style.display = 'none';
-    if (statusBadge) statusBadge.style.display = 'none'; 
+    if (urlArea) urlArea.style.display = 'none'; if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
 window.getEl('btn-single')?.addEventListener('click', () => window.startGame(false));
@@ -49,8 +34,7 @@ window.switchCraftTab = function(tabName) {
 };
 
 window.loadServers = function() {
-    let list = JSON.parse(localStorage.getItem('savedServers') || '[]');
-    let container = window.getEl('saved-servers');
+    let list = JSON.parse(localStorage.getItem('savedServers') || '[]'); let container = window.getEl('saved-servers');
     if (!container) return;
     if (list.length === 0) container.innerHTML = '<span style="color:#aaa;">No hay servidores guardados.</span>';
     else { container.innerHTML = ''; list.forEach(ip => { let btn = document.createElement('button'); btn.className = 'action-btn mini'; btn.style.background = '#2c3e50'; btn.style.textAlign = 'left'; btn.innerText = `🔌 Conectar: ${ip}`; btn.onclick = () => { window.getEl('server-ip').value = ip; window.startGame(true, ip); }; container.appendChild(btn); }); }
@@ -76,7 +60,6 @@ window.upgradeStat = function(stat) { if (window.player.statPoints > 0) { window
 window.transferItem = function(type, toBox, amount) {
     if(!window.currentOpenBox) return;
     if (!toBox && !window.canAddItem(type, amount)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inv. Lleno", '#fff'); return; }
-    
     if(toBox && window.player.inventory[type] >= amount) { window.player.inventory[type] -= amount; window.currentOpenBox.inventory[type] = (window.currentOpenBox.inventory[type] || 0) + amount; } 
     else if (!toBox && window.currentOpenBox.inventory[type] >= amount) { window.currentOpenBox.inventory[type] -= amount; window.player.inventory[type] = (window.player.inventory[type] || 0) + amount; } 
     else if (toBox && window.player.inventory[type] > 0) { let r = window.player.inventory[type]; window.player.inventory[type] = 0; window.currentOpenBox.inventory[type] = (window.currentOpenBox.inventory[type] || 0) + r; } 
@@ -87,9 +70,7 @@ window.transferItem = function(type, toBox, amount) {
 
 window.cfAction = function(action) {
     if(!window.currentCampfire) return;
-    if (action === 'takeCooked' && window.currentCampfire.cooked > 0) { 
-        if (!window.canAddItem('cooked_meat', window.currentCampfire.cooked)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inv. Lleno", '#fff'); return; }
-    }
+    if (action === 'takeCooked' && window.currentCampfire.cooked > 0) { if (!window.canAddItem('cooked_meat', window.currentCampfire.cooked)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inv. Lleno", '#fff'); return; } }
     if (action === 'addWood' && window.player.inventory.wood > 0) { window.player.inventory.wood--; window.currentCampfire.wood++; }
     if (action === 'addMeat' && window.player.inventory.meat > 0) { window.player.inventory.meat--; window.currentCampfire.meat++; }
     if (action === 'takeCooked' && window.currentCampfire.cooked > 0) { window.player.inventory.cooked_meat = (window.player.inventory.cooked_meat||0) + window.currentCampfire.cooked; window.currentCampfire.cooked = 0; }
@@ -102,9 +83,7 @@ window.renderBoxUI = function() {
     if(!window.currentOpenBox || !window.getEl('box-player-grid')) return;
     const renderGrid = (inv, domId, toBox) => {
         const grid = window.getEl(domId); grid.innerHTML = '';
-        for (const [type, amt] of Object.entries(inv)) {
-            if (amt > 0) { const s = document.createElement('div'); s.className = 'inv-slot'; s.onclick = () => window.transferItem(type, toBox, 1); s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); }; s.innerHTML = `<div class="inv-icon" style="background-color: ${window.itemDefs[type]?window.itemDefs[type].color:'#fff'}"></div><div class="inv-amount">${amt}</div>`; grid.appendChild(s); }
-        }
+        for (const [type, amt] of Object.entries(inv)) { if (amt > 0) { const s = document.createElement('div'); s.className = 'inv-slot'; s.onclick = () => window.transferItem(type, toBox, 1); s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); }; s.innerHTML = `<div class="inv-icon" style="background-color: ${window.itemDefs[type]?window.itemDefs[type].color:'#fff'}"></div><div class="inv-amount">${amt}</div>`; grid.appendChild(s); } }
     };
     renderGrid(window.player.inventory, 'box-player-grid', true); renderGrid(window.currentOpenBox.inventory, 'box-storage-grid', false);
 };
@@ -138,38 +117,18 @@ window.updateUI = function() {
     const grid = window.getEl('inventory-grid'); 
     if(grid) {
         grid.innerHTML = '';
-        let slotsArray = new Array(10).fill(null);
-        let slotIdx = 0;
-
+        let slotsArray = new Array(10).fill(null); let slotIdx = 0;
         for (const [type, amt] of Object.entries(window.player.inventory)) {
             if (amt <= 0) continue;
-            let max = window.itemDefs[type].maxStack || 100;
-            let remaining = amt;
-            while (remaining > 0 && slotIdx < 10) {
-                let inSlot = Math.min(remaining, max);
-                slotsArray[slotIdx] = { type, amount: inSlot };
-                remaining -= inSlot;
-                slotIdx++;
-            }
+            let max = window.itemDefs[type].maxStack || 100; let remaining = amt;
+            while (remaining > 0 && slotIdx < 10) { let inSlot = Math.min(remaining, max); slotsArray[slotIdx] = { type, amount: inSlot }; remaining -= inSlot; slotIdx++; }
         }
-
         slotsArray.forEach((slotData) => {
-            const slot = document.createElement('div');
-            slot.className = 'inv-slot';
+            const slot = document.createElement('div'); slot.className = 'inv-slot';
             if (slotData) {
-                let def = window.itemDefs[slotData.type];
-                slot.draggable = true;
-                slot.ondragstart = (e) => { e.dataTransfer.setData('text/plain', slotData.type); };
-                slot.onclick = () => window.invItemClick(slotData.type);
-                slot.innerHTML = `
-                    <div class="inv-icon" style="background-color: ${def.color}"></div>
-                    <div class="inv-amount">${slotData.amount}</div>
-                    <div class="custom-tooltip">${def.name}</div>
-                `;
-            } else {
-                slot.style.background = 'rgba(0,0,0,0.5)';
-                slot.style.border = '1px dashed rgba(255,255,255,0.2)';
-            }
+                let def = window.itemDefs[slotData.type]; slot.draggable = true; slot.ondragstart = (e) => { e.dataTransfer.setData('text/plain', slotData.type); }; slot.onclick = () => window.invItemClick(slotData.type);
+                slot.innerHTML = `<div class="inv-icon" style="background-color: ${def.color}"></div><div class="inv-amount">${slotData.amount}</div><div class="custom-tooltip">${def.name}</div>`;
+            } else { slot.style.background = 'rgba(0,0,0,0.5)'; slot.style.border = '1px dashed rgba(255,255,255,0.2)'; }
             grid.appendChild(slot);
         });
     }
@@ -190,8 +149,7 @@ window.updateUI = function() {
         if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.availableTools.includes(t));
     };
 
-    checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null);
-    checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
+    checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
 
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
 };
@@ -208,31 +166,23 @@ window.updateEntityHUD = function() {
     window.getEl('entity-hud').innerHTML = html;
 };
 
-// ASIGNACIÓN SEGURA AL OBJETO WINDOW PARA EVITAR DUPLICADOS AL RECARGAR SCRIPTS
-window.bindCraft = function(id, fn) { const el = window.getEl(id); if(el) el.addEventListener('click', fn); };
 window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
     if(window.player.inventory.wood >= reqW && (window.player.inventory.stone||0) >= reqS && (window.player.inventory.web||0) >= reqWeb && window.player.stats.int >= reqInt) {
-        if(tool && !window.player.availableTools.includes(tool)) { 
-            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.availableTools.push(tool); window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
-        } 
-        else if(item) { 
-            if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
-            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
-        }
+        if(tool && !window.player.availableTools.includes(tool)) { window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.availableTools.push(tool); window.player.toolHealth[tool] = window.toolMaxDurability[tool]; } 
+        else if(item) { if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; } window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; }
         window.updateUI(); window.renderToolbar();
     }
 };
 
-window.bindCraft('btn-craft-axe', () => window.craftItem(10, 0, 0, 0, 'axe', null)); 
-window.bindCraft('btn-craft-pickaxe', () => window.craftItem(20, 0, 0, 0, 'pickaxe', null)); 
-window.bindCraft('btn-craft-hammer', () => window.craftItem(15, 0, 0, 0, 'hammer', null)); 
-window.bindCraft('btn-craft-bow', () => window.craftItem(100, 0, 2, 0, 'bow', null)); 
-window.bindCraft('btn-craft-sword', () => window.craftItem(30, 30, 0, 3, 'sword', null)); 
-window.bindCraft('btn-craft-box', () => window.craftItem(40, 0, 0, 1, null, 'boxes')); 
-window.bindCraft('btn-craft-campfire', () => window.craftItem(20, 5, 0, 0, null, 'campfire_item')); 
-window.bindCraft('btn-craft-bed', () => window.craftItem(30, 0, 10, 0, null, 'bed_item'));
-
-window.bindCraft('btn-craft-arrow', () => window.craftItem(5, 0, 0, 0, null, 'arrows', 1)); 
-window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
-window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
-window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
+window.getEl('btn-craft-axe')?.addEventListener('click', () => window.craftItem(10, 0, 0, 0, 'axe', null)); 
+window.getEl('btn-craft-pickaxe')?.addEventListener('click', () => window.craftItem(20, 0, 0, 0, 'pickaxe', null)); 
+window.getEl('btn-craft-hammer')?.addEventListener('click', () => window.craftItem(15, 0, 0, 0, 'hammer', null)); 
+window.getEl('btn-craft-bow')?.addEventListener('click', () => window.craftItem(100, 0, 2, 0, 'bow', null)); 
+window.getEl('btn-craft-sword')?.addEventListener('click', () => window.craftItem(30, 30, 0, 3, 'sword', null)); 
+window.getEl('btn-craft-box')?.addEventListener('click', () => window.craftItem(40, 0, 0, 1, null, 'boxes')); 
+window.getEl('btn-craft-campfire')?.addEventListener('click', () => window.craftItem(20, 5, 0, 0, null, 'campfire_item')); 
+window.getEl('btn-craft-bed')?.addEventListener('click', () => window.craftItem(30, 0, 10, 0, null, 'bed_item'));
+window.getEl('btn-craft-arrow')?.addEventListener('click', () => window.craftItem(5, 0, 0, 0, null, 'arrows', 1)); 
+window.getEl('btn-craft-arrow2')?.addEventListener('click', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
+window.getEl('btn-craft-arrow5')?.addEventListener('click', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
+window.getEl('btn-craft-arrow10')?.addEventListener('click', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
