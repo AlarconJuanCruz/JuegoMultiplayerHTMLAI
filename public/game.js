@@ -10,12 +10,13 @@ window.spawnDroppedItem = function(x, y, type, amount) {
     window.droppedItems.push(newItem); window.sendWorldUpdate('drop_item', { item: newItem });
 };
 
-// FRENO DE EMERGENCIA PARA NO QUEDAR TRABADO AL CHATEAR
+// FIX: FRENO AUTOMÁTICO AL ABRIR EL CHAT
 window.openChat = function() {
     let chatContainer = window.getEl('chat-container'); let chatInput = window.getEl('chat-input');
     if (chatContainer && chatInput && !window.player.isDead) { 
         chatContainer.style.display = 'block'; 
         chatInput.focus(); 
+        
         if(window.keys) {
             window.keys.a = false; window.keys.d = false; window.keys.w = false; 
             window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false;
@@ -26,17 +27,22 @@ window.openChat = function() {
 
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
     if (y + h > window.game.groundLevel) return false;
+    
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
+    
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
     }
+    
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
+        
         if (isStructure && (b.type === 'door' || h > window.game.blockSize)) {
             if (x === b.x && (y <= b.y + bh && y + h >= b.y)) return false;
         }
     }
+    
     for (let t of window.trees) { let th = t.isStump ? 15 + t.width*0.2 : t.height; let ty = t.isStump ? t.y + t.height - th : t.y; if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; }
     for (let r of window.rocks) { if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false; }
     if (requireAdjacency) { if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false; }
@@ -89,12 +95,13 @@ window.checkEntityCollisions = function(ent, axis) {
     } return hitWall;
 };
 
-// FIX ANTICRASH: Chequeo de seguridad de arrays
+// FIX ANTICRASH: Comprobaciones de seguridad para no explotar si falta el servidor temporalmente
 window.generateWorldSector = function(startX, endX) {
     if (startX < window.game.shoreX + 50) startX = window.game.shoreX + 50; 
     let seed = Math.floor(startX); function sRandom() { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); }
     const numTrees = Math.floor(sRandom() * 6) + 4; 
     
+    // Arrays de seguridad
     if (!window.removedTrees) window.removedTrees = [];
     if (!window.treeState) window.treeState = {};
     if (!window.removedRocks) window.removedRocks = [];
@@ -119,6 +126,7 @@ window.generateWorldSector = function(startX, endX) {
     }
     let cx = startX + 100 + sRandom() * (endX - startX - 200); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
     let newId = 'e_' + Math.floor(cx);
+    
     if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
         if (distToShore > 2000) {
             if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
@@ -406,6 +414,7 @@ window.addEventListener('mousedown', (e) => {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
         if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
+            // Clickeo al construir: Pasamos "isStructure = true" para que detecte las colisiones severas con puertas
             if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                 let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                 window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
