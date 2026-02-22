@@ -54,7 +54,8 @@ window.drawCharacter = function(charData, isLocal) {
     if (charData.activeTool === 'torch') {
         armR = -Math.PI / 2.5; elbowR = -0.3; 
     } else if (charData.activeTool === 'bow' && charData.isAiming) {
-        aimAngle = Math.atan2(targetY - (pCY - 24 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
+        // Se cambió el 24 por un 42 para alinear el brazo con la nueva flecha
+        aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
         let progress = charData.attackFrame / 12; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
@@ -440,39 +441,38 @@ window.draw = function() {
                 window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.5); window.ctx.lineTo(t.width, -th*0.7); window.ctx.stroke();
             }
 
-// --- Follaje Mejorado ---
+// --- Follaje Mejorado sin bugs de círculos ---
             if (t.type === 0 || t.type === 2) {
                 let baseColor = t.type === 0 ? '#1B5E20' : '#33691E';
                 let midColor = t.type === 0 ? '#2E7D32' : '#558B2F';
                 let lightColor = t.type === 0 ? '#4CAF50' : '#8BC34A';
 
-                // Capa Sombra (Fondo - da volumen general)
-                window.ctx.fillStyle = isHitColor || baseColor;
-                window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.7, t.width*1.1, 0, Math.PI*2); // Centro grande
-                window.ctx.arc(-t.width*0.6, -th*0.5, t.width*0.8, 0, Math.PI*2); // Bulto izq
-                window.ctx.arc(t.width*0.6, -th*0.5, t.width*0.8, 0, Math.PI*2); // Bulto der
-                window.ctx.arc(0, -th*0.9, t.width*0.85, 0, Math.PI*2); // Tope
-                window.ctx.fill();
+                let cy = -th * 0.75; 
+                let cw = t.width; 
 
-                // Capa Media (Crea profundidad)
-                window.ctx.fillStyle = isHitColor || midColor;
-                window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.7, t.width*0.9, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.5, -th*0.55, t.width*0.65, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.5, -th*0.55, t.width*0.65, 0, Math.PI*2);
-                window.ctx.arc(0, -th*0.85, t.width*0.7, 0, Math.PI*2);
-                window.ctx.fill();
+                // Función interna para trazar una copa perfectamente unida
+                const drawCanopy = (color, scale) => {
+                    window.ctx.fillStyle = isHitColor || color;
+                    window.ctx.beginPath();
+                    window.ctx.arc(0, cy, cw * 1.1 * scale, 0, Math.PI*2); // centro
+                    window.ctx.arc(-cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); // izq abajo
+                    window.ctx.arc(cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); // der abajo
+                    window.ctx.arc(-cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); // izq arriba
+                    window.ctx.arc(cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); // der arriba
+                    window.ctx.fill(); // Rellena todo junto
+                };
 
-                // Capa Luz (Brillos - asimetría natural)
+                drawCanopy(baseColor, 1.0);  // Capa Sombra
+                drawCanopy(midColor, 0.8);   // Capa Media
+
+                // Brillo iluminado arriba a la izquierda
                 window.ctx.fillStyle = isHitColor || lightColor;
                 window.ctx.beginPath();
-                window.ctx.arc(-t.width*0.3, -th*0.75, t.width*0.4, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.2, -th*0.65, t.width*0.3, 0, Math.PI*2);
-                window.ctx.arc(0, -th*0.9, t.width*0.3, 0, Math.PI*2);
+                window.ctx.arc(-cw * 0.3, cy - cw * 0.25, cw * 0.45, 0, Math.PI*2);
+                window.ctx.arc(cw * 0.15, cy - cw * 0.4, cw * 0.35, 0, Math.PI*2);
                 window.ctx.fill();
 
-            } else if (t.type === 1) {
+            } else if (t.type === 1) {  
                 // Pino Corregido (Base ancha abajo, punta arriba)
                 for (let i = 0; i < 4; i++) {
                     // i=0 es la base (más ancha), i=3 es la punta (más fina)
@@ -603,7 +603,7 @@ if (window.player.placementMode && !window.player.isDead) {
 
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
         let pCX = window.player.x + window.player.width / 2;
-        let pCY = window.player.y + 14;
+        let pCY = window.player.y + 6; // <-- GUÍA VISUAL DESDE LA CARA
         let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY;
         let angle = Math.atan2(dy, dx);
         let power = 4 + (window.player.chargeLevel / 100) * 6;

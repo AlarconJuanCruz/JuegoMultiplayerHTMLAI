@@ -464,20 +464,20 @@ if (window.player.placementMode) {
 window.addEventListener('mouseup', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead) return;
     if (window.player.activeTool === 'bow') {
-        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
-        if (e.button === 0 && window.player.isCharging) {
-            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
-                window.player.inventory.arrows--;
-                let pCX = window.player.x + window.player.width/2; 
-                let pCY = window.player.y + 14;
-                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
-                let power = 4 + (window.player.chargeLevel / 100) * 6; 
-                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
-                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+            if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
+            if (e.button === 0 && window.player.isCharging) {
+                if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
+                    window.player.inventory.arrows--;
+                    let pCX = window.player.x + window.player.width/2; 
+                    let pCY = window.player.y + 6; // <-- DISPARA DESDE LA ALTURA DE LA CARA
+                    let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
+                    let power = 4 + (window.player.chargeLevel / 100) * 6; 
+                    let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
+                    window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+                }
+                window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
             }
-            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
         }
-    }
 });
 
 function update() {
