@@ -31,25 +31,6 @@ window.destroyBlockLocally = function(b) {
         window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if(dBox) dBox.classList.remove('open'); 
     }
     
-    // Antorcha clavada: devolver con la durabilidad restante
-    if (b.type === 'torch_placed') {
-        let _remHp = Math.max(1, b.hp || 1);
-        window.blocks.splice(index, 1);
-        window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 9999, destroyed: true });
-        // Devolver al cinturón si hay slot libre
-        if (!window.player.toolbar.includes('torch')) {
-            let _freeSlot = window.player.toolbar.indexOf(null);
-            if (_freeSlot !== -1) {
-                window.player.toolbar[_freeSlot] = 'torch';
-                window.player.toolHealth['torch'] = _remHp;
-                if (!window.player.availableTools.includes('torch')) window.player.availableTools.push('torch');
-                window.selectToolbarSlot(_freeSlot);
-                window.spawnDamageText(b.x+15, b.y-10, `Antorcha recuperada (${_remHp}/${window.toolMaxDurability.torch})`, '#e67e22');
-            }
-        }
-        if(window.renderToolbar) window.renderToolbar();
-        return;
-    }
     let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : 'wood')); 
     let refundAmt = b.type === 'door' ? 2 : 1;
     if (b.type !== 'grave') { 
@@ -281,7 +262,7 @@ window.startGame = function(multiplayer, ip = null) {
             window.socket.on('worldUpdate', (data) => {
                 if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
                 else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
-                else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 120; t.maxHp = 120; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
+                else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); delete window.treeState[data.payload.x]; window.trees = window.trees.filter(t => t.x !== data.payload.x); }
                 else if (data.action === 'hit_rock') { let r = window.rocks.find(ro => Math.abs(ro.x - data.payload.x) < 1); if (r) { r.hp -= data.payload.dmg; window.setHit(r); } }
@@ -458,20 +439,12 @@ window.addEventListener('mousedown', (e) => {
             const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
             
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
-                let type = window.player.placementMode === 'boxes' ? 'box' :
-                    (window.player.placementMode === 'bed_item' ? 'bed' :
-                    (window.player.placementMode === 'barricade_item' ? 'barricade' : 'campfire'));
+                let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                 
-                // Barricada: validar que esté sobre el suelo (NO sobre bloques)
-                let _isBarricade = type === 'barricade';
-                let _groundY = window.game.groundLevel - window.game.blockSize;
-                let _onGround = Math.abs(gridY - _groundY) < 2;
-                let _overBlock = _isBarricade && !_onGround;
-                if (!_overBlock && window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
-                    let newB = { x: gridX, y: gridY, type: type, hp: _isBarricade ? 80 : 200, maxHp: _isBarricade ? 80 : 200, isHit: false };
+                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
+                    let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
-                    if (type === 'barricade') { /* solo HP, nada más */ }
                     if (type === 'bed') {
                         window.blocks = window.blocks.filter(b => b.type !== 'bed' || b.owner !== window.player.name);
                         newB.owner = window.player.name; window.player.bedPos = { x: gridX, y: gridY };
@@ -494,37 +467,6 @@ window.addEventListener('mousedown', (e) => {
         } return;
     }
 
-    // Antorcha: click derecho la clava en el suelo
-    if (window.player.activeTool === 'torch' && e.button === 2 && !window.player.placementMode) {
-        let _pCX2 = window.player.x + window.player.width/2;
-        let _pCY2 = window.player.y + window.player.height/2;
-        // Snap a la cuadrícula, sobre el suelo
-        let _tgX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize;
-        let _tgY = window.game.groundLevel - window.game.blockSize;
-        let _dist2 = Math.hypot(_pCX2 - (_tgX+15), _pCY2 - (_tgY+15));
-        let _hasLife = window.player.toolHealth && (window.player.toolHealth.torch||0) > 0;
-        let _noOverlap = !window.blocks.some(b => b.x===_tgX && b.y===_tgY);
-        if (_dist2 <= window.player.miningRange && _hasLife && _noOverlap) {
-            let _tp = {
-                id: 'tp_'+Math.random().toString(36).substr(2,9),
-                x: _tgX, y: _tgY,
-                type: 'torch_placed',
-                hp: window.player.toolHealth.torch,
-                maxHp: window.toolMaxDurability.torch,
-                isHit: false, burnTimer: 0, isBurning: true
-            };
-            window.blocks.push(_tp);
-            window.sendWorldUpdate('place_block', { block: _tp });
-            // Eliminar antorcha del cinturón
-            window.player.toolbar[window.player.activeSlot] = null;
-            window.player.toolHealth.torch = 0;
-            window.selectToolbarSlot(0);
-            if(window.renderToolbar) window.renderToolbar();
-            window.spawnParticles(_tgX+15, _tgY+10, '#e67e22', 8);
-        }
-        return;
-    }
-
     if (window.player.activeTool === 'bow') { if (e.button === 2) window.player.isAiming = true; if (e.button === 0 && window.player.isAiming && window.player.inventory.arrows > 0) window.player.isCharging = true; return; }
     if (e.button !== 0) return; 
 
@@ -544,14 +486,14 @@ window.addEventListener('mousedown', (e) => {
             if (window.mouseWorldX >= ent.x - 10 && window.mouseWorldX <= ent.x + ent.width + 10 && window.mouseWorldY >= ent.y - 10 && window.mouseWorldY <= ent.y + ent.height + 10) {
                 if (Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2)) <= window.player.miningRange) {
                     ent.hp -= entityDmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
-                    // Texto daño: blanco con borde rojo, posición con leve variación
-                    let _ox = (Math.random()-0.5)*16, _oy = Math.random()*10;
-                    window.spawnDamageText(ent.x+ent.width/2+_ox, ent.y-5-_oy, `-${entityDmg}`, 'melee');
-                    // Knockback estilo Minecraft
-                    let _kbDir = (ent.x+ent.width/2 > pCX) ? 1 : -1;
-                    ent.vx = _kbDir * 6; ent.vy = -5;
-                    ent.knockbackFrames = 18;
-                    window.player.meleeCooldown = 20;
+                    let _dmgOx=(Math.random()-0.5)*16, _dmgOy=Math.random()*8;
+                    window.spawnDamageText(ent.x+ent.width/2+_dmgOx, ent.y-5-_dmgOy, `-${entityDmg}`, 'melee');
+                    // Knockback mínimo: leve tropiezo, sin salto exagerado
+                    let _kd = (ent.x+ent.width/2 > pCX) ? 1 : -1;
+                    ent.vx = _kd * 2.2;   // empujón lateral suave
+                    ent.vy = -1.2;         // salto mínimo (casi nada)
+                    ent.knockbackFrames = 8;
+                    window.player.meleeCooldown = 18;
                     
                     if (ent.hp <= 0) { 
                         window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
@@ -601,7 +543,7 @@ window.addEventListener('mousedown', (e) => {
                     if (r.hp <= 0) { 
                         window.sendWorldUpdate('destroy_rock', { x: r.x });
                         window.spawnParticles(r.x + 15, r.y + 15, '#888', 20, 1.5); 
-                        let ni = { id: Math.random().toString(36).substring(2,9), x:r.x+15, y:r.y+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount: tool==='pickaxe' ? (15+Math.floor(Math.random()*10)) : (tool==='hand' ? (7+Math.floor(Math.random()*4)) : (9+Math.floor(Math.random()*5))), life:1.0};
+                        let ni = { id: Math.random().toString(36).substring(2,9), x:r.x+15, y:r.y+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:15 + Math.floor(Math.random()*10), life:1.0};
                         window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
                         window.rocks.splice(i, 1); window.gainXP(25); 
                     } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: rockDmg }); }
@@ -631,9 +573,9 @@ window.addEventListener('mousedown', (e) => {
                             window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
                         } else {
                             window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
-                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount: tool==='axe'?5:(tool==='hand'?2:3), life:1.0};
+                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:5, life:1.0};
                             window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
-                            t.isStump = true; t.hp = 120; t.maxHp = 120; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
+                            t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
                         }
                     } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: treeDmg }); }
                     actionDone = true; break;
@@ -652,7 +594,7 @@ window.addEventListener('mousedown', (e) => {
         if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
             if (window.player.inventory.wood >= cost) {
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
-                    let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: isDoorMode?600:300, maxHp: isDoorMode?600:300, isHit: false };
+                    let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
                 } else {
                     window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00');
@@ -683,20 +625,6 @@ window.addEventListener('mouseup', (e) => {
         }
     }
 });
-
-
-// ── Rueda del mouse: navegar slots del cinturón ──────────────
-window.addEventListener('wheel', (e) => {
-    // Si el cursor está sobre el log del chat o input, dejar scroll normal
-    if (e.target.closest('#global-chat-log') || e.target.closest('#chat-container')) return;
-    if (!window.game || !window.game.isRunning || !window.player || window.player.isDead) return;
-    if (document.querySelector('.window-menu.open')) return;
-    e.preventDefault();
-    let slots = window.player.toolbar ? window.player.toolbar.length : 6;
-    let next = ((window.player.activeSlot + (e.deltaY > 0 ? 1 : -1)) + slots) % slots;
-    if (window.selectToolbarSlot) window.selectToolbarSlot(next);
-    if (window.renderToolbar) window.renderToolbar();
-}, { passive: false });
 
 function update() {
     try {
@@ -813,21 +741,6 @@ function update() {
         });
 
         window.blocks.forEach(b => {
-            // Antorcha en suelo: consume durabilidad con el tiempo
-            if (b.type === 'torch_placed' && b.isBurning) {
-                b.burnTimer = (b.burnTimer||0) + 1;
-                if (b.burnTimer >= 60) { // 1 tick de durabilidad por segundo
-                    b.burnTimer = 0; b.hp--;
-                    if (b.hp <= 0) {
-                        window.spawnParticles(b.x+15, b.y+10, '#888', 8);
-                        window.spawnDamageText(b.x+15, b.y-5, '¡Antorcha agotada!', '#e67e22');
-                        window.blocks = window.blocks.filter(bl => bl !== b);
-                        window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 9999, destroyed: true });
-                        return;
-                    }
-                }
-                if (window.game.frameCount % 4 === 0) window.spawnParticles(b.x+15, b.y+8, '#e67e22', 1, 0.4);
-            }
             if (b.type === 'campfire' && b.isBurning) {
                 b.burnTime--;
                 if (window.game.frameCount % 5 === 0) window.spawnParticles(b.x+15, b.y+10, '#e67e22', 1, 0.5); 
@@ -906,20 +819,7 @@ function update() {
             let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
             if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { window.spawnParticles(pr.x, pr.y, '#557A27', 3); window.projectiles.splice(i, 1); continue; } 
             let hitBlock = false;
-            for(let b of window.blocks) {
-                let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-                if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire') {
-                    // Flechas enemigas dañan puertas/paredes de noche (daño reducido 50%)
-                    if (pr.isEnemy && isNight && (b.type === 'door' || b.type === 'block')) {
-                        let sDmg = Math.max(1, Math.floor(pr.damage * 0.5));
-                        b.hp -= sDmg; window.setHit(b);
-                        window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: sDmg });
-                        if (b.hp <= 0) window.destroyBlockLocally(b);
-                        window.projectiles.splice(i, 1);
-                    } else { hitBlock = true; }
-                    break;
-                }
-            }
+            for(let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire') { hitBlock = true; break; } }
             if(hitBlock) { window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); window.projectiles.splice(i,1); continue; }
             
             if (pr.isEnemy) {
@@ -930,10 +830,10 @@ function update() {
                 let ent = window.entities[e];
                 if (window.checkRectIntersection(pr.x, pr.y, 4, 4, ent.x, ent.y, ent.width, ent.height)) {
                     ent.hp -= pr.damage; window.setHit(ent);
-                    let _aox=(Math.random()-0.5)*16, _aoy=Math.random()*10;
-                    window.spawnDamageText(ent.x+ent.width/2+_aox, ent.y-_aoy, "-"+Math.floor(pr.damage), 'melee');
+                    let _aOx=(Math.random()-0.5)*16, _aOy=Math.random()*8;
+                    window.spawnDamageText(ent.x+ent.width/2+_aOx, ent.y-_aOy, "-"+Math.floor(pr.damage), 'melee');
                     window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
-                    let _akb = pr.vx > 0 ? 1 : -1; ent.vx = _akb*4; ent.vy = -3; ent.knockbackFrames = 12;
+                    let _akd=pr.vx>0?1:-1; ent.vx=_akd*1.5; ent.vy=-0.8; ent.knockbackFrames=6;
                     if(ent.hp <= 0) {
                             window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                             window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
@@ -997,10 +897,10 @@ function update() {
         let isHoldingTorch = window.player.activeTool === 'torch' && !window.player.inBackground && !window.player.isDead;
 
         window.entities.forEach((ent, i) => {
-            // Gestión de knockback → enraizamiento → enfurecimiento
+            // Gestión de knockback y enraizamiento
             if ((ent.knockbackFrames||0) > 0) {
                 ent.knockbackFrames--;
-                if (ent.knockbackFrames === 0) ent.enragedFrames = 200; // tras KB, se enoja por ~3s
+                if (ent.knockbackFrames === 0) ent.enragedFrames = 160;
             }
             if ((ent.enragedFrames||0) > 0) ent.enragedFrames--;
 
@@ -1034,16 +934,7 @@ function update() {
             }
 
             let repelled = false;
-            for (let b of window.blocks) {
-                if (b.type === 'campfire' && b.isBurning) {
-                    let _cfd = Math.hypot((ent.x+ent.width/2)-(b.x+15),(ent.y+ent.height/2)-(b.y+15));
-                    if (_cfd < 150) {
-                        if (_cfd < 128) { ent.vx = ent.x > b.x ? 1.5 : -1.5; }  // huir
-                        else { ent.vx *= 0.85; }  // zona de amortiguación: frenar, NO invertir
-                        repelled = true; break;
-                    }
-                }
-            }
+            for (let b of window.blocks) { if (b.type === 'campfire' && b.isBurning) { if (Math.hypot((ent.x+ent.width/2) - (b.x+15), (ent.y+ent.height/2) - (b.y+15)) < 150) { ent.vx = (ent.x > b.x ? 1.5 : -1.5); repelled = true; break; } } }
 
             if (!repelled && (ent.type === 'spider' || ent.type === 'zombie')) {
                 if (ent.ignorePlayer > 0) ent.ignorePlayer--;
@@ -1055,11 +946,11 @@ function update() {
                     ent.vx = (ent.x > targetCX) ? 1.5 : -1.5;
                     ent.ignorePlayer = 60; 
                 } else if ((ent.knockbackFrames||0) > 0) {
-                    // Durante knockback la física toma el control - no sobrescribir vx
+                    // física controla durante KB, no sobreescribir vx
                 } else if (minDist < aggroRange && ent.ignorePlayer <= 0) {
-                    let _spd = ent.type === 'zombie' ? 0.4 : 0.8;
-                    _spd *= ((ent.enragedFrames||0) > 0 ? 1.7 : 1.0); // enojado = más rápido
-                    let targetVx = (targetPlayer.x > ent.x) ? _spd : -_spd; ent.vx = targetVx;
+                    let _bs = ent.type === 'zombie' ? 0.4 : 0.8;
+                    _bs *= ((ent.enragedFrames||0) > 0 ? 1.6 : 1.0);
+                    let targetVx = (targetPlayer.x > ent.x) ? _bs : -_bs; ent.vx = targetVx;
                     if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; if (ent.stuckFrames > 60 && ent.type !== 'zombie') { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
                     if (minDist < 40 && ent.attackCooldown <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) { 
                         if (targetPlayer === window.player) window.damagePlayer(ent.damage, ent.name); 
@@ -1072,12 +963,7 @@ function update() {
                 let aggroRange = (isNight && !targetPlayer.isStealth) ? 1000 : 800; 
                 if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
                     let dirX = targetPlayer.x > ent.x ? 1 : -1;
-                    // Rango real: arrowSpeed(9) * life(250) * 0.055 ≈ 620px efectivos
-                    let _maxArrow = 620, _far = Math.min(580, _maxArrow*0.85), _near = 260;
-                    if ((ent.knockbackFrames||0) > 0) { /* KB override */ }
-                    else if (minDist > _far) ent.vx = dirX * (0.5 + ((ent.enragedFrames||0)>0?0.3:0));
-                    else if (minDist < _near) ent.vx = -dirX * 0.8;
-                    else ent.vx = 0;
+                    if (minDist > 600) ent.vx = dirX * 0.5; else if (minDist < 400) ent.vx = -dirX * 0.8; else ent.vx = 0;
                     if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { ent.stuckFrames++; if (ent.stuckFrames > 60) { ent.ignorePlayer = 180; ent.vx = -dirX * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
                     if (ent.attackCooldown <= 0 && minDist < 950) {
                         let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
@@ -1093,27 +979,6 @@ function update() {
             else if (ent.type === 'chicken') { 
                 if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 1.5; } 
                 else if(Math.random() < 0.02) { ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); } 
-            }
-
-            // Barricadas con púas: daño de contacto a monstruos + los bichos las atacan
-            if (ent.type !== 'chicken') {
-                for (let _bi = window.blocks.length - 1; _bi >= 0; _bi--) {
-                    let _bk = window.blocks[_bi];
-                    if (_bk.type === 'barricade' && window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, _bk.x+2, _bk.y+10, 26, 12)) {
-                        if (window.game.frameCount % 30 === 0) { // cada ~0.5s
-                            ent.hp -= 4; window.setHit(ent);
-                            let _bOx=(Math.random()-0.5)*14, _bOy=Math.random()*8;
-                            window.spawnDamageText(ent.x+ent.width/2+_bOx, ent.y-_bOy, '-4', 'melee');
-                            // Bicho ataca la barricada
-                            _bk.hp -= 3; window.setHit(_bk);
-                            window.sendWorldUpdate('hit_block', { x: _bk.x, y: _bk.y, dmg: 3 });
-                            if (_bk.hp <= 0) {
-                                window.spawnParticles(_bk.x+15, _bk.y+15, '#8B4513', 12);
-                                window.destroyBlockLocally(_bk);
-                            }
-                        }
-                    }
-                }
             }
         });
 

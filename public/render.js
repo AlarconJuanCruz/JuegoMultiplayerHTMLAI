@@ -530,45 +530,6 @@ window.draw = function() {
             } else if (b.type === 'grave') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); 
                 window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
-            } else if (b.type === 'torch_placed') {
-                // Palo
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513';
-                window.ctx.fillRect(b.x + 13, b.y + 8, 4, 22);
-                // Llama
-                if (b.isBurning && b.hp > 0) {
-                    let _flk = Math.random() * 3;
-                    window.ctx.fillStyle = '#e67e22';
-                    window.ctx.beginPath(); window.ctx.arc(b.x+15, b.y+8-_flk, 5+_flk, 0, Math.PI*2); window.ctx.fill();
-                    window.ctx.fillStyle = '#f1c40f';
-                    window.ctx.beginPath(); window.ctx.arc(b.x+15, b.y+8-_flk, 3, 0, Math.PI*2); window.ctx.fill();
-                    // Barra de durabilidad
-                    let _pct = Math.max(0, b.hp / b.maxHp);
-                    window.ctx.fillStyle = 'rgba(0,0,0,0.5)'; window.ctx.fillRect(b.x+4, b.y+24, 22, 3);
-                    let _bc = _pct > 0.5 ? '#e67e22' : (_pct > 0.2 ? '#f39c12' : '#e74c3c');
-                    window.ctx.fillStyle = _bc; window.ctx.fillRect(b.x+4, b.y+24, 22*_pct, 3);
-                }
-            } else if (b.type === 'barricade') {
-                // Base de madera
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513';
-                window.ctx.fillRect(b.x + 2, b.y + 16, 26, 8);
-                // Tablas cruzadas
-                window.ctx.strokeStyle = b.isHit ? '#ff4444' : '#6B3410';
-                window.ctx.lineWidth = 3;
-                window.ctx.beginPath(); window.ctx.moveTo(b.x+2, b.y+10); window.ctx.lineTo(b.x+28, b.y+24); window.ctx.stroke();
-                window.ctx.beginPath(); window.ctx.moveTo(b.x+28, b.y+10); window.ctx.lineTo(b.x+2, b.y+24); window.ctx.stroke();
-                // Puas
-                window.ctx.fillStyle = b.isHit ? '#ffaaaa' : '#aaa';
-                for (let _pi = 0; _pi < 5; _pi++) {
-                    let _px = b.x + 3 + _pi * 6;
-                    window.ctx.beginPath(); window.ctx.moveTo(_px, b.y+16); window.ctx.lineTo(_px+3, b.y+6); window.ctx.lineTo(_px+6, b.y+16); window.ctx.fill();
-                }
-                // Barra de vida
-                if (b.hp < b.maxHp) {
-                    let _bpct = b.hp / b.maxHp;
-                    window.ctx.fillStyle = 'rgba(0,0,0,0.5)'; window.ctx.fillRect(b.x, b.y+26, 30, 3);
-                    window.ctx.fillStyle = _bpct > 0.5 ? '#4CAF50' : '#e74c3c';
-                    window.ctx.fillRect(b.x, b.y+26, 30*_bpct, 3);
-                }
             }
         }
     });
@@ -588,29 +549,384 @@ window.draw = function() {
     if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
     window.entities.forEach(ent => {
-        if (ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window._canvasLogicW) {
-            if (ent.type === 'chicken') {
-                window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#fff'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
-                if(!ent.isHit) { window.ctx.fillStyle = '#ff0000'; window.ctx.fillRect(ent.x + (ent.vx > 0 ? ent.width : -4), ent.y, 4, 6); }
-            } else if (ent.type === 'spider') {
-                let _sc = ent.isHit ? '#ff6644' : ((ent.enragedFrames||0) > 0 ? '#441111' : '#222');
-                window.ctx.fillStyle = _sc; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
-                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff0000'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
-                if(!ent.isHit) { window.ctx.fillStyle = '#ff0000'; let eyeSize = Math.max(2, ent.width * 0.15); let eyeX = ent.vx > 0 ? ent.x + ent.width - eyeSize - 2 : ent.x + 2; window.ctx.fillRect(eyeX, ent.y + ent.height * 0.25, eyeSize, eyeSize); }
-            } else if (ent.type === 'zombie') {
-                let _zc = ent.isHit ? '#ff6644' : ((ent.enragedFrames||0) > 0 ? '#115511' : '#228b22');
-                window.ctx.fillStyle = _zc; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
-                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff2200'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
-                if(!ent.isHit) { window.ctx.fillStyle = '#000'; window.ctx.fillRect(ent.x + (ent.vx > 0 ? 16 : 4), ent.y + 6, 4, 4); }
-            } else if (ent.type === 'archer') {
-                let _ac = ent.isHit ? '#ff6644' : '#8e44ad';
-                window.ctx.fillStyle = _ac; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
-                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff0000'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
-                window.ctx.save(); let isFacingR = ent.vx >= 0; if (ent.attackCooldown < 100) isFacingR = window.player.x > ent.x; 
-                window.ctx.translate(ent.x + ent.width/2, ent.y + ent.height/2); if (!isFacingR) window.ctx.scale(-1, 1);
-                window.ctx.strokeStyle = '#8B4513'; window.ctx.lineWidth = 2; window.ctx.beginPath(); window.ctx.arc(8, 0, 10, -Math.PI/2.5, Math.PI/2.5); window.ctx.stroke(); window.ctx.restore();
+        if (!(ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window._canvasLogicW)) return;
+        const C = window.ctx;
+        const H = ent.isHit;
+        const ER = (ent.enragedFrames||0) > 0;
+        const FR = ent.vx >= 0; // facing right
+        const T = window.game.frameCount;
+
+        C.save();
+
+        if (ent.type === 'chicken') {
+            // ── POLLO ────────────────────────────────────────────────
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const moving = Math.abs(ent.vx) > 0.05;
+            const bob = moving ? Math.sin(T*0.28)*2.5 : 0;       // cuerpo sube/baja
+            const headBob = moving ? Math.sin(T*0.28+0.5)*3 : 0; // cabeza balancea
+
+            // Flip si mira a la izquierda
+            if (!FR) { C.translate(x+w, 0); C.scale(-1,1); }
+            const bx = FR ? x : 0;
+
+            // Sombra
+            C.globalAlpha=0.18; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(bx+w/2, y+h+1, w*0.45, 2.5, 0, 0, Math.PI*2); C.fill();
+            C.globalAlpha=1;
+
+            // Patas animadas
+            const legColor = H ? '#ff6644' : '#e07820';
+            const lw1 = moving ? Math.sin(T*0.28)*5 : 0;
+            const lw2 = moving ? -Math.sin(T*0.28)*5 : 0;
+            C.strokeStyle=legColor; C.lineWidth=2;
+            // pata izquierda
+            C.beginPath(); C.moveTo(bx+7,y+h-4+bob); C.lineTo(bx+7+lw1,y+h+1); C.lineTo(bx+5+lw1,y+h+3); C.stroke();
+            // pata derecha
+            C.beginPath(); C.moveTo(bx+13,y+h-4+bob); C.lineTo(bx+13+lw2,y+h+1); C.lineTo(bx+15+lw2,y+h+3); C.stroke();
+
+            // Cola (plumas traseras)
+            C.fillStyle = H ? '#ffaaaa' : '#f0d080';
+            C.beginPath(); C.moveTo(bx+2,y+h*0.55+bob); C.quadraticCurveTo(bx-6,y+h*0.4+bob, bx-3,y+h*0.3+bob); C.quadraticCurveTo(bx+0,y+h*0.45+bob, bx+2,y+h*0.55+bob); C.fill();
+
+            // Cuerpo ovalado
+            const bodyG = C.createRadialGradient(bx+w*0.42,y+h*0.58+bob,2, bx+w*0.5,y+h*0.6+bob,w*0.55);
+            bodyG.addColorStop(0, H?'#ffbbbb':'#fffef0');
+            bodyG.addColorStop(1, H?'#ff5544':'#f0e070');
+            C.fillStyle=bodyG;
+            C.beginPath(); C.ellipse(bx+w*0.52, y+h*0.62+bob, w*0.52, h*0.37, 0, 0, Math.PI*2); C.fill();
+
+            // Ala derecha
+            C.fillStyle = H?'#ff7755':'#d8c060';
+            C.beginPath(); C.moveTo(bx+w*0.8,y+h*0.5+bob); C.quadraticCurveTo(bx+w*1.05,y+h*0.63+bob, bx+w*0.85,y+h*0.78+bob); C.quadraticCurveTo(bx+w*0.68,y+h*0.72+bob, bx+w*0.8,y+h*0.5+bob); C.fill();
+
+            // Cuello
+            C.fillStyle = H?'#ff6644':'#f5e888';
+            C.beginPath(); C.ellipse(bx+w*0.42, y+h*0.42+bob, w*0.18, h*0.1, -0.2, 0, Math.PI*2); C.fill();
+
+            // Cabeza
+            const hy = y+h*0.28+headBob;
+            const hg = C.createRadialGradient(bx+w*0.4,hy,1, bx+w*0.42,hy,w*0.3);
+            hg.addColorStop(0, H?'#ffcccc':'#fffff8');
+            hg.addColorStop(1, H?'#ff5544':'#f0e878');
+            C.fillStyle=hg;
+            C.beginPath(); C.ellipse(bx+w*0.44, hy, w*0.32, h*0.22, 0, 0, Math.PI*2); C.fill();
+
+            // Cresta
+            C.fillStyle=H?'#ff3333':'#dd2222';
+            C.beginPath(); C.moveTo(bx+w*0.3,hy-4); C.quadraticCurveTo(bx+w*0.25,hy-11,bx+w*0.35,hy-7); C.quadraticCurveTo(bx+w*0.42,hy-13,bx+w*0.47,hy-7); C.quadraticCurveTo(bx+w*0.52,hy-3,bx+w*0.3,hy-4); C.fill();
+            // Barbilla
+            C.beginPath(); C.arc(bx+w*0.36,hy+6,2.5,0,Math.PI*2); C.fill();
+
+            // Pico
+            C.fillStyle='#e08020';
+            C.beginPath(); C.moveTo(bx+w*0.72,hy-1); C.lineTo(bx+w*0.98,hy); C.lineTo(bx+w*0.72,hy+3); C.fill();
+            // línea de pico
+            C.strokeStyle='#c06010'; C.lineWidth=0.8;
+            C.beginPath(); C.moveTo(bx+w*0.72,hy+1); C.lineTo(bx+w*0.92,hy+1); C.stroke();
+
+            // Ojo
+            C.fillStyle='#111';
+            C.beginPath(); C.arc(bx+w*0.6,hy-1,2,0,Math.PI*2); C.fill();
+            C.fillStyle='#fff';
+            C.beginPath(); C.arc(bx+w*0.61,hy-1.5,0.8,0,Math.PI*2); C.fill();
+
+        } else if (ent.type === 'spider') {
+            // ── ARAÑA ────────────────────────────────────────────────
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const lw = Math.sin(T*0.28)*5; // leg wave
+            const faceX = FR ? x+w : x; // punto de cara
+
+            // 8 patas (4 a cada lado)
+            C.lineWidth=1.8;
+            for (let i=0; i<4; i++) {
+                const off = (i%2===0?lw:-lw)*(0.4+i*0.2);
+                const rootX = x+w*0.5, rootY = y+h*0.55;
+                const legLen1=8+i*1.5, legLen2=10+i;
+                // ángulo de cada pata (izquierda)
+                const ang = Math.PI*0.55 + i*0.18;
+                const mx1=rootX-Math.cos(ang)*legLen1, my1=rootY+Math.sin(ang)*legLen1+off;
+                const ex1=mx1-legLen2*0.7, ey1=my1+legLen2*0.8;
+                C.strokeStyle = H?'#ff6644':'rgba(20,20,20,0.9)';
+                C.beginPath(); C.moveTo(rootX,rootY); C.lineTo(mx1,my1); C.lineTo(ex1,ey1); C.stroke();
+                // espejo (derecha)
+                const rmx=x+w-(mx1-x), rex=x+w-(ex1-x);
+                C.beginPath(); C.moveTo(x+w-rootX+x,rootY); C.moveTo(rootX,rootY); C.lineTo(rmx,my1); C.lineTo(rex,ey1); C.stroke();
             }
+
+            // Abdomen grande (trasero)
+            const abdG = C.createRadialGradient(x+w*0.3,y+h*0.6,1, x+w*0.32,y+h*0.58,w*0.42);
+            abdG.addColorStop(0, H?'#ff7755':(ER?'#380808':'#1c1c1c'));
+            abdG.addColorStop(0.6, H?'#ff3322':(ER?'#200404':'#0a0a0a'));
+            abdG.addColorStop(1,'#000');
+            C.fillStyle=abdG;
+            C.beginPath(); C.ellipse(x+w*0.32,y+h*0.58, w*0.42,h*0.47, 0.1, 0, Math.PI*2); C.fill();
+
+            // Patrón en el abdomen (hourglass amarillo)
+            if (!H) {
+                C.fillStyle='rgba(220,160,0,0.5)';
+                C.beginPath(); C.moveTo(x+w*0.18,y+h*0.4); C.lineTo(x+w*0.46,y+h*0.38); C.lineTo(x+w*0.36,y+h*0.58); C.lineTo(x+w*0.18,y+h*0.56); C.closePath(); C.fill();
+            }
+
+            // Cefalotórax (frente)
+            const cfG = C.createRadialGradient(x+w*0.68,y+h*0.42,1, x+w*0.7,y+h*0.44,w*0.3);
+            cfG.addColorStop(0, H?'#ff6644':(ER?'#2a0808':'#2a2a2a'));
+            cfG.addColorStop(1, H?'#cc2200':'#101010');
+            C.fillStyle=cfG;
+            C.beginPath(); C.ellipse(x+w*0.72,y+h*0.46, w*0.3,h*0.37, 0, 0, Math.PI*2); C.fill();
+
+            // Ojos (4 pares, rojos brillantes)
+            const eyeBaseX = FR ? x+w*0.62 : x+w*0.56;
+            const eyeY = y+h*0.35;
+            for (let i=0;i<4;i++) {
+                const ex = eyeBaseX + i*4*(FR?1:-1);
+                C.fillStyle = H?'#ffee00':(ER?'#ff3300':'#cc0000');
+                C.beginPath(); C.arc(ex,eyeY,2,0,Math.PI*2); C.fill();
+                C.fillStyle='rgba(255,255,255,0.5)';
+                C.beginPath(); C.arc(ex+0.5,eyeY-0.7,0.7,0,Math.PI*2); C.fill();
+            }
+
+            // Quelíceros / colmillos
+            const qx = FR ? x+w*0.98 : x+w*0.46;
+            const qd = FR ? 1 : -1;
+            C.strokeStyle=H?'#ffaa44':'#555'; C.lineWidth=2;
+            C.beginPath(); C.moveTo(qx,eyeY+3); C.quadraticCurveTo(qx+qd*5,eyeY+6, qx+qd*4,eyeY+10); C.stroke();
+            C.beginPath(); C.moveTo(qx+qd*3,eyeY+3); C.quadraticCurveTo(qx+qd*8,eyeY+5, qx+qd*7,eyeY+10); C.stroke();
+            // veneno
+            C.fillStyle='#44ff88';
+            C.beginPath(); C.arc(qx+qd*4,eyeY+10,1.5,0,Math.PI*2); C.fill();
+            C.beginPath(); C.arc(qx+qd*7,eyeY+10,1.5,0,Math.PI*2); C.fill();
+
+        } else if (ent.type === 'zombie') {
+            // ── ZOMBIE ───────────────────────────────────────────────
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const walk = Math.abs(ent.vx)>0.05 ? Math.sin(T*0.2)*0.3 : 0;
+
+            if (!FR) { C.translate(x+w,0); C.scale(-1,1); }
+            const bx = FR ? x : 0;
+
+            // Sombra
+            C.globalAlpha=0.2; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(bx+w/2,y+h+1,w*0.5,3,0,0,Math.PI*2); C.fill();
+            C.globalAlpha=1;
+
+            // Piernas animadas
+            for (let leg=0;leg<2;leg++) {
+                const lx=bx+(leg===0?5:13);
+                const la = leg===0 ? walk : -walk;
+                C.fillStyle=H?'#ff5544':(ER?'#145a14':'#1a5a1a');
+                C.save(); C.translate(lx+2,y+h-18); C.rotate(la);
+                C.fillRect(-3,0,7,10); // muslo
+                C.translate(0,9); C.rotate(-la*0.4);
+                C.fillRect(-2,0,6,9); // espinilla
+                C.fillStyle=H?'#ff3322':'#0d0d0d';
+                C.fillRect(-3,8,9,4); // zapato
+                C.restore();
+            }
+
+            // Torso con rasgaduras
+            const torsoG=C.createLinearGradient(bx,y+h*0.43,bx+w,y+h*0.43);
+            torsoG.addColorStop(0, H?'#ff5544':(ER?'#1a6a1a':'#2a8a2a'));
+            torsoG.addColorStop(1, H?'#cc2211':(ER?'#0f440f':'#1a5a1a'));
+            C.fillStyle=torsoG;
+            C.fillRect(bx+2,y+h*0.42,w-4,h*0.36);
+            // rasgaduras
+            if (!H) {
+                C.strokeStyle='rgba(0,0,0,0.5)'; C.lineWidth=1;
+                C.beginPath(); C.moveTo(bx+7,y+h*0.46); C.lineTo(bx+9,y+h*0.57); C.stroke();
+                C.beginPath(); C.moveTo(bx+15,y+h*0.49); C.lineTo(bx+12,y+h*0.6); C.stroke();
+            }
+
+            // Brazos extendidos (pose zombie clásica)
+            const armSw = Math.sin(T*0.15)*0.12;
+            // brazo trasero
+            C.fillStyle=H?'#ff6655':(ER?'#2a9a2a':'#3a9a3a');
+            C.save(); C.translate(bx+4,y+h*0.44); C.rotate(-0.35+armSw);
+            C.fillRect(-3,0,6,13);
+            C.translate(0,12); C.rotate(0.1);
+            C.fillRect(-2.5,0,5,10);
+            C.fillStyle=H?'#ff8866':(ER?'#1a8a1a':'#4aaa4a');
+            // dedos extendidos
+            for(let d=0;d<3;d++){C.fillRect(-2+d*2.5,9,2,5);}
+            C.restore();
+            // brazo delantero
+            C.fillStyle=H?'#ff4433':(ER?'#1a8a1a':'#2a8a2a');
+            C.save(); C.translate(bx+w-4,y+h*0.42); C.rotate(-0.6+armSw);
+            C.fillRect(-3,0,6,13);
+            C.translate(0,12); C.rotate(0.1);
+            C.fillRect(-2.5,0,5,10);
+            C.fillStyle=H?'#ff7755':(ER?'#1aaa1a':'#3aaa3a');
+            for(let d=0;d<3;d++){C.fillRect(-2+d*2.5,9,2,5);}
+            C.restore();
+
+            // Cuello
+            C.fillStyle=H?'#ff5544':'#5ab05a';
+            C.fillRect(bx+w*0.3,y+h*0.26,w*0.4,h*0.08);
+
+            // Cabeza
+            const hg=C.createLinearGradient(bx+2,y+h*0.06,bx+w-2,y+h*0.27);
+            hg.addColorStop(0,H?'#ff8877':(ER?'#60c060':'#70d070'));
+            hg.addColorStop(1,H?'#cc3322':(ER?'#3a8a3a':'#4a9a4a'));
+            C.fillStyle=hg; C.fillRect(bx+2,y+h*0.06,w-4,h*0.22);
+
+            // Pelo revuelto
+            C.fillStyle=H?'#cc2211':(ER?'#1a4a1a':'#1a5a1a');
+            C.fillRect(bx+2,y+h*0.05,w-4,4);
+            C.fillRect(bx+4,y+h*0.03,4,4); C.fillRect(bx+13,y+h*0.02,5,5);
+
+            // Ojos huecos brillantes
+            C.fillStyle='#000';
+            C.fillRect(bx+4,y+h*0.11,6,5); C.fillRect(bx+13,y+h*0.11,6,5);
+            C.fillStyle=ER?'#ff4400':'#cc0000';
+            C.fillRect(bx+5,y+h*0.12,4,3); C.fillRect(bx+14,y+h*0.12,4,3);
+            // brillo
+            C.fillStyle='rgba(255,180,0,0.6)';
+            C.fillRect(bx+5,y+h*0.12,2,1.5); C.fillRect(bx+14,y+h*0.12,2,1.5);
+
+            // Nariz y boca
+            C.fillStyle='#000';
+            C.fillRect(bx+w*0.4,y+h*0.19,2,3); // nariz
+            C.fillRect(bx+5,y+h*0.23,w-10,3); // boca abierta
+            // dientes
+            C.fillStyle='#ddd';
+            for(let t=0;t<3;t++){C.fillRect(bx+7+t*5,y+h*0.23,3,2);}
+            // herida / sangre
+            if (!H) {
+                C.fillStyle='rgba(180,0,0,0.5)';
+                C.fillRect(bx+3,y+h*0.15,3,2);
+            }
+
+        } else if (ent.type === 'archer') {
+            // ── ARQUERO ──────────────────────────────────────────────
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const fR = ent.attackCooldown < 120 ? window.player.x > ent.x : ent.vx >= 0;
+            const walk = Math.abs(ent.vx)>0.05 ? Math.sin(T*0.2)*0.25 : 0;
+
+            if (!fR) { C.translate(x+w,0); C.scale(-1,1); }
+            const bx = fR ? x : 0;
+
+            // Sombra
+            C.globalAlpha=0.18; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(bx+w/2,y+h+1,w*0.4,2.5,0,0,Math.PI*2); C.fill();
+            C.globalAlpha=1;
+
+            // Piernas (pantalón oscuro)
+            for (let leg=0;leg<2;leg++) {
+                const lx=bx+(leg===0?4:12);
+                const la = leg===0 ? walk : -walk;
+                C.fillStyle=H?'#ff4444':'#1e0f38';
+                C.save(); C.translate(lx+2,y+h-17); C.rotate(la);
+                C.fillRect(-2,0,5,9); C.translate(0,8); C.rotate(-la*0.4);
+                C.fillRect(-2,0,5,8);
+                C.fillStyle=H?'#ff3333':'#0d0820';
+                C.fillRect(-3,7,7,3);
+                C.restore();
+            }
+
+            // Capa trasera (flutter)
+            const capeWave = Math.sin(T*0.12)*3;
+            C.fillStyle=H?'#aa2222':(ER?'#2a004a':'#3b0f6e');
+            C.beginPath(); C.moveTo(bx+w*0.15,y+h*0.37); C.lineTo(bx-4,y+h*0.75+capeWave); C.lineTo(bx+w*0.45,y+h*0.76+capeWave*0.5); C.closePath(); C.fill();
+
+            // Torso (túnica)
+            const tg=C.createLinearGradient(bx,y+h*0.34,bx+w,y+h*0.34);
+            tg.addColorStop(0,H?'#ff5544':(ER?'#5a0088':'#7c2fb8'));
+            tg.addColorStop(1,H?'#cc2211':(ER?'#380060':'#51198a'));
+            C.fillStyle=tg; C.fillRect(bx+1,y+h*0.34,w-2,h*0.36);
+            // detalle dorado
+            if(!H){
+                C.fillStyle='#c8920f';
+                C.fillRect(bx+w*0.3,y+h*0.36,w*0.4,2);
+                C.beginPath(); C.arc(bx+w/2,y+h*0.44,3,0,Math.PI*2); C.fill();
+            }
+
+            // Brazo izquierdo con carcaj de flechas
+            C.fillStyle=H?'#ff5555':'#5a2888';
+            C.fillRect(bx-1,y+h*0.35,4,15);
+            // Carcaj
+            C.fillStyle=H?'#cc3322':'#5a2810';
+            C.fillRect(bx-3,y+h*0.37,5,14);
+            // flechas en el carcaj
+            C.strokeStyle='#c8a050'; C.lineWidth=1;
+            for(let fi=0;fi<4;fi++){
+                C.beginPath(); C.moveTo(bx-2,y+h*0.39+fi*2.5); C.lineTo(bx+2,y+h*0.39+fi*2.5); C.stroke();
+            }
+
+            // Brazo derecho + arco
+            const bowAngle = ent.attackCooldown<120 ? Math.atan2(
+                (window.player.y+24)-(y+h*0.44),
+                fR ? (window.player.x+12)-(bx+w) : (bx)-(window.player.x+12)
+            ) : 0;
+            C.save();
+            C.translate(bx+w,y+h*0.43);
+            C.rotate(Math.max(-0.8,Math.min(0.8,bowAngle)));
+            // brazo
+            C.fillStyle=H?'#ff6666':'#6a3498';
+            C.fillRect(0,-3,13,6);
+            // arco (curva de madera)
+            C.strokeStyle=H?'#ff8844':'#7a4820'; C.lineWidth=3;
+            C.beginPath(); C.arc(15,0,11,-1.1,1.1); C.stroke();
+            // refuerzo central del arco
+            C.strokeStyle=H?'#ffaa66':'#9a6030'; C.lineWidth=1.5;
+            C.beginPath(); C.arc(15,0,11,-0.4,0.4); C.stroke();
+            // cuerda tensada
+            const pull = ent.attackCooldown<120 ? Math.min(8,(120-ent.attackCooldown)/120*8) : 0;
+            C.strokeStyle='rgba(220,210,190,0.9)'; C.lineWidth=1;
+            C.beginPath();
+            C.moveTo(15+Math.cos(-1.1)*11, Math.sin(-1.1)*11);
+            C.lineTo(15-pull, 0);
+            C.lineTo(15+Math.cos(1.1)*11, Math.sin(1.1)*11);
+            C.stroke();
+            // flecha lista
+            if (ent.attackCooldown<90) {
+                C.fillStyle='#c8a050'; C.fillRect(15-pull,-1,16+pull,2);
+                C.fillStyle='#607888'; C.fillRect(30,-2.5,5,5); // punta
+                // plumas
+                C.fillStyle='#cc4444';
+                C.beginPath(); C.moveTo(14-pull,-1); C.lineTo(14-pull-4,-4); C.lineTo(14-pull,0); C.fill();
+                C.beginPath(); C.moveTo(14-pull,1); C.lineTo(14-pull-4,4); C.lineTo(14-pull,0); C.fill();
+            }
+            C.restore();
+
+            // Cuello
+            C.fillStyle=H?'#ff7755':'#c09070';
+            C.fillRect(bx+w*0.28,y+h*0.27,w*0.44,h*0.09);
+
+            // Cabeza con capucha
+            // capucha exterior
+            C.fillStyle=H?'#aa1122':(ER?'#300050':'#4c1590');
+            C.beginPath(); C.moveTo(bx+1,y+h*0.27); C.lineTo(bx+w/2,y+h*0.04); C.lineTo(bx+w-1,y+h*0.27); C.closePath(); C.fill();
+            // cara
+            const faceG=C.createLinearGradient(bx+3,y+h*0.15,bx+w-3,y+h*0.27);
+            faceG.addColorStop(0,H?'#ff9977':'#d4a880');
+            faceG.addColorStop(1,H?'#cc4433':'#b07850');
+            C.fillStyle=faceG; C.fillRect(bx+3,y+h*0.15,w-6,h*0.14);
+            // sombra de capucha
+            C.fillStyle='rgba(0,0,0,0.25)';
+            C.fillRect(bx+3,y+h*0.15,w-6,3);
+
+            // ojos (expresivos, ER=rojos)
+            C.fillStyle=ER?'#ff3300':'#1a0a05';
+            C.fillRect(bx+5,y+h*0.175,4,2.5); C.fillRect(bx+11,y+h*0.175,4,2.5);
+            C.fillStyle=ER?'#ff8800':'#4a2a10';
+            C.fillRect(bx+6,y+h*0.178,2,1.5); C.fillRect(bx+12,y+h*0.178,2,1.5);
+
+            // nariz y boca
+            C.fillStyle='rgba(0,0,0,0.3)';
+            C.fillRect(bx+w*0.42,y+h*0.215,2,2);
+            C.fillRect(bx+6,y+h*0.24,w-12,1.5);
         }
+
+        // Barra de HP mini encima si fue dañado recientemente
+        if (ent.hp < ent.maxHp && (Date.now()-(ent.lastHitTime||0)<3000)) {
+            const pct=Math.max(0,ent.hp/ent.maxHp);
+            C.fillStyle='rgba(0,0,0,0.55)'; C.fillRect(ent.x,ent.y-9,ent.width,4);
+            const hc = pct>0.6?'#44dd44':(pct>0.3?'#f0a020':'#ee3333');
+            C.fillStyle=hc; C.fillRect(ent.x,ent.y-9,ent.width*pct,4);
+            C.strokeStyle='rgba(0,0,0,0.4)'; C.lineWidth=0.5;
+            C.strokeRect(ent.x,ent.y-9,ent.width,4);
+        }
+
+        C.restore();
     });
 
 if (window.player.placementMode && !window.player.isDead) {
@@ -624,14 +940,6 @@ if (window.player.placementMode && !window.player.isDead) {
         window.ctx.globalAlpha = 0.6;
         if (window.player.placementMode === 'boxes') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX + 2, gridY + 10, window.game.blockSize - 4, window.game.blockSize - 10); } 
         else if (window.player.placementMode === 'campfire_item') { window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(gridX + 2, gridY + 20, 26, 10); }
-        else if (window.player.placementMode === 'barricade_item') {
-            window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX+2, gridY+16, 26, 8);
-            window.ctx.strokeStyle = '#6B3410'; window.ctx.lineWidth = 2;
-            window.ctx.beginPath(); window.ctx.moveTo(gridX+2, gridY+10); window.ctx.lineTo(gridX+28, gridY+24); window.ctx.stroke();
-            window.ctx.beginPath(); window.ctx.moveTo(gridX+28, gridY+10); window.ctx.lineTo(gridX+2, gridY+24); window.ctx.stroke();
-            window.ctx.fillStyle = '#aaa';
-            for (let _pi2 = 0; _pi2 < 5; _pi2++) { let _px2 = gridX+3+_pi2*6; window.ctx.beginPath(); window.ctx.moveTo(_px2,gridY+16); window.ctx.lineTo(_px2+3,gridY+6); window.ctx.lineTo(_px2+6,gridY+16); window.ctx.fill(); }
-        }
         else if (window.player.placementMode === 'bed_item') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX, gridY + 20, 30, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(gridX + 2, gridY + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(gridX + 12, gridY + 16, 18, 4); }
         
         window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.strokeRect(gridX, gridY, window.game.blockSize, window.game.blockSize); 
@@ -704,11 +1012,10 @@ if (window.player.placementMode && !window.player.isDead) {
     window.particles.forEach(p => { window.ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); window.ctx.fillStyle = p.color; window.ctx.fillRect(p.x, p.y, p.size, p.size); });
     window.damageTexts.forEach(dt => {
         window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life));
-        window.ctx.font = 'bold 16px Inter, sans-serif';
+        window.ctx.font = 'bold 15px Inter, sans-serif';
         window.ctx.textAlign = 'center';
         if (dt.color === 'melee') {
-            // Texto blanco con outline rojo para daño a enemigos
-            window.ctx.strokeStyle = 'rgba(180,0,0,0.9)';
+            window.ctx.strokeStyle = 'rgba(140,0,0,0.95)';
             window.ctx.lineWidth = 3;
             window.ctx.strokeText(dt.text, dt.x, dt.y);
             window.ctx.fillStyle = '#ffffff';
