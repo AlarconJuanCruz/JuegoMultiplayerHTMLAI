@@ -1,3 +1,5 @@
+// === game.js - MOTOR PRINCIPAL Y FÍSICAS ===
+
 window.sendWorldUpdate = function(action, payload) {
     if (window.game.isMultiplayer && window.socket) { window.socket.emit('worldUpdate', { action: action, payload: payload }); }
 };
@@ -132,10 +134,20 @@ window.startGame = function(multiplayer, ip = null) {
                 if(window.updateUI) window.updateUI();
             });
 
-            window.socket.on('chatMessage', (data) => { if (window.otherPlayers[data.id]) { window.otherPlayers[data.id].chatText = data.text; window.otherPlayers[data.id].chatExpires = Date.now() + 6500; } });
+            // GESTIÓN DE CHAT GLOBAL MULTIJUGADOR
+            window.socket.on('chatMessage', (data) => { 
+                if (window.otherPlayers[data.id]) { 
+                    window.otherPlayers[data.id].chatText = data.text; 
+                    window.otherPlayers[data.id].chatExpires = Date.now() + 6500; 
+                    if(window.addGlobalMessage) window.addGlobalMessage(`💬 [${window.otherPlayers[data.id].name}]: ${data.text}`, '#a29bfe');
+                } 
+            });
             
             window.socket.on('worldUpdate', (data) => {
-                if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
+                // Notificación global de muertes
+                if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
+                
+                else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
                 else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); delete window.treeState[data.payload.x]; window.trees = window.trees.filter(t => t.x !== data.payload.x); }
@@ -149,13 +161,10 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'drop_item') { let exists = window.droppedItems.find(i => i.id === data.payload.item.id); if(!exists) window.droppedItems.push(data.payload.item); }
                 else if (data.action === 'pickup_item') { let index = window.droppedItems.findIndex(i => i.id === data.payload.id); if (index !== -1) window.droppedItems.splice(index, 1); }
                 else if (data.action === 'spawn_projectile') { window.projectiles.push(data.payload); }
-                
-                // FIX ENEMIGOS: Sincronizar nacimientos y muertes por ID único
                 else if (data.action === 'spawn_entity') { if (!window.entities.some(e => e.id === data.payload.entity.id) && !window.killedEntities.includes(data.payload.entity.id)) { window.entities.push(data.payload.entity); } }
                 else if (data.action === 'kill_entity') { window.killedEntities.push(data.payload.id); window.entities = window.entities.filter(en => en.id !== data.payload.id); }
                 else if (data.action === 'hit_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.hp -= data.payload.dmg; window.setHit(e); } }
                 else if (data.action === 'flee_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.fleeTimer = 180; e.fleeDir = data.payload.dir; } }
-                
                 else if (data.action === 'update_box') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && (bl.type === 'box' || bl.type === 'grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && window.currentOpenBox.x === b.x) if(window.renderBoxUI) window.renderBoxUI(); } }
                 else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && window.currentCampfire.x === b.x) if(window.renderCampfireUI) window.renderCampfireUI(); } }
             });
@@ -177,6 +186,7 @@ window.addEventListener('keydown', (e) => {
             let msg = chatInput.value.trim();
             if (msg.length > 0) {
                 window.player.chatText = msg; window.player.chatExpires = Date.now() + 6500;
+                if(window.addGlobalMessage) window.addGlobalMessage(`💬 [Tú]: ${msg}`, '#3498db');
                 if (window.socket) window.socket.emit('chatMessage', msg);
             }
             chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none'; return;
@@ -201,6 +211,12 @@ window.addEventListener('keydown', (e) => {
         }
     }
     const num = parseInt(e.key); if (!isNaN(num) && num > 0 && num <= window.player.availableTools.length) { window.player.activeTool = window.player.availableTools[num - 1]; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; if(window.renderToolbar) window.renderToolbar(); }
+});
+
+window.addEventListener('keyup', (e) => {
+    if (!window.game || !window.game.isRunning) return;
+    if (e.key === 'a' || e.key === 'A') window.keys.a = false; if (e.key === 'd' || e.key === 'D') window.keys.d = false; if (e.key === 'Shift') window.keys.shift = false; 
+    if (e.key === 'y' || e.key === 'Y') window.keys.y = false; if (e.key === 'w' || e.key === 'W' || e.key === ' ') { window.keys.jumpPressed = false; window.player.jumpKeyReleased = true; }
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -240,7 +256,6 @@ window.addEventListener('mousedown', (e) => {
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true)) {
                     let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                     let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
-                    
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') {
@@ -279,8 +294,8 @@ window.addEventListener('mousedown', (e) => {
                     if (ent.hp <= 0) { 
                         window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                         window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
-                        if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(15); }
-                        else if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
+                        if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
+                        else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
                         else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); }
                         else if (ent.type === 'archer') { 
                             let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); 
@@ -382,24 +397,6 @@ window.addEventListener('mousedown', (e) => {
     if(actionDone && window.useTool) window.useTool();
 });
 
-window.addEventListener('mouseup', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead) return;
-    if (window.player.activeTool === 'bow') {
-        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
-        if (e.button === 0 && window.player.isCharging) {
-            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
-                window.player.inventory.arrows--;
-                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + window.player.height/2;
-                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
-                let power = 4 + (window.player.chargeLevel / 100) * 6; 
-                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
-                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
-            }
-            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
-        }
-    }
-});
-
 function update() {
     if (!window.game || !window.game.isRunning) return;
     if (!window.canvas) return;
@@ -408,6 +405,19 @@ function update() {
     if (window.game.screenShake > 0) window.game.screenShake--;
     if (window.player.attackFrame > 0) window.player.attackFrame--;
     
+    // NUEVO: CONSUMO DE LA ANTORCHA (Dura 300 segundos = 5 minutos si está en la mano)
+    if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
+        if (window.player.activeTool === 'torch' && window.player.toolHealth['torch']) {
+            window.player.toolHealth['torch']--;
+            if (window.player.toolHealth['torch'] <= 0) {
+                window.player.availableTools = window.player.availableTools.filter(t => t !== 'torch');
+                window.player.activeTool = 'hand';
+                window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "¡Antorcha Apagada!", '#ff4444');
+                if (window.renderToolbar) window.renderToolbar();
+            }
+        }
+    }
+
     if (window.player.isCharging) { window.player.chargeLevel += 1.0 * (1 + window.player.stats.agi * 0.2); if (window.player.chargeLevel > 100) window.player.chargeLevel = 100; }
     
     let currentUptime = window.game.serverStartTime ? (Date.now() - window.game.serverStartTime) : (window.game.frameCount * (1000/60));
@@ -560,7 +570,7 @@ function update() {
         if(hitBlock) { window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); window.projectiles.splice(i,1); continue; }
         
         if (pr.isEnemy) {
-            if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { window.damagePlayer(pr.damage); window.spawnParticles(pr.x, pr.y, '#ff4444', 5); window.projectiles.splice(i, 1); continue; }
+            if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { window.damagePlayer(pr.damage, 'Flecha de Cazador'); window.spawnParticles(pr.x, pr.y, '#ff4444', 5); window.projectiles.splice(i, 1); continue; }
         } else {
             let hitEnt = false;
             for(let e = window.entities.length - 1; e >= 0; e--) {
@@ -604,7 +614,6 @@ function update() {
         });
     }
 
-    // FIX ENEMIGOS MULTIJUGADOR: Master envía el spawn y los demas lo reciben por red
     let spawnRate = Math.max(150, 600 - (window.game.days * 20) - Math.floor(window.player.x / 50));
     if (isNight && window.game.frameCount % spawnRate === 0 && isMasterClient) { 
         let cx = window.player.x + 800; if (Math.random() > 0.5 && window.player.x - 800 > window.game.shoreX + 2000) cx = window.player.x - 800; 
@@ -619,6 +628,8 @@ function update() {
             if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity', { entity: newEnt }); }
         }
     }
+
+    let isHoldingTorch = window.player.activeTool === 'torch' && !window.player.inBackground && !window.player.isDead;
 
     window.entities.forEach((ent, i) => {
         let lastX = ent.x; ent.x += ent.vx; let hitWall = window.checkEntityCollisions(ent, 'x'); 
@@ -643,10 +654,17 @@ function update() {
             if (ent.ignorePlayer > 0) ent.ignorePlayer--;
             let distToPlayer = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
             let aggroRange = 180; if (isNight && !window.player.isStealth) aggroRange = 600; if (ent.type === 'zombie' && !window.player.isStealth) aggroRange = 800; 
-            if (distToPlayer < aggroRange && ent.ignorePlayer <= 0) {
+
+            // NUEVO: LA ANTORCHA ESPANTA MONSTRUOS DE NIVEL BAJO (NIVEL <= 3)
+            let repelledByTorch = isHoldingTorch && distToPlayer < 250 && ent.level <= 3;
+
+            if (repelledByTorch) {
+                ent.vx = (ent.x > pCX) ? 1.5 : -1.5;
+                ent.ignorePlayer = 60; // Lo mantiene huyendo
+            } else if (distToPlayer < aggroRange && ent.ignorePlayer <= 0) {
                 let speed = ent.type === 'zombie' ? 0.4 : 0.8; let targetVx = (window.player.x > ent.x) ? speed : -speed; ent.vx = targetVx;
                 if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; if (ent.stuckFrames > 60 && ent.type !== 'zombie') { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
-                if (distToPlayer < 40 && ent.attackCooldown <= 0 && !window.player.inBackground && !window.player.isDead) { window.damagePlayer(ent.damage); ent.attackCooldown = 150; }
+                if (distToPlayer < 40 && ent.attackCooldown <= 0 && !window.player.inBackground && !window.player.isDead) { window.damagePlayer(ent.damage, ent.name); ent.attackCooldown = 150; }
             } else { if(ent.type === 'spider' && Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.5 : -0.5); }
             if (ent.attackCooldown > 0) ent.attackCooldown--;
         } 
@@ -691,7 +709,7 @@ function update() {
 
     if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
         window.player.hunger -= isMoving ? 0.1 : 0.02; 
-        if (window.player.hunger <= 0) { window.player.hunger = 0; window.damagePlayer(2); } 
+        if (window.player.hunger <= 0) { window.player.hunger = 0; window.damagePlayer(2, 'Hambre'); } 
         if (window.player.hunger > 50 && window.player.hp < window.player.maxHp) { window.player.hp += 0.5; if(typeof window.updateUI==='function') window.updateUI(); }
     }
     
