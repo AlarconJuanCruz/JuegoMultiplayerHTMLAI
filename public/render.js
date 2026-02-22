@@ -530,6 +530,45 @@ window.draw = function() {
             } else if (b.type === 'grave') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); 
                 window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
+            } else if (b.type === 'torch_placed') {
+                // Palo
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513';
+                window.ctx.fillRect(b.x + 13, b.y + 8, 4, 22);
+                // Llama
+                if (b.isBurning && b.hp > 0) {
+                    let _flk = Math.random() * 3;
+                    window.ctx.fillStyle = '#e67e22';
+                    window.ctx.beginPath(); window.ctx.arc(b.x+15, b.y+8-_flk, 5+_flk, 0, Math.PI*2); window.ctx.fill();
+                    window.ctx.fillStyle = '#f1c40f';
+                    window.ctx.beginPath(); window.ctx.arc(b.x+15, b.y+8-_flk, 3, 0, Math.PI*2); window.ctx.fill();
+                    // Barra de durabilidad
+                    let _pct = Math.max(0, b.hp / b.maxHp);
+                    window.ctx.fillStyle = 'rgba(0,0,0,0.5)'; window.ctx.fillRect(b.x+4, b.y+24, 22, 3);
+                    let _bc = _pct > 0.5 ? '#e67e22' : (_pct > 0.2 ? '#f39c12' : '#e74c3c');
+                    window.ctx.fillStyle = _bc; window.ctx.fillRect(b.x+4, b.y+24, 22*_pct, 3);
+                }
+            } else if (b.type === 'barricade') {
+                // Base de madera
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513';
+                window.ctx.fillRect(b.x + 2, b.y + 16, 26, 8);
+                // Tablas cruzadas
+                window.ctx.strokeStyle = b.isHit ? '#ff4444' : '#6B3410';
+                window.ctx.lineWidth = 3;
+                window.ctx.beginPath(); window.ctx.moveTo(b.x+2, b.y+10); window.ctx.lineTo(b.x+28, b.y+24); window.ctx.stroke();
+                window.ctx.beginPath(); window.ctx.moveTo(b.x+28, b.y+10); window.ctx.lineTo(b.x+2, b.y+24); window.ctx.stroke();
+                // Puas
+                window.ctx.fillStyle = b.isHit ? '#ffaaaa' : '#aaa';
+                for (let _pi = 0; _pi < 5; _pi++) {
+                    let _px = b.x + 3 + _pi * 6;
+                    window.ctx.beginPath(); window.ctx.moveTo(_px, b.y+16); window.ctx.lineTo(_px+3, b.y+6); window.ctx.lineTo(_px+6, b.y+16); window.ctx.fill();
+                }
+                // Barra de vida
+                if (b.hp < b.maxHp) {
+                    let _bpct = b.hp / b.maxHp;
+                    window.ctx.fillStyle = 'rgba(0,0,0,0.5)'; window.ctx.fillRect(b.x, b.y+26, 30, 3);
+                    window.ctx.fillStyle = _bpct > 0.5 ? '#4CAF50' : '#e74c3c';
+                    window.ctx.fillRect(b.x, b.y+26, 30*_bpct, 3);
+                }
             }
         }
     });
@@ -554,13 +593,19 @@ window.draw = function() {
                 window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#fff'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
                 if(!ent.isHit) { window.ctx.fillStyle = '#ff0000'; window.ctx.fillRect(ent.x + (ent.vx > 0 ? ent.width : -4), ent.y, 4, 6); }
             } else if (ent.type === 'spider') {
-                window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#222'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                let _sc = ent.isHit ? '#ff6644' : ((ent.enragedFrames||0) > 0 ? '#441111' : '#222');
+                window.ctx.fillStyle = _sc; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff0000'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
                 if(!ent.isHit) { window.ctx.fillStyle = '#ff0000'; let eyeSize = Math.max(2, ent.width * 0.15); let eyeX = ent.vx > 0 ? ent.x + ent.width - eyeSize - 2 : ent.x + 2; window.ctx.fillRect(eyeX, ent.y + ent.height * 0.25, eyeSize, eyeSize); }
             } else if (ent.type === 'zombie') {
-                window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#228b22'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                let _zc = ent.isHit ? '#ff6644' : ((ent.enragedFrames||0) > 0 ? '#115511' : '#228b22');
+                window.ctx.fillStyle = _zc; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff2200'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
                 if(!ent.isHit) { window.ctx.fillStyle = '#000'; window.ctx.fillRect(ent.x + (ent.vx > 0 ? 16 : 4), ent.y + 6, 4, 4); }
             } else if (ent.type === 'archer') {
-                window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#8e44ad'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                let _ac = ent.isHit ? '#ff6644' : '#8e44ad';
+                window.ctx.fillStyle = _ac; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
+                if ((ent.enragedFrames||0) > 0) { window.ctx.strokeStyle='#ff0000'; window.ctx.lineWidth=1.5; window.ctx.strokeRect(ent.x,ent.y,ent.width,ent.height); }
                 window.ctx.save(); let isFacingR = ent.vx >= 0; if (ent.attackCooldown < 100) isFacingR = window.player.x > ent.x; 
                 window.ctx.translate(ent.x + ent.width/2, ent.y + ent.height/2); if (!isFacingR) window.ctx.scale(-1, 1);
                 window.ctx.strokeStyle = '#8B4513'; window.ctx.lineWidth = 2; window.ctx.beginPath(); window.ctx.arc(8, 0, 10, -Math.PI/2.5, Math.PI/2.5); window.ctx.stroke(); window.ctx.restore();
@@ -579,6 +624,14 @@ if (window.player.placementMode && !window.player.isDead) {
         window.ctx.globalAlpha = 0.6;
         if (window.player.placementMode === 'boxes') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX + 2, gridY + 10, window.game.blockSize - 4, window.game.blockSize - 10); } 
         else if (window.player.placementMode === 'campfire_item') { window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(gridX + 2, gridY + 20, 26, 10); }
+        else if (window.player.placementMode === 'barricade_item') {
+            window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX+2, gridY+16, 26, 8);
+            window.ctx.strokeStyle = '#6B3410'; window.ctx.lineWidth = 2;
+            window.ctx.beginPath(); window.ctx.moveTo(gridX+2, gridY+10); window.ctx.lineTo(gridX+28, gridY+24); window.ctx.stroke();
+            window.ctx.beginPath(); window.ctx.moveTo(gridX+28, gridY+10); window.ctx.lineTo(gridX+2, gridY+24); window.ctx.stroke();
+            window.ctx.fillStyle = '#aaa';
+            for (let _pi2 = 0; _pi2 < 5; _pi2++) { let _px2 = gridX+3+_pi2*6; window.ctx.beginPath(); window.ctx.moveTo(_px2,gridY+16); window.ctx.lineTo(_px2+3,gridY+6); window.ctx.lineTo(_px2+6,gridY+16); window.ctx.fill(); }
+        }
         else if (window.player.placementMode === 'bed_item') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX, gridY + 20, 30, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(gridX + 2, gridY + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(gridX + 12, gridY + 16, 18, 4); }
         
         window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.strokeRect(gridX, gridY, window.game.blockSize, window.game.blockSize); 
@@ -649,7 +702,23 @@ if (window.player.placementMode && !window.player.isDead) {
     });
 
     window.particles.forEach(p => { window.ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); window.ctx.fillStyle = p.color; window.ctx.fillRect(p.x, p.y, p.size, p.size); });
-    window.damageTexts.forEach(dt => { window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life)); window.ctx.fillStyle = dt.color; window.ctx.font = 'bold 18px Inter, sans-serif'; window.ctx.fillText(dt.text, dt.x, dt.y); });
+    window.damageTexts.forEach(dt => {
+        window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life));
+        window.ctx.font = 'bold 16px Inter, sans-serif';
+        window.ctx.textAlign = 'center';
+        if (dt.color === 'melee') {
+            // Texto blanco con outline rojo para daño a enemigos
+            window.ctx.strokeStyle = 'rgba(180,0,0,0.9)';
+            window.ctx.lineWidth = 3;
+            window.ctx.strokeText(dt.text, dt.x, dt.y);
+            window.ctx.fillStyle = '#ffffff';
+            window.ctx.fillText(dt.text, dt.x, dt.y);
+        } else {
+            window.ctx.fillStyle = dt.color;
+            window.ctx.fillText(dt.text, dt.x, dt.y);
+        }
+    });
+    window.ctx.textAlign = 'left';
     window.ctx.globalAlpha = 1.0; 
 
     if (window.game.isRaining) {

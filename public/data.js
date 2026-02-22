@@ -46,7 +46,8 @@ window.itemDefs = {
     'arrows': { name: 'Flechas', color: '#888', size: 6, maxStack: 100 }, 
     'boxes': { name: 'Caja', color: '#8B4513', size: 14, maxStack: 10 }, 
     'campfire_item': { name: 'Fogata', color: '#e67e22', size: 14, maxStack: 10 },
-    'bed_item': { name: 'Cama', color: '#8B0000', size: 16, maxStack: 1 } 
+    'bed_item': { name: 'Cama', color: '#8B0000', size: 16, maxStack: 1 },
+    'barricade_item': { name: 'Barricada con Púas', color: '#8B4513', size: 14, maxStack: 5 }
 };
 window.toolMaxDurability = { torch: 300, axe: 40, hammer: 50, pickaxe: 40, bow: 30, sword: 60 };
 
@@ -55,7 +56,7 @@ window.player = {
     baseSpeed: 3.5, baseJump: -9.0, baseHp: 100, baseHunger: 100, speed: 3.5, jumpPower: -9.0, hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
-    inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }, 
+    inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0 }, 
     
     // SISTEMA CINTURÓN 100% GARANTIZADO
     toolbar: ['hand', null, null, null, null, null],
