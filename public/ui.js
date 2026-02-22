@@ -1,18 +1,28 @@
 // === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
+
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
 const btnOnline = window.getEl('btn-online');
 if (btnOnline) btnOnline.addEventListener('click', () => { window.startGame(true); });
 
-const currentUrlDisplay = window.getEl('current-url'); const urlArea = window.getEl('online-url-area'); const statusBadge = window.getEl('server-status-badge');
+const currentUrlDisplay = window.getEl('current-url'); 
+const urlArea = window.getEl('online-url-area'); 
+const statusBadge = window.getEl('server-status-badge');
+
 if (!isLocalEnv) {
     if (urlArea) urlArea.style.display = 'block';
     if (currentUrlDisplay) currentUrlDisplay.innerText = window.location.origin;
     if (statusBadge) {
         statusBadge.innerHTML = 'Estado: <span style="color:#f39c12;">🟠 Despertando / Verificando...</span>';
-        fetch(window.location.origin).then(r => { if (r.ok) statusBadge.innerHTML = 'Estado: <span style="color:#4CAF50;">🟢 En Línea y Listo</span>'; else throw new Error(); }).catch(e => { statusBadge.innerHTML = 'Estado: <span style="color:#ff4444;">🔴 Error de Conexión</span>'; });
+        fetch(window.location.origin).then(r => { 
+            if (r.ok) statusBadge.innerHTML = 'Estado: <span style="color:#4CAF50;">🟢 En Línea y Listo</span>'; 
+            else throw new Error(); 
+        }).catch(e => { 
+            statusBadge.innerHTML = 'Estado: <span style="color:#ff4444;">🔴 Error de Conexión</span>'; 
+        });
     }
 } else {
-    if (urlArea) urlArea.style.display = 'none'; if (statusBadge) statusBadge.style.display = 'none'; 
+    if (urlArea) urlArea.style.display = 'none'; 
+    if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
 // SISTEMA DE LOGS Y CHAT GLOBAL FIJABLE
@@ -21,8 +31,12 @@ window.toggleChatLog = function() {
     window.isChatLogPinned = !window.isChatLogPinned;
     let log = window.getEl('global-chat-log');
     if (log) {
-        if (window.isChatLogPinned) log.classList.add('pinned');
-        else log.classList.remove('pinned');
+        if (window.isChatLogPinned) {
+            log.classList.add('pinned');
+            log.scrollTop = log.scrollHeight;
+        } else {
+            log.classList.remove('pinned');
+        }
     }
 };
 
@@ -37,7 +51,8 @@ window.addGlobalMessage = function(text, color = '#fff') {
     log.appendChild(el);
     
     if (log.childNodes.length > 30) { log.removeChild(log.firstChild); }
-    setTimeout(() => { el.classList.add('fade-out'); }, 20000); // 20 Segundos antes de volverse invisible
+    setTimeout(() => { el.classList.add('fade-out'); }, 15000);
+    if (window.isChatLogPinned) { log.scrollTop = log.scrollHeight; }
 };
 
 window.getEl('btn-single')?.addEventListener('click', () => window.startGame(false));
