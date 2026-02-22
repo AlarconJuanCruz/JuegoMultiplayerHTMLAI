@@ -239,7 +239,6 @@ window.addEventListener('keydown', (e) => {
         }
     }
     const num = parseInt(e.key); 
-    // SELECCIÓN CON TECLAS 1-6 DEL CINTURÓN
     if (!isNaN(num) && num >= 1 && num <= 6) { 
         if(window.selectToolbarSlot) window.selectToolbarSlot(num - 1); 
         if(window.renderToolbar) window.renderToolbar(); 
@@ -294,7 +293,7 @@ window.addEventListener('mousedown', (e) => {
                     
                     if (window.player.inventory[window.player.placementMode] <= 0) {
                         window.player.toolbar[window.player.activeSlot] = null;
-                        window.selectToolbarSlot(0); // Volver a la mano automáticamente
+                        window.selectToolbarSlot(0);
                     }
                     if(window.updateUI) window.updateUI();
                     if(window.renderToolbar) window.renderToolbar();
@@ -593,7 +592,6 @@ function update() {
                         window.player.inventory[item.type] = (window.player.inventory[item.type]||0) + item.amount; 
                         window.droppedItems.splice(i, 1); window.sendWorldUpdate('pickup_item', { id: item.id }); 
                         
-                        // AUTO-EQUIPAR OBJETOS RECOLECTADOS
                         if (['boxes', 'campfire_item', 'bed_item'].includes(item.type) || window.toolDefs[item.type]) { 
                             if(typeof window.autoEquip==='function') window.autoEquip(item.type); 
                         }
@@ -613,6 +611,7 @@ function update() {
             item.life += 0.05;
         }
 
+        // FIX "MANTÉN Y" TOOLTIP
         if (promptEl && textEl) {
             if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
                 let hoveringInteractable = interactables[0];
@@ -622,9 +621,14 @@ function update() {
                     textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar <span style="color:#D2B48C;">${tName}</span>`; 
                 } else { promptEl.style.display = 'none'; }
             } else if (anyItemHovered && !window.player.isDead && window.player.nearbyItem) {
-                let itData = window.itemDefs[window.player.nearbyItem.type];
-                promptEl.style.display = 'block'; 
-                textEl.innerHTML = `Mantén <span class="key-btn">Y</span> atraer <span style="color:${itData.color};">${itData.name} x${window.player.nearbyItem.amount}</span>`;
+                let type = window.player.nearbyItem.type;
+                let itData = window.itemDefs[type] || window.toolDefs[type];
+                if(itData) {
+                    let color = itData.color || '#FFD700';
+                    let amtText = window.player.nearbyItem.amount > 1 ? ` x${window.player.nearbyItem.amount}` : '';
+                    promptEl.style.display = 'block'; 
+                    textEl.innerHTML = `Mantén <span class="key-btn">Y</span> para recoger <strong style="color:${color};">${itData.name}${amtText}</strong>`;
+                } else { promptEl.style.display = 'none'; }
             } else { promptEl.style.display = 'none'; }
         }
 
@@ -784,7 +788,7 @@ function update() {
         if (typeof window.updateEntityHUD === 'function') window.updateEntityHUD();
 
     } catch (err) {
-        console.error("Motor de juego protegido contra crashes:", err);
+        console.error("Motor de juego protegido:", err);
     }
 }
 

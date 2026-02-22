@@ -3,164 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Survival RPG - Modular</title>
+    <title>Survival RPG - Fullscreen</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Inter', sans-serif; }
-        #game-wrapper { position: relative; width: 1280px; height: 720px; margin: 0 auto; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        /* RESET Y FONDO GLOBAL */
+        body { margin: 0; padding: 0; background: #050505; overflow: hidden; font-family: 'Inter', sans-serif; }
+        
+        /* CONTENEDOR DE ESCALADO DINÁMICO (NUEVO) */
+        #screen-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        #game-wrapper { position: relative; width: 1280px; height: 720px; transform-origin: center center; background: #000; box-shadow: 0 0 30px rgba(0,0,0,1); overflow: hidden; }
 
+        /* INVENTARIO */
         #inventory-grid { display: grid; grid-template-columns: repeat(5, 45px); gap: 8px; justify-content: center; margin-bottom: 10px; }
         .inv-slot { position: relative; width: 45px; height: 45px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .inv-slot:hover .custom-tooltip { display: block; }
         .custom-tooltip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2); }
         .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
         
+        /* CHAT GLOBAL */
         .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; color: white; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; opacity: 1; border-right: 3px solid #fff;}
         .log-msg.fade-out { opacity: 0; pointer-events: none; }
+        #global-chat-log.pinned { background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; pointer-events: auto; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); }
+        #global-chat-log.pinned .log-msg.fade-out { opacity: 0.9 !important; }
+        #global-chat-log.pinned::-webkit-scrollbar { width: 5px; }
+        #global-chat-log.pinned::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
         
-        /* CINTURÓN: ESTILOS FIJOS Y 6 SLOTS */
-        #toolbar { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 8px; pointer-events: auto; z-index: 1000; }
-        .tool-slot { width: 50px; height: 50px; background: rgba(0,0,0,0.7); border: 2px solid #555; border-radius: 5px; position: relative; color: white; text-align: center; font-size: 11px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: 0.1s; }
-        .tool-slot.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.2); transform: scale(1.1); box-shadow: 0 0 10px rgba(255,215,0,0.5); z-index: 2; }
-        
+        /* HUD ENEMIGOS */
         .entity-bar-container { background: rgba(0,0,0,0.8); padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .entity-info { color: white; font-size: 12px; display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
         .entity-hp-bg { background: #222; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; border: 1px solid #000; }
         .entity-hp-fill { height: 100%; transition: width 0.2s ease-out; }
+
+        /* CINTURÓN - PEGADO ABAJO COMO MINECRAFT */
+        #toolbar { 
+            position: absolute !important; 
+            bottom: 0 !important; 
+            left: 0 !important; 
+            width: 100% !important; 
+            display: flex !important; 
+            justify-content: center !important; 
+            gap: 12px; 
+            padding: 20px 0 10px 0; 
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            z-index: 1000 !important; 
+            transform: none !important;
+        }
+
+        /* TEXTO CENTRAL MEJORADO (MANTEN Y) */
+        #interaction-prompt { 
+            position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); 
+            background: rgba(0,0,0,0.85); padding: 12px 20px; border-radius: 8px; 
+            border: 1px solid rgba(255,255,255,0.2); font-weight: bold; font-size: 15px; 
+            text-shadow: 1px 1px 2px #000; color: #fff; z-index: 200; display: none;
+        }
+        .key-btn { background: #fff; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: 900; text-shadow: none; margin: 0 4px;}
     </style>
 </head>
 <body>
-    <div id="game-wrapper">
-        <div id="main-menu">
-            <div class="menu-box glass-panel">
-                <h1 class="menu-title">SURVIVAL RPG</h1>
-                <p class="menu-subtitle">Alpha Multijugador</p>
-                <input type="text" id="player-name" class="menu-input" placeholder="Tu Nombre (ej: El Juancho)" maxlength="15">
-                <button id="btn-single" class="action-btn" style="padding: 10px; margin-bottom: 10px;">🕹️ Jugar Solo (Offline)</button>
-                <div style="background: rgba(76, 175, 80, 0.1); padding: 10px; border-radius: 8px; border: 1px solid var(--accent-green); margin-bottom: 15px;">
-                    <button id="btn-online" class="action-btn" style="margin-bottom: 8px;">🌐 Jugar Online (Global)</button>
-                    <div id="server-status-badge" style="font-size: 0.75rem; margin-bottom: 5px; font-weight: bold; color: #f39c12;">🟠 Comprobando servidor...</div>
-                    <div id="online-url-area" style="display:none; font-size: 0.75rem; color: #aaa;">Link para amigos: <br><code id="current-url" style="color: var(--accent-green); display:block; margin-top:4px; background: #000; padding: 4px; word-break: break-all;"></code></div>
-                </div>
-                <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                    <button id="btn-host" class="action-btn" style="background: #e67e22; margin-bottom: 5px;">🏠 Crear Servidor Local (LAN)</button>
-                    <div style="display:flex; gap:10px;">
-                        <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0; flex: 2; padding: 8px;" placeholder="IP del Amigo">
-                        <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
-                    </div>
-                </div>
-                <div id="server-list" style="margin-top: 15px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); text-align: left;">
-                    <div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">📋 Servidores Recientes:</div><div id="saved-servers" style="display: flex; flex-direction: column; gap: 5px;"></div>
-                </div>
-            </div>
-        </div>
 
-        <canvas id="gameCanvas" width="1280" height="720" style="display: block;"></canvas>
-        
-        <div id="death-screen" class="glass-panel" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1000; text-align:center; padding: 30px; border: 2px solid #ff4444;">
-            <h2 style="color:#ff4444; font-size: 2rem; margin-top:0;">¡HAS MUERTO!</h2>
-            <p style="font-size: 1.2rem;">¿Dónde deseas reaparecer?</p>
-            <div style="display:flex; gap:15px; justify-content:center; margin-top:20px;">
-                <button class="action-btn" style="background:#4CAF50; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('coast')">🌊 Costa</button>
-                <button id="btn-respawn-bed" class="action-btn" style="background:#8B0000; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('bed')">🛏️ Tu Cama</button>
-            </div>
-        </div>
-
-        <div id="ui-layer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+    <div id="screen-wrapper">
+        <div id="game-wrapper">
             
-            <div style="position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; z-index: 200;">
-                <div id="server-info" class="glass-panel" style="pointer-events: auto; margin: 0;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
-                <div id="distance-display" class="glass-panel" style="margin: 0;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
-                <div id="entity-hud" style="display: flex; flex-direction: column; gap: 8px;"></div>
-            </div>
-
-            <div id="clock-display" class="glass-panel" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 200; font-size: 1.2rem; font-weight: bold; margin: 0;">Día 1 - 08:00</div>
-
-            <div style="position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: none; z-index: 200; width: 350px;">
-                <div id="top-controls" style="display: flex; gap: 5px; background: transparent; border: none; box-shadow: none; padding: 0; pointer-events: auto;">
-                    <button class="toggle-btn" onclick="window.openChat()" style="color: #3498db;">💬 Chat</button>
-                    <button class="toggle-btn" onclick="window.toggleChatLog()" style="color: #a29bfe;">📜 Registro</button>
-                    <button class="toggle-btn" onclick="window.toggleMenu('inventory')">Personaje (I) <span id="stat-notif" class="stat-notif">!</span></button>
-                    <button class="toggle-btn" onclick="window.toggleMenu('crafting')">Crafteo (C)</button>
-                    <button id="btn-help" class="toggle-btn">?</button>
-                </div>
-                
-                <div id="status-bars" style="display: flex; flex-direction: column; gap: 10px; width: 250px; pointer-events: auto;">
-                    <div class="bar-wrapper"><div class="bar-label"><span>Salud</span><span id="hp-text">100/100</span></div><div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div></div>
-                    <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
-                    <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
-                </div>
-
-                <div id="global-chat-log" style="display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: flex-end; text-align: right;"></div>
-
-                <div id="chat-container" style="display: none; width: 100%; pointer-events: auto; margin-top: 10px;">
-                    <input type="text" id="chat-input" placeholder="Escribe y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-                </div>
-            </div>
-
-            <div id="toolbar"></div>
-            
-            <div id="interaction-prompt" class="glass-panel" style="position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%);"><span id="prompt-text"></span></div>
-            <div id="placement-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px #000;">MODO UBICACIÓN<br><span style="font-size: 0.7rem; color: #fff; font-weight: normal;">Clic Izq: Colocar | Clic Der: Cancelar</span></div>
-            
-            <div id="game-tips" class="glass-panel" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
-                <strong style="color: #fff;">Controles Básicos:</strong><br><br>
-                <span class="tip-highlight">ENTER</span>: Abrir/Enviar Chat<br>
-                <span class="tip-highlight">F</span>: Comer Rápido<br>
-                <span class="tip-highlight">E</span>: Abrir Puertas/Cajas/Fogatas<br>
-                <span class="tip-highlight">SHIFT</span> adentro = <b>SIGILO</b><br>
-                <span class="tip-highlight">R</span>: Modo Martillo<br>
-            </div>
-
-            <div id="menu-inventory" class="window-menu glass-panel" style="pointer-events: auto;">
-                <div class="window-header"><h3>Personaje</h3><button class="close-btn" onclick="window.toggleMenu('inventory')">✖</button></div>
-                <div class="inv-split">
-                    <div class="inv-left"><div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Arrastra al Cinturón)</div><div id="inventory-grid"></div></div>
-                    <div class="inv-right">
-                        <div class="stat-header">Atributos (Puntos: <span id="stat-points">0</span>)</div>
-                        <div class="stat-row"><span>💪 Fuerza</span> <div><span class="stat-val" id="stat-str">0</span><button class="stat-btn" onclick="window.upgradeStat('str')">+</button></div></div>
-                        <div class="stat-row"><span>⚡ Agilidad</span> <div><span class="stat-val" id="stat-agi">0</span><button class="stat-btn" onclick="window.upgradeStat('agi')">+</button></div></div>
-                        <div class="stat-row"><span>❤️ Vitalidad</span> <div><span class="stat-val" id="stat-vit">0</span><button class="stat-btn" onclick="window.upgradeStat('vit')">+</button></div></div>
-                        <div class="stat-row"><span>🥩 Stamina</span> <div><span class="stat-val" id="stat-sta">0</span><button class="stat-btn" onclick="window.upgradeStat('sta')">+</button></div></div>
-                        <div class="stat-row"><span>🧠 Intelecto</span> <div><span class="stat-val" id="stat-int">0</span><button class="stat-btn" onclick="window.upgradeStat('int')">+</button></div></div>
+            <div id="main-menu">
+                <div class="menu-box glass-panel">
+                    <h1 class="menu-title">SURVIVAL RPG</h1>
+                    <p class="menu-subtitle">Alpha Multijugador</p>
+                    <input type="text" id="player-name" class="menu-input" placeholder="Tu Nombre (ej: El Juancho)" maxlength="15">
+                    <button id="btn-single" class="action-btn" style="padding: 10px; margin-bottom: 10px;">🕹️ Jugar Solo (Offline)</button>
+                    <div style="background: rgba(76, 175, 80, 0.1); padding: 10px; border-radius: 8px; border: 1px solid var(--accent-green); margin-bottom: 15px;">
+                        <button id="btn-online" class="action-btn" style="margin-bottom: 8px;">🌐 Jugar Online (Global)</button>
+                        <div id="server-status-badge" style="font-size: 0.75rem; margin-bottom: 5px; font-weight: bold; color: #f39c12;">🟠 Comprobando servidor...</div>
+                        <div id="online-url-area" style="display:none; font-size: 0.75rem; color: #aaa;">Link para amigos: <br><code id="current-url" style="color: var(--accent-green); display:block; margin-top:4px; background: #000; padding: 4px; word-break: break-all;"></code></div>
                     </div>
-                </div>
-            </div>
-
-            <div id="menu-box" class="window-menu glass-panel" style="pointer-events: auto;"><div class="window-header"><h3>Caja</h3><button class="close-btn" onclick="window.toggleMenu('box')">✖</button></div><div class="inv-split"><div class="inv-left"><div class="inv-grid" id="box-player-grid"></div></div><div class="inv-right"><div class="inv-grid" id="box-storage-grid"></div></div></div></div>
-            <div id="menu-campfire" class="window-menu glass-panel" style="pointer-events: auto;"><div class="window-header"><h3>Fogata</h3><button class="close-btn" onclick="window.toggleMenu('campfire')">✖</button></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">Madera <div><strong id="cf-wood-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('addWood')">+Añadir</button></div></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">Carne Cruda <div><strong id="cf-meat-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('addMeat')">+Añadir</button></div></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;"><span style="color:#ff6b6b;">Carne Cocida</span><div><strong id="cf-cooked-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('takeCooked')">Recoger</button></div></div><button id="btn-cf-ignite" class="action-btn" style="background:#e67e22;" onclick="window.cfAction('toggleFire')">🔥 ENCENDER</button></div>
-
-            <div id="menu-crafting" class="window-menu glass-panel" style="pointer-events: auto;">
-                <div class="window-header"><h3>Mesa de Trabajo</h3><button class="close-btn" onclick="window.toggleMenu('crafting')">✖</button></div>
-                <div class="craft-tabs" style="display:flex; gap:5px; margin-bottom:10px;">
-                    <button id="btn-tab-herramientas" class="action-btn mini" style="flex:1; background:#4CAF50; margin:0;" onclick="window.switchCraftTab('herramientas')">🛠️ Herram.</button>
-                    <button id="btn-tab-armas" class="action-btn mini" style="flex:1; background:#444; margin:0;" onclick="window.switchCraftTab('armas')">⚔️ Armas</button>
-                    <button id="btn-tab-muebles" class="action-btn mini" style="flex:1; background:#444; margin:0;" onclick="window.switchCraftTab('muebles')">🪑 Muebles</button>
-                </div>
-                <input type="text" id="craft-search" class="search-bar" placeholder="🔍 Buscar receta...">
-                <div id="craft-list">
-                    <div id="tab-herramientas">
-                        <div class="craft-item" data-name="antorcha luz"><div class="craft-header"><span class="craft-title">🔥 Antorcha</span> <span id="req-torch" class="req-text"></span></div><button id="btn-craft-torch" class="action-btn">Fabricar (5 Mad. + 2 Tela)</button></div>
-                        <div class="craft-item" data-name="hacha"><div class="craft-header"><span class="craft-title">🪓 Hacha</span> <span id="req-axe" class="req-text"></span></div><button id="btn-craft-axe" class="action-btn">Fabricar (10 Mad.)</button></div>
-                        <div class="craft-item" data-name="pico"><div class="craft-header"><span class="craft-title">⛏️ Pico</span> <span id="req-pickaxe" class="req-text"></span></div><button id="btn-craft-pickaxe" class="action-btn">Fabricar (20 Mad.)</button></div>
-                        <div class="craft-item" data-name="martillo"><div class="craft-header"><span class="craft-title">🔨 Martillo</span> <span id="req-hammer" class="req-text"></span></div><button id="btn-craft-hammer" class="action-btn">Fabricar (15 Mad.)</button></div>
-                    </div>
-                    <div id="tab-armas" style="display:none;">
-                        <div class="craft-item" data-name="arco"><div class="craft-header"><span class="craft-title">🏹 Arco Corto</span> <span id="req-bow" class="req-text"></span></div><button id="btn-craft-bow" class="action-btn">Fabricar (100 Mad. + 2 Tela)</button></div>
-                        <div class="craft-item" data-name="espada"><div class="craft-header"><span class="craft-title">⚔️ Espada</span> <span id="req-sword" class="req-text"></span></div><button id="btn-craft-sword" class="action-btn">Fabricar (30 Mad. + 30 Pie.)</button></div>
-                        <div class="craft-item" data-name="flechas municion"><div class="craft-header"><span class="craft-title">🎯 Flechas</span> <span class="req-text req-text-ok">5 Mad. c/u</span></div>
-                            <div class="craft-actions"><button id="btn-craft-arrow" class="action-btn mini">x1</button><button id="btn-craft-arrow2" class="action-btn mini">x2</button><button id="btn-craft-arrow5" class="action-btn mini">x5</button><button id="btn-craft-arrow10" class="action-btn mini">x10</button></div>
+                    <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                        <button id="btn-host" class="action-btn" style="background: #e67e22; margin-bottom: 5px;">🏠 Crear Servidor Local (LAN)</button>
+                        <div style="display:flex; gap:10px;">
+                            <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0; flex: 2; padding: 8px;" placeholder="IP del Amigo">
+                            <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
                         </div>
                     </div>
-                    <div id="tab-muebles" style="display:none;">
-                        <div class="craft-item" data-name="caja cofre"><div class="craft-header"><span class="craft-title">📦 Caja (Ítem)</span> <span id="req-box" class="req-text"></span></div><button id="btn-craft-box" class="action-btn">Fabricar (40 Mad.)</button></div>
-                        <div class="craft-item" data-name="fogata fuego"><div class="craft-header"><span class="craft-title">🔥 Fogata (Ítem)</span> <span id="req-campfire" class="req-text"></span></div><button id="btn-craft-campfire" class="action-btn">Fabricar (20 Mad. + 5 Pie.)</button></div>
-                        <div class="craft-item" data-name="cama dormir spawn"><div class="craft-header"><span class="craft-title">🛏️ Cama (Respawn)</span> <span id="req-bed" class="req-text"></span></div><button id="btn-craft-bed" class="action-btn">Fabricar (30 Mad. + 10 Tela)</button></div>
+                    <div id="server-list" style="margin-top: 15px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); text-align: left;">
+                        <div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">📋 Servidores Recientes:</div><div id="saved-servers" style="display: flex; flex-direction: column; gap: 5px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <canvas id="gameCanvas" width="1280" height="720" style="display: block;"></canvas>
+            
+            <div id="death-screen" class="glass-panel" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1000; text-align:center; padding: 30px; border: 2px solid #ff4444;">
+                <h2 style="color:#ff4444; font-size: 2rem; margin-top:0;">¡HAS MUERTO!</h2>
+                <p style="font-size: 1.2rem;">¿Dónde deseas reaparecer?</p>
+                <div style="display:flex; gap:15px; justify-content:center; margin-top:20px;">
+                    <button class="action-btn" style="background:#4CAF50; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('coast')">🌊 Costa</button>
+                    <button id="btn-respawn-bed" class="action-btn" style="background:#8B0000; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('bed')">🛏️ Tu Cama</button>
+                </div>
+            </div>
+
+            <div id="ui-layer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                
+                <div style="position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; z-index: 200;">
+                    <div id="server-info" class="glass-panel" style="pointer-events: auto; margin: 0;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
+                    <div id="distance-display" class="glass-panel" style="margin: 0;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
+                    <div id="entity-hud" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                </div>
+
+                <div id="clock-display" class="glass-panel" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 200; font-size: 1.2rem; font-weight: bold; margin: 0;">Día 1 - 08:00</div>
+
+                <div style="position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: none; z-index: 200; width: 350px;">
+                    <div id="top-controls" style="display: flex; gap: 5px; background: transparent; border: none; box-shadow: none; padding: 0; pointer-events: auto;">
+                        <button class="toggle-btn" onclick="window.openChat()" style="color: #3498db;">💬 Chat</button>
+                        <button class="toggle-btn" onclick="window.toggleChatLog()" style="color: #a29bfe;">📜 Registro</button>
+                        <button class="toggle-btn" onclick="window.toggleMenu('inventory')">Personaje (I) <span id="stat-notif" class="stat-notif">!</span></button>
+                        <button class="toggle-btn" onclick="window.toggleMenu('crafting')">Crafteo (C)</button>
+                        <button id="btn-help" class="toggle-btn">?</button>
+                    </div>
+                    
+                    <div id="status-bars" style="display: flex; flex-direction: column; gap: 10px; width: 250px; pointer-events: auto;">
+                        <div class="bar-wrapper"><div class="bar-label"><span>Salud</span><span id="hp-text">100/100</span></div><div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div></div>
+                        <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
+                        <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
+                    </div>
+
+                    <div id="global-chat-log" style="display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: flex-end; text-align: right; margin-top: 5px;"></div>
+
+                    <div id="chat-container" style="display: none; width: 100%; pointer-events: auto; margin-top: 10px;">
+                        <input type="text" id="chat-input" placeholder="Escribe y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                    </div>
+                </div>
+
+                <div id="toolbar"></div>
+                
+                <div id="interaction-prompt"><span id="prompt-text"></span></div>
+                
+                <div id="placement-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px #000;">MODO UBICACIÓN<br><span style="font-size: 0.7rem; color: #fff; font-weight: normal;">Clic Izq: Colocar | Clic Der: Cancelar</span></div>
+                
+                <div id="game-tips" class="glass-panel" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
+                    <strong style="color: #fff;">Controles Básicos:</strong><br><br>
+                    <span class="tip-highlight">ENTER</span>: Abrir/Enviar Chat<br>
+                    <span class="tip-highlight">F</span>: Comer Rápido<br>
+                    <span class="tip-highlight">E</span>: Abrir Puertas/Cajas/Fogatas<br>
+                    <span class="tip-highlight">SHIFT</span> adentro = <b>SIGILO</b><br>
+                    <span class="tip-highlight">R</span>: Modo Martillo<br>
+                </div>
+
+                <div id="menu-inventory" class="window-menu glass-panel" style="pointer-events: auto;">
+                    <div class="window-header"><h3>Personaje</h3><button class="close-btn" onclick="window.toggleMenu('inventory')">✖</button></div>
+                    <div class="inv-split">
+                        <div class="inv-left"><div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Arrastra al Cinturón)</div><div id="inventory-grid"></div></div>
+                        <div class="inv-right">
+                            <div class="stat-header">Atributos (Puntos: <span id="stat-points">0</span>)</div>
+                            <div class="stat-row"><span>💪 Fuerza</span> <div><span class="stat-val" id="stat-str">0</span><button class="stat-btn" onclick="window.upgradeStat('str')">+</button></div></div>
+                            <div class="stat-row"><span>⚡ Agilidad</span> <div><span class="stat-val" id="stat-agi">0</span><button class="stat-btn" onclick="window.upgradeStat('agi')">+</button></div></div>
+                            <div class="stat-row"><span>❤️ Vitalidad</span> <div><span class="stat-val" id="stat-vit">0</span><button class="stat-btn" onclick="window.upgradeStat('vit')">+</button></div></div>
+                            <div class="stat-row"><span>🥩 Stamina</span> <div><span class="stat-val" id="stat-sta">0</span><button class="stat-btn" onclick="window.upgradeStat('sta')">+</button></div></div>
+                            <div class="stat-row"><span>🧠 Intelecto</span> <div><span class="stat-val" id="stat-int">0</span><button class="stat-btn" onclick="window.upgradeStat('int')">+</button></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="menu-box" class="window-menu glass-panel" style="pointer-events: auto;"><div class="window-header"><h3>Caja</h3><button class="close-btn" onclick="window.toggleMenu('box')">✖</button></div><div class="inv-split"><div class="inv-left"><div class="inv-grid" id="box-player-grid"></div></div><div class="inv-right"><div class="inv-grid" id="box-storage-grid"></div></div></div></div>
+                <div id="menu-campfire" class="window-menu glass-panel" style="pointer-events: auto;"><div class="window-header"><h3>Fogata</h3><button class="close-btn" onclick="window.toggleMenu('campfire')">✖</button></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">Madera <div><strong id="cf-wood-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('addWood')">+Añadir</button></div></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">Carne Cruda <div><strong id="cf-meat-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('addMeat')">+Añadir</button></div></div><div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;"><span style="color:#ff6b6b;">Carne Cocida</span><div><strong id="cf-cooked-count" style="margin-right:10px;">0</strong><button class="action-btn mini" style="width:auto; padding:4px 10px;" onclick="window.cfAction('takeCooked')">Recoger</button></div></div><button id="btn-cf-ignite" class="action-btn" style="background:#e67e22;" onclick="window.cfAction('toggleFire')">🔥 ENCENDER</button></div>
+
+                <div id="menu-crafting" class="window-menu glass-panel" style="pointer-events: auto;">
+                    <div class="window-header"><h3>Mesa de Trabajo</h3><button class="close-btn" onclick="window.toggleMenu('crafting')">✖</button></div>
+                    <div class="craft-tabs" style="display:flex; gap:5px; margin-bottom:10px;">
+                        <button id="btn-tab-herramientas" class="action-btn mini" style="flex:1; background:#4CAF50; margin:0;" onclick="window.switchCraftTab('herramientas')">🛠️ Herram.</button>
+                        <button id="btn-tab-armas" class="action-btn mini" style="flex:1; background:#444; margin:0;" onclick="window.switchCraftTab('armas')">⚔️ Armas</button>
+                        <button id="btn-tab-muebles" class="action-btn mini" style="flex:1; background:#444; margin:0;" onclick="window.switchCraftTab('muebles')">🪑 Muebles</button>
+                    </div>
+                    <input type="text" id="craft-search" class="search-bar" placeholder="🔍 Buscar receta...">
+                    <div id="craft-list">
+                        <div id="tab-herramientas">
+                            <div class="craft-item" data-name="antorcha luz"><div class="craft-header"><span class="craft-title">🔥 Antorcha</span> <span id="req-torch" class="req-text"></span></div><button id="btn-craft-torch" class="action-btn">Fabricar (5 Mad. + 2 Tela)</button></div>
+                            <div class="craft-item" data-name="hacha"><div class="craft-header"><span class="craft-title">🪓 Hacha</span> <span id="req-axe" class="req-text"></span></div><button id="btn-craft-axe" class="action-btn">Fabricar (10 Mad.)</button></div>
+                            <div class="craft-item" data-name="pico"><div class="craft-header"><span class="craft-title">⛏️ Pico</span> <span id="req-pickaxe" class="req-text"></span></div><button id="btn-craft-pickaxe" class="action-btn">Fabricar (20 Mad.)</button></div>
+                            <div class="craft-item" data-name="martillo"><div class="craft-header"><span class="craft-title">🔨 Martillo</span> <span id="req-hammer" class="req-text"></span></div><button id="btn-craft-hammer" class="action-btn">Fabricar (15 Mad.)</button></div>
+                        </div>
+                        <div id="tab-armas" style="display:none;">
+                            <div class="craft-item" data-name="arco"><div class="craft-header"><span class="craft-title">🏹 Arco Corto</span> <span id="req-bow" class="req-text"></span></div><button id="btn-craft-bow" class="action-btn">Fabricar (100 Mad. + 2 Tela)</button></div>
+                            <div class="craft-item" data-name="espada"><div class="craft-header"><span class="craft-title">⚔️ Espada</span> <span id="req-sword" class="req-text"></span></div><button id="btn-craft-sword" class="action-btn">Fabricar (30 Mad. + 30 Pie.)</button></div>
+                            <div class="craft-item" data-name="flechas municion"><div class="craft-header"><span class="craft-title">🎯 Flechas</span> <span class="req-text req-text-ok">5 Mad. c/u</span></div>
+                                <div class="craft-actions"><button id="btn-craft-arrow" class="action-btn mini">x1</button><button id="btn-craft-arrow2" class="action-btn mini">x2</button><button id="btn-craft-arrow5" class="action-btn mini">x5</button><button id="btn-craft-arrow10" class="action-btn mini">x10</button></div>
+                            </div>
+                        </div>
+                        <div id="tab-muebles" style="display:none;">
+                            <div class="craft-item" data-name="caja cofre"><div class="craft-header"><span class="craft-title">📦 Caja (Ítem)</span> <span id="req-box" class="req-text"></span></div><button id="btn-craft-box" class="action-btn">Fabricar (40 Mad.)</button></div>
+                            <div class="craft-item" data-name="fogata fuego"><div class="craft-header"><span class="craft-title">🔥 Fogata (Ítem)</span> <span id="req-campfire" class="req-text"></span></div><button id="btn-craft-campfire" class="action-btn">Fabricar (20 Mad. + 5 Pie.)</button></div>
+                            <div class="craft-item" data-name="cama dormir spawn"><div class="craft-header"><span class="craft-title">🛏️ Cama (Respawn)</span> <span id="req-bed" class="req-text"></span></div><button id="btn-craft-bed" class="action-btn">Fabricar (30 Mad. + 10 Tela)</button></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+        function resizeGame() {
+            const wrapper = document.getElementById('game-wrapper');
+            const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+            wrapper.style.transform = `scale(${scale})`;
+        }
+        window.addEventListener('resize', resizeGame);
+        window.addEventListener('DOMContentLoaded', resizeGame);
+    </script>
 
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
     <script src="data.js"></script>
