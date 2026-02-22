@@ -186,6 +186,20 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'kill_entity') { window.killedEntities.push(data.payload.id); window.entities = window.entities.filter(en => en.id !== data.payload.id); }
                 else if (data.action === 'hit_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.hp -= data.payload.dmg; window.setHit(e); } }
                 else if (data.action === 'flee_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.fleeTimer = 180; e.fleeDir = data.payload.dir; } }
+                else if (data.action === 'sync_entities') {
+                    // Clientes no-master reciben posiciones del master y las aplican con interpolación suave
+                    data.payload.forEach(snap => {
+                        let e = window.entities.find(en => en.id === snap.id);
+                        if (e) {
+                            // Interpolación suave hacia la posición del servidor
+                            e.x  += (snap.x  - e.x)  * 0.3;
+                            e.y  += (snap.y  - e.y)  * 0.3;
+                            e.vx  = snap.vx;
+                            e.vy  = snap.vy;
+                            e.hp  = snap.hp;
+                        }
+                    });
+                }
                 else if (data.action === 'update_box') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && (bl.type === 'box' || bl.type === 'grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && window.currentOpenBox.x === b.x) if(window.renderBoxUI) window.renderBoxUI(); } }
                 else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && window.currentCampfire.x === b.x) if(window.renderCampfireUI) window.renderCampfireUI(); } }
             });
@@ -450,7 +464,7 @@ window.addEventListener('mouseup', (e) => {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
                 let pCX = window.player.x + window.player.width/2; 
-                let pCY = window.player.y + 20; 
+                let pCY = window.player.y + 14; // misma altura que la guía de trayectoria
                 let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
                 let power = 4 + (window.player.chargeLevel / 100) * 6; 
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
@@ -715,6 +729,11 @@ function update() {
                 }
                 if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity', { entity: newEnt }); }
             }
+        }
+
+        if (window.game.isMultiplayer && window.socket && isMasterClient && window.game.frameCount % 6 === 0 && window.entities.length > 0) {
+            let snap = window.entities.map(e => ({ id: e.id, x: e.x, y: e.y, vx: e.vx, vy: e.vy, hp: e.hp }));
+            window.sendWorldUpdate('sync_entities', snap);
         }
 
         let isHoldingTorch = window.player.activeTool === 'torch' && !window.player.inBackground && !window.player.isDead;

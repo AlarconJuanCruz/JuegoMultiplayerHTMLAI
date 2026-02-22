@@ -327,8 +327,79 @@ window.draw = function() {
 
     window.rocks.forEach(r => {
         if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
-            window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath(); window.ctx.moveTo(r.x, r.y + r.height); window.ctx.lineTo(r.x + r.width * 0.2, r.y); window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5); window.ctx.lineTo(r.x + r.width, r.y + r.height); window.ctx.fill();
-            if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(r.x, r.y - 10, r.width, 4); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(r.x+1, r.y - 9, (r.hp / r.maxHp) * (r.width-2), 2); }
+            window.ctx.save();
+            if (r.isHit) {
+                window.ctx.fillStyle = '#ff4444';
+                window.ctx.beginPath();
+                window.ctx.moveTo(r.x, r.y + r.height);
+                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
+                window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5);
+                window.ctx.lineTo(r.x + r.width, r.y + r.height);
+                window.ctx.fill();
+            } else {
+                // Sombra base
+                window.ctx.fillStyle = 'rgba(0,0,0,0.18)';
+                window.ctx.beginPath();
+                window.ctx.ellipse(r.x + r.width/2 + 3, r.y + r.height + 2, r.width * 0.52, 5, 0, 0, Math.PI*2);
+                window.ctx.fill();
+
+                // Cara oscura (derecha/abajo)
+                let darkGrad = window.ctx.createLinearGradient(r.x, r.y, r.x + r.width, r.y + r.height);
+                darkGrad.addColorStop(0, '#5a5a5a');
+                darkGrad.addColorStop(1, '#2e2e2e');
+                window.ctx.fillStyle = darkGrad;
+                window.ctx.beginPath();
+                window.ctx.moveTo(r.x, r.y + r.height);
+                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
+                window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5);
+                window.ctx.lineTo(r.x + r.width, r.y + r.height);
+                window.ctx.fill();
+
+                // Cara iluminada (arriba-izquierda)
+                let lightGrad = window.ctx.createLinearGradient(r.x, r.y, r.x + r.width * 0.6, r.y + r.height * 0.6);
+                lightGrad.addColorStop(0, '#9e9e9e');
+                lightGrad.addColorStop(0.5, '#757575');
+                lightGrad.addColorStop(1, '#616161');
+                window.ctx.fillStyle = lightGrad;
+                window.ctx.beginPath();
+                window.ctx.moveTo(r.x, r.y + r.height);
+                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
+                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.35);
+                window.ctx.lineTo(r.x + r.width * 0.15, r.y + r.height);
+                window.ctx.fill();
+
+                // Faceta superior brillante
+                window.ctx.fillStyle = 'rgba(200,200,210,0.55)';
+                window.ctx.beginPath();
+                window.ctx.moveTo(r.x + r.width * 0.18, r.y + 2);
+                window.ctx.lineTo(r.x + r.width * 0.82, r.y + 6);
+                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.38);
+                window.ctx.lineTo(r.x + r.width * 0.2, r.y + r.height * 0.22);
+                window.ctx.fill();
+
+                // Linea de borde / grieta
+                window.ctx.strokeStyle = 'rgba(20,20,20,0.25)';
+                window.ctx.lineWidth = 1;
+                window.ctx.beginPath();
+                window.ctx.moveTo(r.x + r.width * 0.2, r.y);
+                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.35);
+                window.ctx.stroke();
+
+                // Pequeño detalle de musgo en la base
+                window.ctx.fillStyle = 'rgba(80,110,50,0.3)';
+                window.ctx.beginPath();
+                window.ctx.ellipse(r.x + r.width * 0.35, r.y + r.height - 2, r.width * 0.22, 4, -0.3, 0, Math.PI*2);
+                window.ctx.fill();
+            }
+
+            // Barra de vida
+            if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) {
+                window.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                window.ctx.fillRect(r.x, r.y - 12, r.width, 6);
+                window.ctx.fillStyle = '#4CAF50';
+                window.ctx.fillRect(r.x + 1, r.y - 11, (r.hp / r.maxHp) * (r.width - 2), 4);
+            }
+            window.ctx.restore();
         }
     });
 
@@ -416,14 +487,7 @@ window.draw = function() {
                 for (let i = 0; i < 5; i++) {
                     let layerW = t.width * 1.6 - i * 8;
                     let baseY = -th - 12 + i * stepY;
-                    // Sombra de cada capa
-                    window.ctx.fillStyle = isHitColor || '#1B5E20';
-                    window.ctx.beginPath();
-                    window.ctx.moveTo(2, baseY);
-                    window.ctx.lineTo(-layerW + 2, baseY + stepY * 1.55);
-                    window.ctx.lineTo(layerW + 2, baseY + stepY * 1.55);
-                    window.ctx.fill();
-                    // Capa principal
+                    // Capa principal (sin sombra desplazada)
                     window.ctx.fillStyle = isHitColor || (i % 2 === 0 ? '#2E7D32' : '#388E3C');
                     window.ctx.beginPath();
                     window.ctx.moveTo(0, baseY);
@@ -576,16 +640,43 @@ window.draw = function() {
     }
 
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
-        let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + 20;
-        let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
-        let power = 4 + (window.player.chargeLevel / 100) * 6; let vx = Math.cos(angle) * power; let vy = Math.sin(angle) * power;
-        window.ctx.save(); window.ctx.lineWidth = 2; window.ctx.setLineDash([6, 4]); 
-        let simX = pCX; let simY = pCY; let simVy = vy; let pointsToDraw = Math.floor(10 + (window.player.chargeLevel / 100) * 30); 
+        // Origen a la altura de la mano/brazo del personaje (~14px desde arriba del sprite)
+        let pCX = window.player.x + window.player.width / 2;
+        let pCY = window.player.y + 14;
+        let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY;
+        let angle = Math.atan2(dy, dx);
+        let power = 4 + (window.player.chargeLevel / 100) * 6;
+        let vx = Math.cos(angle) * power; let vy = Math.sin(angle) * power;
+        let pointsToDraw = Math.floor(10 + (window.player.chargeLevel / 100) * 30);
+
+        window.ctx.save();
+        window.ctx.lineWidth = 1.5;
+        window.ctx.setLineDash([5, 5]);
+
+        let simX = pCX; let simY = pCY; let simVy = vy;
         window.ctx.beginPath(); window.ctx.moveTo(pCX, pCY);
-        for(let i=0; i<pointsToDraw; i++) { simX += vx; simVy += window.game.gravity * 0.4; simY += simVy; window.ctx.lineTo(simX, simY); }
+        for (let i = 0; i < pointsToDraw; i++) {
+            simX += vx; simVy += window.game.gravity * 0.4; simY += simVy;
+            window.ctx.lineTo(simX, simY);
+        }
         let grad = window.ctx.createLinearGradient(pCX, pCY, simX, simY);
-        grad.addColorStop(0, 'rgba(255, 255, 255, 1)'); grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        window.ctx.strokeStyle = grad; window.ctx.stroke(); window.ctx.setLineDash([]); window.ctx.restore();
+        grad.addColorStop(0, 'rgba(255, 220, 100, 0.9)');
+        grad.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        window.ctx.strokeStyle = grad;
+        window.ctx.stroke();
+
+        // Punto de impacto estimado
+        window.ctx.setLineDash([]);
+        window.ctx.beginPath();
+        window.ctx.arc(simX, simY, 4, 0, Math.PI * 2);
+        window.ctx.fillStyle = 'rgba(255, 200, 80, 0.6)';
+        window.ctx.fill();
+        window.ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        window.ctx.lineWidth = 1;
+        window.ctx.stroke();
+
+        window.ctx.restore();
     }
 
     window.projectiles.forEach(pr => {
