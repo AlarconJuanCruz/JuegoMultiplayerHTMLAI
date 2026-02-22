@@ -40,7 +40,8 @@ window.recalculateStats = function() {
 window.getMeleeDamage = function() { return window.player.baseDamage[window.player.activeTool] * (1 + window.player.stats.str * 0.1); };
 window.getBowDamage = function() { return (8 + (window.player.chargeLevel/100)*25) * (1 + window.player.stats.int * 0.15); };
 
-window.damagePlayer = function(amount) {
+// NUEVO: SISTEMA DE MUERTE CON SEGUIMIENTO DE EVENTOS
+window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
     if (window.player.isDead) return;
 
     window.player.hp -= amount; 
@@ -54,17 +55,16 @@ window.damagePlayer = function(amount) {
         window.player.hp = 0;
         window.player.isDead = true;
         
+        // AVISAR A TODOS QUE HAS MUERTO
+        if(window.addGlobalMessage) window.addGlobalMessage(`☠️ Has muerto por ${source}`, '#e74c3c');
+        if(window.sendWorldUpdate) window.sendWorldUpdate('player_death', { name: window.player.name, source: source });
+
         window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false;
         window.player.isCharging = false; window.player.isAiming = false;
         
         let graveId = 'g_' + Math.random().toString(36).substr(2, 9);
         let graveX = Math.floor((window.player.x + window.player.width/2) / window.game.blockSize) * window.game.blockSize;
-        let grave = {
-            id: graveId, x: graveX, y: window.game.groundLevel - window.game.blockSize,
-            type: 'grave', owner: window.player.name,
-            inventory: { ...window.player.inventory },
-            hp: 200, maxHp: 200, isHit: false, createdAt: Date.now()
-        };
+        let grave = { id: graveId, x: graveX, y: window.game.groundLevel - window.game.blockSize, type: 'grave', owner: window.player.name, inventory: { ...window.player.inventory }, hp: 200, maxHp: 200, isHit: false, createdAt: Date.now() };
         window.blocks.push(grave);
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
@@ -73,7 +73,6 @@ window.damagePlayer = function(amount) {
         
         let deathScreen = window.getEl('death-screen');
         let bedBtn = window.getEl('btn-respawn-bed');
-        
         if (deathScreen) deathScreen.style.display = 'block';
         if (bedBtn) { if (window.player.bedPos) bedBtn.style.display = 'inline-block'; else bedBtn.style.display = 'none'; }
     }

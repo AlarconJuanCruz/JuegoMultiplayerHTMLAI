@@ -1,5 +1,3 @@
-// === game.js - MOTOR PRINCIPAL Y FÍSICAS ===
-
 window.sendWorldUpdate = function(action, payload) {
     if (window.game.isMultiplayer && window.socket) { window.socket.emit('worldUpdate', { action: action, payload: payload }); }
 };
@@ -82,8 +80,10 @@ window.generateWorldSector = function(startX, endX) {
         let tx = startX + 50 + sRandom() * (endX - startX - 100); 
         let tHeight = 160 + sRandom() * 120; let tWidth = 28 + sRandom() * 16;
         if (!window.removedTrees.includes(tx)) {
-            let isStump = window.stumpedTrees.includes(tx); let hp = isStump ? 50 : 100;
-            window.trees.push({ id: 't_'+Math.floor(tx), x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump }); 
+            let tState = window.treeState[tx];
+            let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
+            let hp = isStump ? 50 : 100;
+            window.trees.push({ id: 't_'+Math.floor(tx), x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); 
         }
     }
     if (startX > 800 && sRandom() < 0.75) { 
@@ -95,12 +95,12 @@ window.generateWorldSector = function(startX, endX) {
     }
     let cx = startX + 100 + sRandom() * (endX - startX - 200); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
     let newId = 'e_' + Math.floor(cx);
-    if (!window.entities.some(e => e.id === newId)) {
+    if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
         if (distToShore > 2000) {
             if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
-            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, lastX: cx }); } 
+            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
             else { let spiderMaxHp = 20 + (lvl * 15); let sWidth = 14 + (lvl * 2), sHeight = 8 + (lvl * 1.5); window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: window.game.groundLevel - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); }
-        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, lastX: cx }); }
+        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); }
     }
 };
 
@@ -124,10 +124,11 @@ window.startGame = function(multiplayer, ip = null) {
             window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
             
             window.socket.on('initWorldState', (state) => {
-                window.blocks = state.blocks; window.removedTrees = state.removedTrees; window.removedRocks = state.removedRocks; window.stumpedTrees = state.stumpedTrees || [];
+                window.blocks = state.blocks; window.removedTrees = state.removedTrees; window.removedRocks = state.removedRocks; window.treeState = state.treeState || {}; window.killedEntities = state.killedEntities || [];
                 window.trees = window.trees.filter(t => !window.removedTrees.includes(t.x)); 
-                window.trees.forEach(t => { if (window.stumpedTrees.includes(t.x)) { t.isStump = true; t.hp = 50; t.maxHp = 50; } });
+                window.trees.forEach(t => { if (window.treeState[t.x]) { t.isStump = window.treeState[t.x].isStump; t.regrowthCount = window.treeState[t.x].regrowthCount; t.grownDay = window.treeState[t.x].grownDay; if (t.isStump) { t.hp = 50; t.maxHp = 50; } } });
                 window.rocks = window.rocks.filter(r => !window.removedRocks.includes(r.x));
+                window.entities = window.entities.filter(e => !window.killedEntities.includes(e.id));
                 if(window.updateUI) window.updateUI();
             });
 
@@ -135,9 +136,9 @@ window.startGame = function(multiplayer, ip = null) {
             
             window.socket.on('worldUpdate', (data) => {
                 if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
-                else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; } }
-                else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; } }
-                else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); window.trees = window.trees.filter(t => t.x !== data.payload.x); }
+                else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
+                else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
+                else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); delete window.treeState[data.payload.x]; window.trees = window.trees.filter(t => t.x !== data.payload.x); }
                 else if (data.action === 'hit_rock') { let r = window.rocks.find(ro => Math.abs(ro.x - data.payload.x) < 1); if (r) { r.hp -= data.payload.dmg; window.setHit(r); } }
                 else if (data.action === 'destroy_rock') { window.removedRocks.push(data.payload.x); window.rocks = window.rocks.filter(r => r.x !== data.payload.x); }
                 else if (data.action === 'hit_block') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y); if (b) { b.hp -= data.payload.dmg; window.setHit(b); if(data.payload.destroyed || b.hp <= 0) { if (window.currentOpenBox && window.currentOpenBox.x === b.x) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } window.blocks = window.blocks.filter(bl => bl !== b); } } }
@@ -148,7 +149,13 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'drop_item') { let exists = window.droppedItems.find(i => i.id === data.payload.item.id); if(!exists) window.droppedItems.push(data.payload.item); }
                 else if (data.action === 'pickup_item') { let index = window.droppedItems.findIndex(i => i.id === data.payload.id); if (index !== -1) window.droppedItems.splice(index, 1); }
                 else if (data.action === 'spawn_projectile') { window.projectiles.push(data.payload); }
-                else if (data.action === 'hit_entity') { let e = window.entities.find(en => Math.abs(en.x - data.payload.x) < 20 && en.type === data.payload.type); if (e) { e.hp -= data.payload.dmg; window.setHit(e); if(e.hp <= 0) window.entities = window.entities.filter(en => en !== e); } }
+                
+                // FIX ENEMIGOS: Sincronizar nacimientos y muertes por ID único
+                else if (data.action === 'spawn_entity') { if (!window.entities.some(e => e.id === data.payload.entity.id) && !window.killedEntities.includes(data.payload.entity.id)) { window.entities.push(data.payload.entity); } }
+                else if (data.action === 'kill_entity') { window.killedEntities.push(data.payload.id); window.entities = window.entities.filter(en => en.id !== data.payload.id); }
+                else if (data.action === 'hit_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.hp -= data.payload.dmg; window.setHit(e); } }
+                else if (data.action === 'flee_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.fleeTimer = 180; e.fleeDir = data.payload.dir; } }
+                
                 else if (data.action === 'update_box') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && (bl.type === 'box' || bl.type === 'grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && window.currentOpenBox.x === b.x) if(window.renderBoxUI) window.renderBoxUI(); } }
                 else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && window.currentCampfire.x === b.x) if(window.renderCampfireUI) window.renderCampfireUI(); } }
             });
@@ -157,7 +164,6 @@ window.startGame = function(multiplayer, ip = null) {
     window.recalculateStats(); window.generateWorldSector(window.game.shoreX, window.game.exploredRight); if(window.updateUI) window.updateUI(); if(window.renderToolbar) window.renderToolbar(); 
 };
 
-// FIX: EVITAR BUG DEL MENÚ CONTEXTUAL DE WINDOWS QUE TRABA LAS TECLAS
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 window.addEventListener('blur', () => { if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; } if(window.player) window.player.isCharging = false; });
 
@@ -197,17 +203,10 @@ window.addEventListener('keydown', (e) => {
     const num = parseInt(e.key); if (!isNaN(num) && num > 0 && num <= window.player.availableTools.length) { window.player.activeTool = window.player.availableTools[num - 1]; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; if(window.renderToolbar) window.renderToolbar(); }
 });
 
-window.addEventListener('keyup', (e) => {
-    if (!window.game || !window.game.isRunning) return;
-    if (e.key === 'a' || e.key === 'A') window.keys.a = false; if (e.key === 'd' || e.key === 'D') window.keys.d = false; if (e.key === 'Shift') window.keys.shift = false; 
-    if (e.key === 'y' || e.key === 'Y') window.keys.y = false; if (e.key === 'w' || e.key === 'W' || e.key === ' ') { window.keys.jumpPressed = false; window.player.jumpKeyReleased = true; }
-});
-
 window.addEventListener('mousemove', (e) => {
     if(!window.canvas || !window.player || window.player.isDead) return;
     const rect = window.canvas.getBoundingClientRect(); const scaleX = window.canvas.width / rect.width; const scaleY = window.canvas.height / rect.height;
     window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY; window.mouseWorldX = window.screenMouseX + window.camera.x; window.mouseWorldY = window.screenMouseY + window.camera.y;
-    // Solo forzar la mirada al mouse si está apuntando o atacando
     if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
 });
 
@@ -263,7 +262,6 @@ window.addEventListener('mousedown', (e) => {
 
     window.player.attackFrame = 12; 
     const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2; 
-    
     const baseDmg = window.getMeleeDamage(); const tool = window.player.activeTool; let actionDone = false;
 
     let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
@@ -277,9 +275,9 @@ window.addEventListener('mousedown', (e) => {
             if (window.mouseWorldX >= ent.x - 10 && window.mouseWorldX <= ent.x + ent.width + 10 && window.mouseWorldY >= ent.y - 10 && window.mouseWorldY <= ent.y + ent.height + 10) {
                 if (Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2)) <= window.player.miningRange) {
                     ent.hp -= entityDmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5); window.spawnDamageText(ent.x + ent.width/2, ent.y - 5, `-${entityDmg}`, '#ff4444'); 
-                    window.sendWorldUpdate('hit_entity', { x: ent.x, type: ent.type, dmg: entityDmg });
-
+                    
                     if (ent.hp <= 0) { 
+                        window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                         window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
                         if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(15); }
                         else if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
@@ -289,7 +287,11 @@ window.addEventListener('mousedown', (e) => {
                             let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(40 * ent.level); 
                         }
                         window.entities.splice(i, 1); if(window.updateUI) window.updateUI(); 
-                    } actionDone = true; break; 
+                    } else {
+                        window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: entityDmg });
+                        if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pCX) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
+                    }
+                    actionDone = true; break; 
                 }
             }
         }
@@ -344,14 +346,22 @@ window.addEventListener('mousedown', (e) => {
         for (let i = window.trees.length - 1; i >= 0; i--) {
             const t = window.trees[i];
             if (t.isStump) continue; 
+            
             if (window.mouseWorldX >= t.x - 20 && window.mouseWorldX <= t.x + t.width + 20 && window.mouseWorldY >= t.y - 100 && window.mouseWorldY <= t.y + t.height) { 
                 if (Math.hypot(pCX - (t.x + t.width/2), pCY - (t.y + t.height/2)) <= window.player.miningRange) {
                     t.hp -= treeDmg; window.setHit(t); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 8); window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `-${treeDmg}`, '#ff4444');
                     if (t.hp <= 0) {
-                        window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
-                        let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:5, life:1.0};
-                        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
-                        t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x }); window.gainXP(15);
+                        if (t.regrowthCount >= 3) {
+                            window.spawnParticles(t.x + 15, t.y + t.height, '#C19A6B', 15, 1.2);
+                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:3, life:1.0};
+                            window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
+                            window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
+                        } else {
+                            window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
+                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:5, life:1.0};
+                            window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
+                            t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
+                        }
                     } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: treeDmg }); }
                     actionDone = true; break;
                 }
@@ -406,10 +416,13 @@ function update() {
     let hourFloat = (totalFrames / 3600) % 24; let clockH = Math.floor(hourFloat); let clockM = Math.floor((totalFrames % 3600) / 60);
     let isNight = hourFloat >= 23 || hourFloat < 5; let isDay = hourFloat >= 6 && hourFloat < 18;
 
-    let dailySeed = Math.sin(window.game.days * 8765.4);
-    window.game.isRaining = isDay && (dailySeed > 0.4) && (hourFloat > 10 && hourFloat < 16);
+    let dailySeed = Math.sin(window.game.days * 8765.4); let nSeed = (dailySeed + 1) / 2;
+    window.game.isRaining = false;
+    if (nSeed > 0.65) { 
+        let rainStart = 9 + (nSeed * 4); let rainDuration = 1 + (nSeed * 1.5); 
+        window.game.isRaining = isDay && (hourFloat >= rainStart && hourFloat <= (rainStart + rainDuration));
+    }
 
-    // FIX "SE MUEVE RARO" (Moonwalk arreglado): El personaje mira automáticamente hacia donde camina, salvo que apunte o ataque.
     if (!window.player.isAiming && window.player.attackFrame <= 0 && !window.player.isDead) {
         if (window.player.vx > 0.1) window.player.facingRight = true;
         else if (window.player.vx < -0.1) window.player.facingRight = false;
@@ -480,6 +493,19 @@ function update() {
             b.burnTime--;
             if (window.game.frameCount % 5 === 0) window.spawnParticles(b.x+15, b.y+10, '#e67e22', 1, 0.5); 
             if (b.meat > 0) { b.cookTimer++; if (b.cookTimer > 300) { b.meat--; b.cooked++; b.cookTimer = 0; if (window.currentCampfire === b && typeof window.renderCampfireUI==='function') window.renderCampfireUI(); } }
+            if (window.game.isRaining) {
+                let hasRoof = window.blocks.some(roof => (roof.type === 'block' || roof.type === 'door') && roof.x === b.x && roof.y < b.y);
+                if (!hasRoof) {
+                    b.rainExtinguishTimer = (b.rainExtinguishTimer || 0) + 1;
+                    if (b.rainExtinguishTimer > 150) { 
+                        b.isBurning = false; b.rainExtinguishTimer = 0;
+                        window.spawnParticles(b.x+15, b.y+15, '#aaaaaa', 10, 0.5); 
+                        if (window.currentCampfire === b && typeof window.renderCampfireUI==='function') window.renderCampfireUI();
+                        if (window.sendWorldUpdate) window.sendWorldUpdate('update_campfire', { x: b.x, y: b.y, wood: b.wood, meat: b.meat, cooked: b.cooked, isBurning: false });
+                    }
+                } else { b.rainExtinguishTimer = 0; }
+            } else { b.rainExtinguishTimer = 0; }
+
             if (b.burnTime <= 0) { if (b.wood > 0) { b.wood--; b.burnTime = 1800; } else { b.isBurning = false; } if (window.currentCampfire === b && typeof window.renderCampfireUI==='function') window.renderCampfireUI(); }
         }
     });
@@ -487,7 +513,22 @@ function update() {
     let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + window.player.height/2;
     let anyItemHovered = false;
 
-    // SEPARACIÓN LIMPIA DE RECOGER ITEMS E INTERACTUAR BLOQUES
+    let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
+    let promptEl = window.getEl('interaction-prompt'); let textEl = window.getEl('prompt-text');
+    
+    if (promptEl && textEl) {
+        if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
+            let hoveringInteractable = interactables[0];
+            if (hoveringInteractable.type !== 'bed') {
+                promptEl.style.display = 'block'; 
+                let tName = hoveringInteractable.type === 'box' ? 'Caja' : (hoveringInteractable.type === 'campfire' ? 'Fogata' : (hoveringInteractable.type === 'grave' ? 'Tumba' : 'Puerta'));
+                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar <span style="color:#D2B48C;">${tName}</span>`; 
+            } else { promptEl.style.display = 'none'; }
+        } else if (anyItemHovered && !window.player.isDead) {
+            promptEl.style.display = 'block'; textEl.innerHTML = `Mantén <span class="key-btn">Y</span> para atraer objetos cercanos`;
+        } else { promptEl.style.display = 'none'; }
+    }
+
     for (let i = window.droppedItems.length - 1; i >= 0; i--) {
         let item = window.droppedItems[i]; let s = window.itemDefs[item.type].size; let d = Math.hypot(pCX - item.x, pCY - item.y);
         if (window.keys.y && d < 250 && !window.player.isDead) {
@@ -511,22 +552,6 @@ function update() {
         item.life += 0.05;
     }
 
-    let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
-    let promptEl = window.getEl('interaction-prompt'); let textEl = window.getEl('prompt-text');
-    
-    if (promptEl && textEl) {
-        if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
-            let hoveringInteractable = interactables[0];
-            if (hoveringInteractable.type !== 'bed') {
-                promptEl.style.display = 'block'; 
-                let tName = hoveringInteractable.type === 'box' ? 'Caja' : (hoveringInteractable.type === 'campfire' ? 'Fogata' : (hoveringInteractable.type === 'grave' ? 'Tumba' : 'Puerta'));
-                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar <span style="color:#D2B48C;">${tName}</span>`; 
-            } else { promptEl.style.display = 'none'; }
-        } else if (anyItemHovered && !window.player.isDead) {
-            promptEl.style.display = 'block'; textEl.innerHTML = `Mantén <span class="key-btn">Y</span> para atraer objetos cercanos`;
-        } else { promptEl.style.display = 'none'; }
-    }
-
     for (let i = window.projectiles.length - 1; i >= 0; i--) {
         let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
         if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { window.spawnParticles(pr.x, pr.y, '#557A27', 3); window.projectiles.splice(i, 1); continue; } 
@@ -543,13 +568,18 @@ function update() {
                if (window.checkRectIntersection(pr.x, pr.y, 4, 4, ent.x, ent.y, ent.width, ent.height)) {
                    ent.hp -= pr.damage; window.setHit(ent); window.spawnDamageText(ent.x, ent.y, "-"+Math.floor(pr.damage), '#ff4444'); window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
                    if(ent.hp <= 0) {
+                        window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                         window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
                         if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
                         else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
                         else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(40 * ent.level); }
                         else if (ent.type === 'archer') { let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(30 * ent.level); }
                         window.entities.splice(e, 1); if(typeof window.updateUI==='function') window.updateUI();
-                   } hitEnt = true; break;
+                   } else {
+                       window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage });
+                       if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
+                   }
+                   hitEnt = true; break;
                }
             } if(hitEnt) { window.projectiles.splice(i,1); continue; }
         }
@@ -562,28 +592,31 @@ function update() {
         if (allIds[0] !== window.socket?.id) isMasterClient = false;
     }
 
-    if (window.game.isRaining && isMasterClient && window.game.frameCount % 120 === 0) {
+    if (window.game.isRaining && isMasterClient && window.game.frameCount % 60 === 0) {
         window.trees.forEach(t => {
-            if (t.isStump) {
+            if (t.isStump && t.regrowthCount < 3 && t.grownDay !== window.game.days) {
                 let isOffScreen = (t.x < window.camera.x - 300 || t.x > window.camera.x + window.canvas.width + 300);
-                if (isOffScreen && Math.random() < 0.1) {
-                    t.isStump = false; t.hp = t.maxHp = 100;
-                    window.sendWorldUpdate('grow_tree', { x: t.x });
+                if (isOffScreen && Math.random() < 0.2) {
+                    t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount++; t.grownDay = window.game.days;
+                    window.sendWorldUpdate('grow_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay });
                 }
             }
         });
     }
 
+    // FIX ENEMIGOS MULTIJUGADOR: Master envía el spawn y los demas lo reciben por red
     let spawnRate = Math.max(150, 600 - (window.game.days * 20) - Math.floor(window.player.x / 50));
     if (isNight && window.game.frameCount % spawnRate === 0 && isMasterClient) { 
         let cx = window.player.x + 800; if (Math.random() > 0.5 && window.player.x - 800 > window.game.shoreX + 2000) cx = window.player.x - 800; 
         let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
         if (distToShore > 2000) { 
+            let newEnt = null;
             if (distToShore > 3000 && Math.random() < 0.4 && window.entities.filter(e => e.type === 'archer').length < 3) {
-                let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx });
+                newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: 30 + (lvl * 20), maxHp: 30 + (lvl * 20), damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx };
             } else if (window.entities.filter(e => e.type === 'zombie').length < 3) {
-                let zMaxHp = 60 + (lvl * 30); window.entities.push({ id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: window.game.groundLevel - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: zMaxHp, maxHp: zMaxHp, damage: 15 + (lvl * 4), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx });
+                newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: window.game.groundLevel - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: 60 + (lvl * 30), maxHp: 60 + (lvl * 30), damage: 15 + (lvl * 4), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx };
             }
+            if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity', { entity: newEnt }); }
         }
     }
 
@@ -596,7 +629,10 @@ function update() {
         if (isDay && ent.type === 'zombie') {
             if (window.game.frameCount % 30 === 0) {
                 ent.hp -= 5; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ffa500', 5); window.spawnDamageText(ent.x, ent.y, "-5", '#ffa500');
-                if (ent.hp <= 0) { window.spawnParticles(ent.x, ent.y, '#ff4444', 15); let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(40 * ent.level); window.entities.splice(i, 1); return; }
+                if (ent.hp <= 0) { 
+                    window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
+                    window.spawnParticles(ent.x, ent.y, '#ff4444', 15); let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(40 * ent.level); window.entities.splice(i, 1); return; 
+                }
             }
         }
 
@@ -632,7 +668,10 @@ function update() {
             } else { if(Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.6 : -0.6); }
             if (ent.attackCooldown > 0) ent.attackCooldown--;
         }
-        else if (ent.type === 'chicken') { if(Math.random() < 0.02) ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); }
+        else if (ent.type === 'chicken') { 
+            if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 2.5; } 
+            else if(Math.random() < 0.02) { ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); } 
+        }
     });
 
     window.camera.x = window.player.x - (window.canvas.width / 2) + (window.player.width / 2);

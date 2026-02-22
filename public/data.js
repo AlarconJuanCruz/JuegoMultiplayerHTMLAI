@@ -10,15 +10,16 @@ window.lightCtx = window.lightCanvas.getContext('2d');
 
 window.socket = null; window.otherPlayers = {}; 
 
-window.game = { gravity: 0.5, blockSize: 30, groundLevel: 660, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false };
+window.game = { gravity: 0.5, blockSize: 30, groundLevel: 660, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false, serverStartTime: 0 };
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 
 window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
-window.removedTrees = []; window.removedRocks = []; window.stumpedTrees = [];
+window.removedTrees = []; window.removedRocks = []; window.stumpedTrees = []; window.killedEntities = [];
 window.currentOpenBox = null; window.currentCampfire = null;
 
-window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Mart.' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };
+// NUEVA HERRAMIENTA: ANTORCHA
+window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'torch': { id: 'torch', name: 'Antorcha' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Mart.' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };
 
 window.itemDefs = { 
     'wood': { name: 'Madera', color: '#c19a6b', size: 12, maxStack: 500 }, 
@@ -31,12 +32,12 @@ window.itemDefs = {
     'campfire_item': { name: 'Fogata', color: '#e67e22', size: 14, maxStack: 10 },
     'bed_item': { name: 'Cama', color: '#8B0000', size: 16, maxStack: 1 } 
 };
-window.toolMaxDurability = { axe: 40, hammer: 50, pickaxe: 40, bow: 30, sword: 60 };
+window.toolMaxDurability = { torch: 300, axe: 40, hammer: 50, pickaxe: 40, bow: 30, sword: 60 }; // Antorcha: 300 segs (5 mins)
 
 window.player = {
     name: "Invitado", x: 250, y: 100, width: 24, height: 48, vx: 0, vy: 0, 
     baseSpeed: 3.5, baseJump: -9.0, baseHp: 100, baseHunger: 100, speed: 3.5, jumpPower: -9.0, hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
-    baseDamage: { hand: 9, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
+    baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
     inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }, 
     availableTools: ['hand'], activeTool: 'hand', toolHealth: {}, buildMode: 'block', inBackground: false, wantsBackground: false,

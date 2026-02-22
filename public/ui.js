@@ -1,4 +1,4 @@
-// === ui.js - GESTIÓN DE INTERFAZ ===
+// === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
 const btnOnline = window.getEl('btn-online');
 if (btnOnline) btnOnline.addEventListener('click', () => { window.startGame(true); });
@@ -14,6 +14,20 @@ if (!isLocalEnv) {
 } else {
     if (urlArea) urlArea.style.display = 'none'; if (statusBadge) statusBadge.style.display = 'none'; 
 }
+
+// NUEVO: SISTEMA DE LOGS Y EVENTOS GLOBALES
+window.addGlobalMessage = function(text, color = '#fff') {
+    let log = window.getEl('global-chat-log');
+    if (!log) return;
+    let el = document.createElement('div');
+    el.className = 'log-msg';
+    el.style.borderLeft = `3px solid ${color}`;
+    el.style.color = color;
+    el.innerHTML = text;
+    log.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { if (el.parentNode) el.remove(); }, 500); }, 8000);
+    if (log.childNodes.length > 5) { log.removeChild(log.firstChild); }
+};
 
 window.getEl('btn-single')?.addEventListener('click', () => window.startGame(false));
 window.getEl('btn-host')?.addEventListener('click', () => window.startGame(true, window.location.hostname));
@@ -101,7 +115,11 @@ window.renderToolbar = function() {
     window.player.availableTools.forEach((toolId, index) => {
         const tool = window.toolDefs[toolId]; const div = document.createElement('div'); div.className = `tool-slot ${window.player.activeTool === toolId ? 'active' : ''}`; 
         let durHTML = '';
-        if (toolId !== 'hand' && window.player.toolHealth[toolId] !== undefined) { let pct = (window.player.toolHealth[toolId] / window.toolMaxDurability[toolId]) * 100; let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c'); durHTML = `<div class="tool-durability-bg"><div class="tool-durability-fill" style="width: ${pct}%; background: ${color};"></div></div>`; }
+        if (toolId !== 'hand' && window.player.toolHealth[toolId] !== undefined) { 
+            let pct = (window.player.toolHealth[toolId] / window.toolMaxDurability[toolId]) * 100; 
+            let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c'); 
+            durHTML = `<div class="tool-durability-bg"><div class="tool-durability-fill" style="width: ${pct}%; background: ${color};"></div></div>`; 
+        }
         div.innerHTML = `<span style="font-size:0.5rem; opacity:0.7; position:absolute; top:2px; left:4px;">${index + 1}</span><br>${tool.name}${durHTML}`; 
         div.onclick = () => { window.player.activeTool = toolId; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; window.renderToolbar(); }; window.getEl('toolbar').appendChild(div);
     });
@@ -149,40 +167,38 @@ window.updateUI = function() {
         if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.availableTools.includes(t));
     };
 
+    // NUEVO: CHEQUEO DE LA ANTORCHA
+    checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
     checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
 
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
 };
 
-window.updateEntityHUD = function() {
-    if(!window.getEl('entity-hud')) return;
-    let html = '';
-    window.entities.forEach(ent => {
-        if (ent.hp < ent.maxHp && (Date.now() - (ent.lastHitTime || 0) < 3000) && ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window.canvas.width) {
-            let hpPercent = (ent.hp / ent.maxHp) * 100; let color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : '#ffaa00'));
-            html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
-        }
-    });
-    window.getEl('entity-hud').innerHTML = html;
-};
-
+window.bindCraft = function(id, fn) { const el = window.getEl(id); if(el) el.addEventListener('click', fn); };
 window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
     if(window.player.inventory.wood >= reqW && (window.player.inventory.stone||0) >= reqS && (window.player.inventory.web||0) >= reqWeb && window.player.stats.int >= reqInt) {
-        if(tool && !window.player.availableTools.includes(tool)) { window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.availableTools.push(tool); window.player.toolHealth[tool] = window.toolMaxDurability[tool]; } 
-        else if(item) { if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; } window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; }
+        if(tool && !window.player.availableTools.includes(tool)) { 
+            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.availableTools.push(tool); window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
+        } 
+        else if(item) { 
+            if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
+            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
+        }
         window.updateUI(); window.renderToolbar();
     }
 };
 
-window.getEl('btn-craft-axe')?.addEventListener('click', () => window.craftItem(10, 0, 0, 0, 'axe', null)); 
-window.getEl('btn-craft-pickaxe')?.addEventListener('click', () => window.craftItem(20, 0, 0, 0, 'pickaxe', null)); 
-window.getEl('btn-craft-hammer')?.addEventListener('click', () => window.craftItem(15, 0, 0, 0, 'hammer', null)); 
-window.getEl('btn-craft-bow')?.addEventListener('click', () => window.craftItem(100, 0, 2, 0, 'bow', null)); 
-window.getEl('btn-craft-sword')?.addEventListener('click', () => window.craftItem(30, 30, 0, 3, 'sword', null)); 
-window.getEl('btn-craft-box')?.addEventListener('click', () => window.craftItem(40, 0, 0, 1, null, 'boxes')); 
-window.getEl('btn-craft-campfire')?.addEventListener('click', () => window.craftItem(20, 5, 0, 0, null, 'campfire_item')); 
-window.getEl('btn-craft-bed')?.addEventListener('click', () => window.craftItem(30, 0, 10, 0, null, 'bed_item'));
-window.getEl('btn-craft-arrow')?.addEventListener('click', () => window.craftItem(5, 0, 0, 0, null, 'arrows', 1)); 
-window.getEl('btn-craft-arrow2')?.addEventListener('click', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
-window.getEl('btn-craft-arrow5')?.addEventListener('click', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
-window.getEl('btn-craft-arrow10')?.addEventListener('click', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
+window.bindCraft('btn-craft-torch', () => window.craftItem(5, 0, 2, 0, 'torch', null)); 
+window.bindCraft('btn-craft-axe', () => window.craftItem(10, 0, 0, 0, 'axe', null)); 
+window.bindCraft('btn-craft-pickaxe', () => window.craftItem(20, 0, 0, 0, 'pickaxe', null)); 
+window.bindCraft('btn-craft-hammer', () => window.craftItem(15, 0, 0, 0, 'hammer', null)); 
+window.bindCraft('btn-craft-bow', () => window.craftItem(100, 0, 2, 0, 'bow', null)); 
+window.bindCraft('btn-craft-sword', () => window.craftItem(30, 30, 0, 3, 'sword', null)); 
+window.bindCraft('btn-craft-box', () => window.craftItem(40, 0, 0, 1, null, 'boxes')); 
+window.bindCraft('btn-craft-campfire', () => window.craftItem(20, 5, 0, 0, null, 'campfire_item')); 
+window.bindCraft('btn-craft-bed', () => window.craftItem(30, 0, 10, 0, null, 'bed_item'));
+
+window.bindCraft('btn-craft-arrow', () => window.craftItem(5, 0, 0, 0, null, 'arrows', 1)); 
+window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
+window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
+window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));

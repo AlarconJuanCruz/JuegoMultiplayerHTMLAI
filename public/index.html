@@ -6,17 +6,14 @@
     <title>Survival RPG - Modular</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        #inventory-grid {
-            display: grid; grid-template-columns: repeat(5, 45px); gap: 8px; justify-content: center; margin-bottom: 10px;
-        }
-        .inv-slot {
-            position: relative; width: 45px; height: 45px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer;
-        }
+        #inventory-grid { display: grid; grid-template-columns: repeat(5, 45px); gap: 8px; justify-content: center; margin-bottom: 10px; }
+        .inv-slot { position: relative; width: 45px; height: 45px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .inv-slot:hover .custom-tooltip { display: block; }
-        .custom-tooltip {
-            display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2);
-        }
+        .custom-tooltip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2); }
         .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+        /* NUEVO: ESTILO PARA EL CHAT GLOBAL */
+        #global-chat-log { position: absolute; bottom: 90px; left: 20px; width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 150; }
+        .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; }
     </style>
 </head>
 <body>
@@ -25,20 +22,13 @@
             <div class="menu-box glass-panel">
                 <h1 class="menu-title">SURVIVAL RPG</h1>
                 <p class="menu-subtitle">Alpha Multijugador</p>
-                
                 <input type="text" id="player-name" class="menu-input" placeholder="Tu Nombre (ej: El Juancho)" maxlength="15">
-                
                 <button id="btn-single" class="action-btn" style="padding: 10px; margin-bottom: 10px;">🕹️ Jugar Solo (Offline)</button>
-
                 <div style="background: rgba(76, 175, 80, 0.1); padding: 10px; border-radius: 8px; border: 1px solid var(--accent-green); margin-bottom: 15px;">
                     <button id="btn-online" class="action-btn" style="margin-bottom: 8px;">🌐 Jugar Online (Global)</button>
                     <div id="server-status-badge" style="font-size: 0.75rem; margin-bottom: 5px; font-weight: bold; color: #f39c12;">🟠 Comprobando servidor...</div>
-                    <div id="online-url-area" style="display:none; font-size: 0.75rem; color: #aaa;">
-                        Link para amigos: <br>
-                        <code id="current-url" style="color: var(--accent-green); display:block; margin-top:4px; background: #000; padding: 4px; word-break: break-all;"></code>
-                    </div>
+                    <div id="online-url-area" style="display:none; font-size: 0.75rem; color: #aaa;">Link para amigos: <br><code id="current-url" style="color: var(--accent-green); display:block; margin-top:4px; background: #000; padding: 4px; word-break: break-all;"></code></div>
                 </div>
-
                 <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
                     <button id="btn-host" class="action-btn" style="background: #e67e22; margin-bottom: 5px;">🏠 Crear Servidor Local (LAN)</button>
                     <div style="display:flex; gap:10px;">
@@ -46,10 +36,8 @@
                         <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
                     </div>
                 </div>
-
                 <div id="server-list" style="margin-top: 15px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); text-align: left;">
-                    <div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">📋 Servidores Recientes:</div>
-                    <div id="saved-servers" style="display: flex; flex-direction: column; gap: 5px;"></div>
+                    <div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">📋 Servidores Recientes:</div><div id="saved-servers" style="display: flex; flex-direction: column; gap: 5px;"></div>
                 </div>
             </div>
         </div>
@@ -66,6 +54,8 @@
         </div>
 
         <div id="ui-layer" style="display: none;">
+            <div id="global-chat-log"></div>
+
             <div id="distance-display" class="glass-panel">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
             <div id="server-info" class="glass-panel">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
             <div id="clock-display">Día 1 - 08:00</div>
@@ -105,10 +95,7 @@
             <div id="menu-inventory" class="window-menu glass-panel">
                 <div class="window-header"><h3>Personaje</h3><button class="close-btn" onclick="window.toggleMenu('inventory')">✖</button></div>
                 <div class="inv-split">
-                    <div class="inv-left">
-                        <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Clic para usar)</div>
-                        <div id="inventory-grid"></div>
-                    </div>
+                    <div class="inv-left"><div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Clic para usar)</div><div id="inventory-grid"></div></div>
                     <div class="inv-right">
                         <div class="stat-header">Atributos (Puntos: <span id="stat-points">0</span>)</div>
                         <div class="stat-row"><span>💪 Fuerza</span> <div><span class="stat-val" id="stat-str">0</span><button class="stat-btn" onclick="window.upgradeStat('str')">+</button></div></div>
@@ -133,6 +120,7 @@
                 <input type="text" id="craft-search" class="search-bar" placeholder="🔍 Buscar receta...">
                 <div id="craft-list">
                     <div id="tab-herramientas">
+                        <div class="craft-item" data-name="antorcha luz"><div class="craft-header"><span class="craft-title">🔥 Antorcha</span> <span id="req-torch" class="req-text"></span></div><button id="btn-craft-torch" class="action-btn">Fabricar (5 Mad. + 2 Tela)</button></div>
                         <div class="craft-item" data-name="hacha"><div class="craft-header"><span class="craft-title">🪓 Hacha</span> <span id="req-axe" class="req-text"></span></div><button id="btn-craft-axe" class="action-btn">Fabricar (10 Mad.)</button></div>
                         <div class="craft-item" data-name="pico"><div class="craft-header"><span class="craft-title">⛏️ Pico</span> <span id="req-pickaxe" class="req-text"></span></div><button id="btn-craft-pickaxe" class="action-btn">Fabricar (20 Mad.)</button></div>
                         <div class="craft-item" data-name="martillo"><div class="craft-header"><span class="craft-title">🔨 Martillo</span> <span id="req-hammer" class="req-text"></span></div><button id="btn-craft-hammer" class="action-btn">Fabricar (15 Mad.)</button></div>

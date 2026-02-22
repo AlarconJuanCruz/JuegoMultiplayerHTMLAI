@@ -16,7 +16,8 @@ const worldState = {
     droppedItems: [], 
     removedTrees: [], 
     removedRocks: [],
-    stumpedTrees: [] // NUEVO: Memoria de tocones
+    treeState: {},
+    killedEntities: [] // NUEVO: Memoria de enemigos derrotados
 };
 
 io.on('connection', (socket) => {
@@ -42,13 +43,14 @@ io.on('connection', (socket) => {
         if (data.action === 'interact_door') { let d = worldState.blocks.find(b => b.x === data.payload.x && b.y === data.payload.y); if(d) d.open = !d.open; }
         if (data.action === 'update_box' || data.action === 'update_campfire') { let b = worldState.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y); if (b) Object.assign(b, data.payload); }
         
-        // ECOLOGÍA DE ÁRBOLES
-        if (data.action === 'stump_tree') { worldState.stumpedTrees.push(data.payload.x); }
-        if (data.action === 'destroy_tree') { worldState.removedTrees.push(data.payload.x); worldState.stumpedTrees = worldState.stumpedTrees.filter(x => x !== data.payload.x); }
-        if (data.action === 'grow_tree') { worldState.stumpedTrees = worldState.stumpedTrees.filter(x => x !== data.payload.x); }
-        
+        if (data.action === 'stump_tree') { worldState.treeState[data.payload.x] = { isStump: true, regrowthCount: data.payload.regrowthCount, grownDay: data.payload.grownDay }; }
+        if (data.action === 'grow_tree') { worldState.treeState[data.payload.x] = { isStump: false, regrowthCount: data.payload.regrowthCount, grownDay: data.payload.grownDay }; }
+        if (data.action === 'destroy_tree') { worldState.removedTrees.push(data.payload.x); delete worldState.treeState[data.payload.x]; }
         if (data.action === 'destroy_rock') { worldState.removedRocks.push(data.payload.x); }
         if (data.action === 'destroy_grave') { worldState.blocks = worldState.blocks.filter(b => b.id !== data.payload.id); }
+
+        // SINCRONIZACIÓN DE ENEMIGOS
+        if (data.action === 'kill_entity') { worldState.killedEntities.push(data.payload.id); }
 
         socket.broadcast.emit('worldUpdate', data); 
     });
