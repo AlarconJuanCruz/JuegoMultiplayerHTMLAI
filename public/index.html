@@ -6,21 +6,17 @@
     <title>Survival RPG - Fullscreen</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* RESET Y FONDO GLOBAL */
         body { margin: 0; padding: 0; background: #050505; overflow: hidden; font-family: 'Inter', sans-serif; }
         
-        /* CONTENEDOR DE ESCALADO DINÁMICO */
         #screen-wrapper { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         #game-wrapper { position: relative; width: 1280px; height: 720px; transform-origin: center center; background: #000; box-shadow: 0 0 30px rgba(0,0,0,1); overflow: hidden; }
 
-        /* INVENTARIO */
         #inventory-grid { display: grid; grid-template-columns: repeat(5, 45px); gap: 8px; justify-content: center; margin-bottom: 10px; }
         .inv-slot { position: relative; width: 45px; height: 45px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .inv-slot:hover .custom-tooltip { display: block; }
         .custom-tooltip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2); }
         .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
         
-        /* CHAT GLOBAL */
         .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; color: white; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; opacity: 1; border-right: 3px solid #fff;}
         .log-msg.fade-out { opacity: 0; pointer-events: none; }
         #global-chat-log.pinned { background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; pointer-events: auto; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); }
@@ -28,21 +24,18 @@
         #global-chat-log.pinned::-webkit-scrollbar { width: 5px; }
         #global-chat-log.pinned::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
         
-        /* HUD ENEMIGOS */
         .entity-bar-container { background: rgba(0,0,0,0.8); padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .entity-info { color: white; font-size: 12px; display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
         .entity-hp-bg { background: #222; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; border: 1px solid #000; }
         .entity-hp-fill { height: 100%; transition: width 0.2s ease-out; }
 
-        /* CINTURÓN - SIMPLE, HORIZONTAL Y ABAJO AL CENTRO */
         .tool-slot { width: 50px; height: 50px; background: rgba(0,0,0,0.7); border: 2px solid #555; border-radius: 5px; position: relative; color: white; text-align: center; font-size: 11px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: 0.1s; }
         .tool-slot.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.2); transform: scale(1.1); box-shadow: 0 0 10px rgba(255,215,0,0.5); z-index: 2; }
 
-        /* TEXTO CENTRAL MEJORADO (MANTEN Y) */
         #interaction-prompt { position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); padding: 12px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; font-size: 15px; text-shadow: 1px 1px 2px #000; color: #fff; z-index: 200; display: none; }
         .key-btn { background: #fff; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: 900; text-shadow: none; margin: 0 4px;}
         
-        /* FIX PARA CAJAS DE TEXTO ANGOSTAS */
+        /* Cajas que no estrujan el texto */
         .glass-panel-auto { white-space: nowrap; width: max-content; padding: 10px 15px; }
     </style>
 </head>
@@ -68,9 +61,6 @@
                             <button id="btn-join" class="action-btn" style="background: #3498db; flex: 1; padding: 8px; margin:0;">Unirse</button>
                         </div>
                     </div>
-                    <div id="server-list" style="margin-top: 15px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.1); text-align: left;">
-                        <div style="color: #4CAF50; font-weight: bold; margin-bottom: 5px;">📋 Servidores Recientes:</div><div id="saved-servers" style="display: flex; flex-direction: column; gap: 5px;"></div>
-                    </div>
                 </div>
             </div>
 
@@ -78,7 +68,6 @@
             
             <div id="death-screen" class="glass-panel" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1000; text-align:center; padding: 30px; border: 2px solid #ff4444;">
                 <h2 style="color:#ff4444; font-size: 2rem; margin-top:0;">¡HAS MUERTO!</h2>
-                <p style="font-size: 1.2rem;">¿Dónde deseas reaparecer?</p>
                 <div style="display:flex; gap:15px; justify-content:center; margin-top:20px;">
                     <button class="action-btn" style="background:#4CAF50; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('coast')">🌊 Costa</button>
                     <button id="btn-respawn-bed" class="action-btn" style="background:#8B0000; font-size: 1.1rem; padding: 10px 20px;" onclick="window.respawn('bed')">🛏️ Tu Cama</button>
@@ -109,20 +98,18 @@
                         <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
                         <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
                     </div>
+
+                    <div id="global-chat-log" style="display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: flex-end; text-align: right; margin-top: 10px;"></div>
                 </div>
 
-                <div id="global-chat-log" style="position: absolute; top: 220px; right: 20px; width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; align-items: flex-end; text-align: right; z-index: 150;"></div>
-
-                <div id="toolbar" style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 10px; pointer-events: auto; z-index: 1000; width: max-content; padding: 0;"></div>
+                <div id="toolbar" style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 10px; pointer-events: auto; z-index: 1000; width: max-content; padding: 0; background: transparent;"></div>
                 
-                <div id="chat-container" style="display: none; position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 400px; z-index: 1001; pointer-events: auto;">
-                    <input type="text" id="chat-input" placeholder="Escribe un mensaje y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                <div id="chat-container" style="display: none; position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); width: 400px; z-index: 2000; pointer-events: auto;">
+                    <input type="text" id="chat-input" placeholder="Escribe un mensaje y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center;">
                 </div>
 
                 <div id="interaction-prompt"><span id="prompt-text"></span></div>
-                
                 <div id="placement-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px #000;">MODO UBICACIÓN<br><span style="font-size: 0.7rem; color: #fff; font-weight: normal;">Clic Izq: Colocar | Clic Der: Cancelar</span></div>
-                
                 <div id="game-tips" class="glass-panel" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
                     <strong style="color: #fff;">Controles Básicos:</strong><br><br>
                     <span class="tip-highlight">ENTER</span>: Abrir/Enviar Chat<br>

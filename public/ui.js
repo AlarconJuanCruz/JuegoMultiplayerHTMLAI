@@ -88,8 +88,7 @@ window.invItemClick = function(type) {
     if (type === 'meat') window.eatFood(15, 30); 
     else if (type === 'cooked_meat') window.eatFood(30, 60);
     else if (['boxes', 'campfire_item', 'bed_item'].includes(type) || window.toolDefs[type]) { 
-        if (typeof window.autoEquip === 'function') window.autoEquip(type); 
-        window.toggleMenu('inventory'); 
+        if(typeof window.autoEquip==='function') window.autoEquip(type); window.toggleMenu('inventory'); 
     }
 };
 
@@ -133,7 +132,99 @@ window.renderCampfireUI = function() {
     if (window.currentCampfire.isBurning) { btn.innerText = "APAGAR"; btn.style.background = "#555"; } else { btn.innerText = "🔥 ENCENDER"; btn.style.background = "#e67e22"; }
 };
 
-// FIX PROTECCIÓN: Asegura que el cinturón exista antes de leerlo (Evita Crasheo Total)
+// CINTURÓN Y PROTECCIÓN ANTI-CONGELAMIENTO
+window.autoEquip = function(id) {
+    if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+    if (!window.player.toolbar.includes(id)) {
+        let idx = window.player.toolbar.indexOf(null);
+        if (idx !== -1) { 
+            window.player.toolbar[idx] = id; 
+            window.selectToolbarSlot(idx);
+            if(window.renderToolbar) window.renderToolbar();
+        }
+    } else {
+        let existingIdx = window.player.toolbar.indexOf(id);
+        window.selectToolbarSlot(existingIdx);
+        if(window.renderToolbar) window.renderToolbar();
+    }
+};
+
+window.handleToolbarDrop = function(e, slotIndex) {
+    e.preventDefault();
+    let type = e.dataTransfer.getData('text/plain');
+    if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type))) {
+        if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+        let oldIdx = window.player.toolbar.indexOf(type);
+        if (oldIdx !== -1) window.player.toolbar[oldIdx] = null;
+        window.player.toolbar[slotIndex] = type;
+        window.selectToolbarSlot(slotIndex);
+        if(window.renderToolbar) window.renderToolbar();
+    }
+};
+
+// LA LÓGICA QUE EVITA EL BUG DEL CONGELAMIENTO:
+window.selectToolbarSlot = function(index) {
+    if (!window.player.toolbar) return;
+    window.player.activeSlot = index;
+    let item = window.player.toolbar[index];
+    window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0;
+    
+    if (item && window.toolDefs[item]) {
+        window.player.activeTool = item;
+        window.player.placementMode = null;
+    } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0 && ['boxes', 'campfire_item', 'bed_item'].includes(item)) {
+        // Solo activa el Placement Mode si es un mueble válido. Esto evita el freeze.
+        window.player.activeTool = 'hand';
+        window.player.placementMode = item;
+    } else {
+        window.player.activeTool = 'hand';
+        window.player.placementMode = null;
+    }
+};
+
+window.renderToolbar = function() {
+    let tb = window.getEl('toolbar');
+    if(!tb) return;
+    tb.innerHTML = '';
+    
+    if(!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+    
+    for(let i=0; i<6; i++) {
+        let itemId = window.player.toolbar[i];
+        let div = document.createElement('div');
+        div.className = `tool-slot ${window.player.activeSlot === i ? 'active' : ''}`;
+        
+        div.ondragover = (e) => e.preventDefault();
+        div.ondrop = (e) => window.handleToolbarDrop(e, i);
+
+        let content = `<span style="position:absolute; top:2px; left:4px; font-size:10px; color:#aaa; font-weight:bold;">${i+1}</span>`;
+        
+        if (itemId) {
+            if (window.toolDefs[itemId]) {
+                let tool = window.toolDefs[itemId]; let durHTML = '';
+                if (itemId !== 'hand' && window.player.toolHealth[itemId] !== undefined) {
+                    let pct = (window.player.toolHealth[itemId] / window.toolMaxDurability[itemId]) * 100;
+                    let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
+                    durHTML = `<div class="tool-durability-bg" style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#222;"><div class="tool-durability-fill" style="height:100%; width: ${pct}%; background: ${color};"></div></div>`;
+                }
+                content += `<div style="margin-top:10px;">${tool.name}</div>${durHTML}`;
+            } else if (window.itemDefs[itemId]) {
+                let def = window.itemDefs[itemId];
+                let count = window.player.inventory[itemId] || 0;
+                if (count <= 0) {
+                    window.player.toolbar[i] = null;
+                    if (window.player.activeSlot === i) { window.selectToolbarSlot(0); }
+                } else {
+                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto; border-radius:3px;"></div><div class="inv-amount" style="position:absolute; bottom:2px; right:4px;">${count}</div>`;
+                }
+            }
+        }
+        div.innerHTML = content;
+        div.onclick = () => { window.selectToolbarSlot(i); window.renderToolbar(); };
+        tb.appendChild(div);
+    }
+};
+
 window.getReqText = function(rW, rS, rWeb, rInt) {
     let t = ""; if (window.player.stats.int < rInt) t += `<span style="color:#ff6b6b; margin-left:5px;">Req. INT ${rInt}</span> `;
     let mW = rW - window.player.inventory.wood; let mWeb = rWeb - (window.player.inventory.web||0); let mS = rS - (window.player.inventory.stone || 0);
@@ -172,9 +263,7 @@ window.updateUI = function() {
 
     const checkBtn = (idReq, idBtn, w, s, web, intR, t) => {
         let reqDOM = window.getEl(idReq), btnDOM = window.getEl(idBtn);
-        
-        // FIX ESTRICTO: Si no existe toolbar o availableTools, no crashea
-        if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+        if (!window.player.toolbar) window.player.toolbar = ['hand'];
         if (!window.player.availableTools) window.player.availableTools = ['hand'];
         
         let hasIt = t && (window.player.toolbar.includes(t) || window.player.availableTools.includes(t));

@@ -41,7 +41,7 @@ window.player = {
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
     inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }, 
     
-    // SISTEMA DE CINTURÓN - 6 SLOTS CLAROS Y SEGUROS
+    // CINTURÓN 100% GARANTIZADO
     toolbar: ['hand', null, null, null, null, null],
     activeSlot: 0,
     activeTool: 'hand', 
