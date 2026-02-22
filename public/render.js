@@ -440,43 +440,60 @@ window.draw = function() {
                 window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.5); window.ctx.lineTo(t.width, -th*0.7); window.ctx.stroke();
             }
 
-            // --- Follaje ---
+// --- Follaje Mejorado ---
             if (t.type === 0 || t.type === 2) {
                 let baseColor = t.type === 0 ? '#1B5E20' : '#33691E';
                 let midColor = t.type === 0 ? '#2E7D32' : '#558B2F';
                 let lightColor = t.type === 0 ? '#4CAF50' : '#8BC34A';
 
+                // Capa Sombra (Fondo - da volumen general)
                 window.ctx.fillStyle = isHitColor || baseColor;
                 window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.8, t.width*1.1, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.8, -th*0.5, t.width*0.8, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.8, -th*0.5, t.width*0.8, 0, Math.PI*2);
+                window.ctx.arc(0, -th*0.7, t.width*1.1, 0, Math.PI*2); // Centro grande
+                window.ctx.arc(-t.width*0.6, -th*0.5, t.width*0.8, 0, Math.PI*2); // Bulto izq
+                window.ctx.arc(t.width*0.6, -th*0.5, t.width*0.8, 0, Math.PI*2); // Bulto der
+                window.ctx.arc(0, -th*0.9, t.width*0.85, 0, Math.PI*2); // Tope
                 window.ctx.fill();
 
+                // Capa Media (Crea profundidad)
                 window.ctx.fillStyle = isHitColor || midColor;
                 window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.8, t.width*0.9, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.7, -th*0.55, t.width*0.6, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.7, -th*0.55, t.width*0.6, 0, Math.PI*2);
+                window.ctx.arc(0, -th*0.7, t.width*0.9, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.5, -th*0.55, t.width*0.65, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.5, -th*0.55, t.width*0.65, 0, Math.PI*2);
+                window.ctx.arc(0, -th*0.85, t.width*0.7, 0, Math.PI*2);
                 window.ctx.fill();
 
+                // Capa Luz (Brillos - asimetría natural)
                 window.ctx.fillStyle = isHitColor || lightColor;
                 window.ctx.beginPath();
-                window.ctx.arc(t.width*0.2, -th*0.9, t.width*0.6, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.4, -th*0.65, t.width*0.4, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.3, -th*0.75, t.width*0.4, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.2, -th*0.65, t.width*0.3, 0, Math.PI*2);
+                window.ctx.arc(0, -th*0.9, t.width*0.3, 0, Math.PI*2);
                 window.ctx.fill();
 
             } else if (t.type === 1) {
+                // Pino Corregido (Base ancha abajo, punta arriba)
                 for (let i = 0; i < 4; i++) {
-                    let layerW = t.width * 1.5 - (i * 10);
-                    let yPos = -th - 10 + (i * (th*0.8/4));
+                    // i=0 es la base (más ancha), i=3 es la punta (más fina)
+                    let layerW = t.width * 1.5 - (i * (t.width * 0.35));
+                    let yPos = -th * 0.3 - (i * (th * 0.7 / 3)); 
                     
                     window.ctx.fillStyle = isHitColor || '#1B5E20';
-                    window.ctx.beginPath(); window.ctx.moveTo(0, yPos); window.ctx.lineTo(-layerW, yPos + th*0.35); window.ctx.lineTo(layerW, yPos + th*0.35); window.ctx.fill();
+                    window.ctx.beginPath(); 
+                    window.ctx.moveTo(0, yPos - th*0.25); // Punta superior de este nivel
+                    window.ctx.lineTo(-layerW, yPos + th*0.15); // Base izq de este nivel
+                    window.ctx.lineTo(layerW, yPos + th*0.15); // Base der de este nivel
+                    window.ctx.fill();
                     
+                    // Detalle de iluminación en la mitad del pino
                     if(!isHitColor) {
                         window.ctx.fillStyle = '#2E7D32';
-                        window.ctx.beginPath(); window.ctx.moveTo(0, yPos); window.ctx.lineTo(-layerW*0.9, yPos + th*0.35); window.ctx.lineTo(0, yPos + th*0.32); window.ctx.fill();
+                        window.ctx.beginPath(); 
+                        window.ctx.moveTo(0, yPos - th*0.25); 
+                        window.ctx.lineTo(-layerW*0.85, yPos + th*0.15); 
+                        window.ctx.lineTo(0, yPos + th*0.12); 
+                        window.ctx.fill();
                     }
                 }
             }
@@ -551,8 +568,11 @@ window.draw = function() {
         }
     });
 
-    if (window.player.placementMode && !window.player.isDead) {
-        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
+if (window.player.placementMode && !window.player.isDead) {
+        let offsetY = window.game.groundLevel % window.game.blockSize;
+        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
+        const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        
         let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
         let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
 
@@ -566,8 +586,10 @@ window.draw = function() {
     }
 
     if (window.player.activeTool === 'hammer' && !window.player.isDead && !window.player.placementMode) {
+        let offsetY = window.game.groundLevel % window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
-        const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
+        const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        
         const isDoor = window.player.buildMode === 'door'; const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize;
         
         let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true);
@@ -581,7 +603,7 @@ window.draw = function() {
 
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
         let pCX = window.player.x + window.player.width / 2;
-        let pCY = window.player.y + 24; // altura del pecho/brazo
+        let pCY = window.player.y + 14;
         let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY;
         let angle = Math.atan2(dy, dx);
         let power = 4 + (window.player.chargeLevel / 100) * 6;

@@ -24,7 +24,7 @@ window.openChat = function() {
 };
 
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
-    if (y >= window.game.groundLevel) return false;
+    if (y + h > window.game.groundLevel) return false;
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
@@ -299,10 +299,14 @@ document.addEventListener('drop', (e) => {
 window.addEventListener('mousedown', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
     
-    if (window.player.placementMode) {
+if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
         if (e.button === 0) {
-            const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
+            // NUEVO CÁLCULO DE GRILLA ALINEADO AL SUELO
+            let offsetY = window.game.groundLevel % window.game.blockSize;
+            const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
+            const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+            
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
                 let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
@@ -442,15 +446,18 @@ window.addEventListener('mousedown', (e) => {
     }
 
     if (!actionDone && window.player.activeTool === 'hammer') {
-        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
-        const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
-        if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-            if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
-                let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
-                window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
+            let offsetY = window.game.groundLevel % window.game.blockSize;
+            const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
+            const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+
+            const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
+            if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
+                if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
+                    let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
+                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
+                }
             }
         }
-    }
     if(actionDone && window.useTool) window.useTool();
 });
 
@@ -462,7 +469,7 @@ window.addEventListener('mouseup', (e) => {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
                 let pCX = window.player.x + window.player.width/2; 
-                let pCY = window.player.y + 24; // mismo origen que la guía
+                let pCY = window.player.y + 14;
                 let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
                 let power = 4 + (window.player.chargeLevel / 100) * 6; 
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
