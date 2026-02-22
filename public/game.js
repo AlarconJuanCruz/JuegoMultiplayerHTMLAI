@@ -100,8 +100,11 @@ window.generateWorldSector = function(startX, endX) {
         let tx = startX + 50 + sRandom() * (endX - startX - 100); 
         let tHeight = 160 + sRandom() * 120; let tWidth = 28 + sRandom() * 16;
         if (!window.removedTrees.includes(tx)) {
-            let tState = window.treeState[tx];
-            let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
+            // FIX ANTICRASH: Protegemos la lectura de window.treeState para que si no existe no rompa el código
+            let tState = window.treeState ? window.treeState[tx] : null;
+            let isStump = tState ? tState.isStump : false; 
+            let rCount = tState ? tState.regrowthCount : 0; 
+            let gDay = tState ? tState.grownDay : -1;
             let hp = isStump ? 50 : 100;
             window.trees.push({ id: 't_'+Math.floor(tx), x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); 
         }
@@ -115,7 +118,10 @@ window.generateWorldSector = function(startX, endX) {
     }
     let cx = startX + 100 + sRandom() * (endX - startX - 200); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
     let newId = 'e_' + Math.floor(cx);
-    if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
+    // FIX ANTICRASH: Chequeamos que killedEntities exista
+    let isKilled = window.killedEntities && window.killedEntities.includes(newId);
+    
+    if (!window.entities.some(e => e.id === newId) && !isKilled) {
         if (distToShore > 2000) {
             if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
             else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
@@ -231,12 +237,6 @@ window.addEventListener('keydown', (e) => {
         }
     }
     const num = parseInt(e.key); if (!isNaN(num) && num > 0 && num <= window.player.availableTools.length) { window.player.activeTool = window.player.availableTools[num - 1]; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; if(window.renderToolbar) window.renderToolbar(); }
-});
-
-window.addEventListener('keyup', (e) => {
-    if (!window.game || !window.game.isRunning) return;
-    if (e.key === 'a' || e.key === 'A') window.keys.a = false; if (e.key === 'd' || e.key === 'D') window.keys.d = false; if (e.key === 'Shift') window.keys.shift = false; 
-    if (e.key === 'y' || e.key === 'Y') window.keys.y = false; if (e.key === 'w' || e.key === 'W' || e.key === ' ') { window.keys.jumpPressed = false; window.player.jumpKeyReleased = true; }
 });
 
 window.addEventListener('mousemove', (e) => {
@@ -416,6 +416,24 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if(actionDone && window.useTool) window.useTool();
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (!window.game || !window.game.isRunning || window.player.isDead) return;
+    if (window.player.activeTool === 'bow') {
+        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
+        if (e.button === 0 && window.player.isCharging) {
+            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
+                window.player.inventory.arrows--;
+                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + window.player.height/2;
+                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
+                let power = 4 + (window.player.chargeLevel / 100) * 6; 
+                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
+                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+            }
+            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
+        }
+    }
 });
 
 function update() {
