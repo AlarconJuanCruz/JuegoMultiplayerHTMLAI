@@ -42,13 +42,11 @@ window.toggleChatLog = function() {
     if (log) {
         if (window.isChatLogPinned) { 
             log.classList.add('pinned'); 
-            // Mostrar todos los chats que estaban ocultos
             log.querySelectorAll('.hidden-msg').forEach(el => el.style.display = 'block');
             log.scrollTop = log.scrollHeight; 
         } 
         else { 
             log.classList.remove('pinned'); 
-            // Ocultar los que ya deberían haberse desvanecido
             log.querySelectorAll('.fade-out').forEach(el => {
                 el.style.display = 'none';
                 el.classList.add('hidden-msg');
@@ -70,7 +68,6 @@ window.addGlobalMessage = function(text, color = '#fff') {
     
     setTimeout(() => { 
         el.classList.add('fade-out'); 
-        // En lugar de encoger la caja (que aplasta el texto), la ocultamos después de desvanecerse
         setTimeout(() => {
             if (!window.isChatLogPinned && el.parentNode) {
                 el.style.display = 'none';
@@ -223,7 +220,6 @@ window.selectToolbarSlot = function(index) {
     }
 };
 
-// Función segura para obtener colores de items de colocación
 function getInvDef(type, isTool) {
     let def = isTool ? window.toolDefs[type] : window.itemDefs[type];
     if (!def) {
@@ -248,7 +244,7 @@ window.renderToolbar = function() {
         div.className = `tool-slot ${window.player.activeSlot === i ? 'active' : ''}`;
         
         div.ondragover = (e) => e.preventDefault();
-        div.ondrop = (e) => window.handleToolbarDrop(e, i);
+        div.ondrop = (e) => { e.stopPropagation(); window.handleToolbarDrop(e, i); };
 
         let content = `<span style="position:absolute; top:2px; left:4px; font-size:10px; color:#aaa; font-weight:bold;">${i+1}</span>`;
         
@@ -294,17 +290,17 @@ window.getReqText = function(rW, rS, rWeb, rInt) {
     if (mW > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mW} Mad.</span>`; if (mWeb > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mWeb} Tela</span>`; if (mS > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mS} Pie.</span>`; return t === "" ? '<span class="req-text-ok">Recursos OK</span>' : t;
 };
 
-// ============================================
-// SISTEMA DE INVENTARIO (GRILLA DINÁMICA)
-// ============================================
 window.updateUI = function() { 
-    // CORRECCIÓN BUG ARRASTRE: Ahora toda la ventana de Inventario recibe los ítems soltados
     const grid = window.getEl('inventory-grid'); 
-    if(grid && !grid.dataset.dragBind) {
-        grid.dataset.dragBind = "true";
-        grid.addEventListener('dragover', (e) => e.preventDefault());
-        grid.addEventListener('drop', (e) => {
+    
+    // EVITAR CAÍDAS AL PISO DESDE EL INVENTARIO: Toda la ventana atrapa el objeto
+    let menuInv = window.getEl('menu-inventory');
+    if (menuInv && !menuInv.dataset.dragBind) {
+        menuInv.dataset.dragBind = "true";
+        menuInv.addEventListener('dragover', (e) => e.preventDefault());
+        menuInv.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation(); // Detiene el evento global que lo tira al piso
             let type = e.dataTransfer.getData('text/plain');
             let source = e.dataTransfer.getData('source');
             if (source === 'toolbar' && window.player.toolbar) {

@@ -30,25 +30,27 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
     }
     
-    let isItem = !isStructure; // cajas, fogatas y camas
+    let isItem = !isStructure;
 
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
         
-        // 1. Verificación básica: No podemos atravesar algo que ya existe
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
         
-        // 2. Reglas de Puertas y Bloques contiguos
         if (isStructure && b.type === 'door') {
             if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) && (y < b.y + bh && y + h > b.y)) return false; 
         }
         if (isStructure && h > window.game.blockSize && b.type === 'block') { 
             if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) && (y < b.y + bh && y + h > b.y)) return false; 
         }
+
+        // REGLA: No se puede poner puerta encima ni debajo de otra puerta
+        if (isStructure && h > window.game.blockSize && b.type === 'door') {
+            if (x === b.x && (y + h === b.y || y === b.y + bh)) return false;
+        }
         
-        // 3. Regla: No puedes colocar Cajas/Fogatas/Camas SOBRE Cajas/Fogatas/Camas
+        // REGLA: No colocar Cajas/Camas/Fogatas directamente encima de Cajas/Camas/Fogatas/Tumbas
         if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave')) {
-            // Si el nuevo objeto descansa exactamente encima del existente
             if (x < b.x + window.game.blockSize && x + w > b.x && y + h === b.y) {
                 return false; 
             }
@@ -240,6 +242,17 @@ window.startGame = function(multiplayer, ip = null) {
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 window.addEventListener('blur', () => { if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; } if(window.player) window.player.isCharging = false; });
 
+window.addEventListener('wheel', (e) => {
+    if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
+    
+    // VERIFICACIÓN DEL CHAT: Evita cambiar ítem si scrolleas sobre el chat
+    if (e.target.closest('#global-chat-log')) return; 
+    
+    if (e.deltaY > 0) window.selectToolbarSlot((window.player.activeSlot + 1) % 6);
+    else window.selectToolbarSlot((window.player.activeSlot - 1 + 6) % 6);
+    if(window.renderToolbar) window.renderToolbar();
+}, {passive: false}); 
+
 window.addEventListener('keyup', (e) => {
     if (!window.game || !window.game.isRunning) return;
     let chatInput = window.getEl('chat-input');
@@ -308,16 +321,14 @@ window.addEventListener('mousemove', (e) => {
     if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
 });
 
-window.addEventListener('wheel', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
-    if (e.deltaY > 0) window.selectToolbarSlot((window.player.activeSlot + 1) % 6);
-    else window.selectToolbarSlot((window.player.activeSlot - 1 + 6) % 6);
-    if(window.renderToolbar) window.renderToolbar();
-}, {passive: false}); 
-
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => {
-    e.preventDefault(); if (!window.player || e.target.closest('.window-menu') || window.player.isDead) return; 
+    e.preventDefault(); 
+    if (!window.player || window.player.isDead) return; 
+    
+    // EVITAR DROP GLOBAL SI ESTÁ SOBRE UN MENÚ O EL CINTURÓN (Así no cae al piso por error)
+    if (e.target.closest('.window-menu') || e.target.closest('#toolbar')) return;
+
     const type = e.dataTransfer.getData('text/plain');
     if (type && window.player.inventory[type] > 0) { 
         let amt = window.player.inventory[type]; let ni = { id: Math.random().toString(36).substring(2,9), x: window.player.x + window.player.width/2 + (Math.random() * 10 - 5), y: window.player.y - 20 + (Math.random() * 10 - 5), vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 1) * 3 - 1, type: type, amount: amt, life: 1.0 };
@@ -449,18 +460,23 @@ window.addEventListener('mousedown', (e) => {
         }
     }
 
+    // NUEVO: Destrucción permanente de tocones de madera (no vuelven a crecer)
     if (!actionDone && treeDmg > 0) {
         for (let i = window.trees.length - 1; i >= 0; i--) {
             const t = window.trees[i];
-            if (t.isStump) continue; 
             
-            if (window.mouseWorldX >= t.x - 20 && window.mouseWorldX <= t.x + t.width + 20 && window.mouseWorldY >= t.y - 100 && window.mouseWorldY <= t.y + t.height) { 
-                if (Math.hypot(pCX - (t.x + t.width/2), pCY - (t.y + t.height/2)) <= window.player.miningRange) {
+            let th = t.isStump ? 15 + t.width*0.2 : t.height;
+            let ty = t.isStump ? t.y + t.height - th : t.y - 100;
+            let hitY = t.isStump ? t.y + t.height - 10 : t.y + t.height/2;
+
+            if (window.mouseWorldX >= t.x - 20 && window.mouseWorldX <= t.x + t.width + 20 && window.mouseWorldY >= ty && window.mouseWorldY <= t.y + t.height) { 
+                if (Math.hypot(pCX - (t.x + t.width/2), pCY - hitY) <= window.player.miningRange) {
                     t.hp -= treeDmg; window.setHit(t); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 8); window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `-${treeDmg}`, '#ff4444');
+                    
                     if (t.hp <= 0) {
-                        if (t.regrowthCount >= 3) {
+                        if (t.isStump || t.regrowthCount >= 3) {
                             window.spawnParticles(t.x + 15, t.y + t.height, '#C19A6B', 15, 1.2);
-                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:3, life:1.0};
+                            let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount: (t.isStump ? 2 : 3), life:1.0};
                             window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
                             window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
                         } else {
@@ -610,7 +626,6 @@ function update() {
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
 
         if (window.game.isMultiplayer && window.socket) {
-            // Se envía si el estado "isTyping" ha cambiado
             if (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState) {
                 window.socket.emit('playerMovement', { 
                     x: window.player.x, y: window.player.y, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame,
@@ -666,7 +681,8 @@ function update() {
                         window.player.inventory[item.type] = (window.player.inventory[item.type]||0) + item.amount; 
                         window.droppedItems.splice(i, 1); window.sendWorldUpdate('pickup_item', { id: item.id }); 
                         
-                        if (['boxes', 'campfire_item', 'bed_item'].includes(item.type) || window.toolDefs[item.type]) { 
+                        // REGLA: No equipar cajas/camas al recogerlas
+                        if (window.toolDefs[item.type]) { 
                             if(typeof window.autoEquip==='function') window.autoEquip(item.type); 
                         }
                         
