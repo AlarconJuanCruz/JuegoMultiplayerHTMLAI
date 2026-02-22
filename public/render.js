@@ -970,6 +970,17 @@ window.draw = function() {
     }
 
     window.ctx.save(); window.ctx.translate(-window.camera.x, -window.camera.y);
+
+    // Paleta de colores para jugadores remotos (por índice de id)
+    const PLAYER_COLORS = ['#5dade2','#58d68d','#f4d03f','#e59866','#c39bd3','#f1948a','#52be80','#85c1e9'];
+    function getPlayerColor(name) {
+        let hash = 0; for (let c of (name||'')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+        return PLAYER_COLORS[hash % PLAYER_COLORS.length];
+    }
+
+    // Recolectar posiciones de chat activos para evitar solapamiento
+    let activeChatBoxes = [];
+
     const drawNameAndChat = (charData, isLocal) => {
         if (charData.isDead) return;
         if (!isLocal) { let dist = Math.hypot(window.player.x - charData.x, window.player.y - charData.y); if (dist > 500) return; }
@@ -977,16 +988,69 @@ window.draw = function() {
         const pCX = charData.x + (charData.width || 24) / 2; const pCY = charData.y + (charData.height || 48); 
         const bob = Math.abs(Math.sin((charData.renderAnimTime || 0) * 3)) * 3; 
 
-        const nameY = pCY - 80 - bob; const chatY = pCY - 110 - bob;
+        const nameY = pCY - 80 - bob;
+        let chatBaseY = pCY - 110 - bob;
 
-        if (!isLocal) {
-            window.ctx.fillStyle = 'rgba(255,255,255,0.9)'; window.ctx.font = 'bold 12px Inter, sans-serif'; window.ctx.textAlign = 'center'; 
-            window.ctx.fillText(`${charData.name} (Nv. ${charData.level || 1})`, pCX, nameY);
+        // Evitar solapamiento: empujar hacia arriba si hay otro chat cerca
+        if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
+            window.ctx.font = 'bold 13px Inter, sans-serif';
+            let tW = window.ctx.measureText(charData.chatText).width;
+            let boxW = tW + 16, boxH = 24;
+            let boxX = pCX - boxW / 2, boxY = chatBaseY - 15;
+
+            // Ajustar posición vertical para no pisarse con otros globos
+            let maxAttempts = 6;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                let overlaps = false;
+                for (let other of activeChatBoxes) {
+                    if (Math.abs((boxX + boxW/2) - (other.cx + other.w/2)) < (boxW/2 + other.w/2 + 8) &&
+                        Math.abs((boxY + boxH/2) - (other.y + other.h/2)) < (boxH/2 + other.h/2 + 4)) {
+                        overlaps = true; break;
+                    }
+                }
+                if (!overlaps) break;
+                boxY -= (boxH + 6);
+            }
+            chatBaseY = boxY + 15;
+            activeChatBoxes.push({ cx: pCX, w: boxW, y: boxY, h: boxH });
+
+            window.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+            window.ctx.strokeStyle = isLocal ? 'rgba(52,152,219,0.7)' : `${getPlayerColor(charData.name)}99`;
+            window.ctx.lineWidth = 1.5;
+            // Bubble con triangle pointer
+            let rx = pCX - tW/2 - 8, ry = boxY;
+            window.ctx.beginPath();
+            window.ctx.moveTo(rx + 6, ry);
+            window.ctx.lineTo(rx + boxW - 6, ry);
+            window.ctx.quadraticCurveTo(rx + boxW, ry, rx + boxW, ry + 6);
+            window.ctx.lineTo(rx + boxW, ry + boxH - 6);
+            window.ctx.quadraticCurveTo(rx + boxW, ry + boxH, rx + boxW - 6, ry + boxH);
+            window.ctx.lineTo(pCX + 5, ry + boxH);
+            window.ctx.lineTo(pCX, ry + boxH + 6);
+            window.ctx.lineTo(pCX - 5, ry + boxH);
+            window.ctx.lineTo(rx + 6, ry + boxH);
+            window.ctx.quadraticCurveTo(rx, ry + boxH, rx, ry + boxH - 6);
+            window.ctx.lineTo(rx, ry + 6);
+            window.ctx.quadraticCurveTo(rx, ry, rx + 6, ry);
+            window.ctx.closePath();
+            window.ctx.fill();
+            window.ctx.stroke();
+
+            let textColor = isLocal ? '#a8d8f0' : getPlayerColor(charData.name);
+            window.ctx.fillStyle = textColor;
+            window.ctx.textAlign = 'center'; 
+            window.ctx.fillText(charData.chatText, pCX, boxY + 16);
         }
 
-        if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
-            window.ctx.font = 'bold 13px Inter, sans-serif'; let tW = window.ctx.measureText(charData.chatText).width;
-            window.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; window.ctx.fillRect(pCX - tW/2 - 8, chatY - 15, tW + 16, 24); window.ctx.fillStyle = '#fff'; window.ctx.textAlign = 'center'; window.ctx.fillText(charData.chatText, pCX, chatY + 2);
+        if (!isLocal) {
+            let nameColor = getPlayerColor(charData.name);
+            window.ctx.fillStyle = nameColor;
+            window.ctx.font = 'bold 12px Inter, sans-serif'; 
+            window.ctx.textAlign = 'center'; 
+            // Sombra para legibilidad
+            window.ctx.shadowColor = 'rgba(0,0,0,0.9)'; window.ctx.shadowBlur = 4;
+            window.ctx.fillText(`${charData.name} (Nv. ${charData.level || 1})`, pCX, nameY);
+            window.ctx.shadowBlur = 0;
         }
     };
     
