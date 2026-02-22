@@ -760,3 +760,8 @@ canvas { display: block; width: 100%; height: 100%; }
     font-size: 11px;
     letter-spacing: 0.05em;
 }
+
+#global-chat-log.pinned .log-msg {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}

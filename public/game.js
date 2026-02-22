@@ -24,7 +24,7 @@ window.openChat = function() {
 };
 
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
-    if (y + h > window.game.groundLevel) return false;
+    if (y >= window.game.groundLevel) return false;
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
@@ -111,8 +111,8 @@ window.generateWorldSector = function(startX, endX) {
     if (startX > 800 && sRandom() < 0.75) { 
         const numRocks = Math.floor(sRandom() * 3) + 2; 
         for (let i=0; i<numRocks; i++) { 
-            let rx = startX + sRandom() * (endX - startX); let rW = 30 + sRandom()*20; let rH = 20 + sRandom()*15; 
-            if (!window.removedRocks.includes(rx)) window.rocks.push({id: 'r_'+Math.floor(rx), x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 150, maxHp: 150, isHit: false}); 
+            let rx = startX + sRandom() * (endX - startX); let rW = 50 + sRandom()*40; let rH = 35 + sRandom()*25; 
+            if (!window.removedRocks.includes(rx)) window.rocks.push({id: 'r_'+Math.floor(rx), x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); 
         }
     }
     let cx = startX + 100 + sRandom() * (endX - startX - 200); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
@@ -187,11 +187,9 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'hit_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.hp -= data.payload.dmg; window.setHit(e); } }
                 else if (data.action === 'flee_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.fleeTimer = 180; e.fleeDir = data.payload.dir; } }
                 else if (data.action === 'sync_entities') {
-                    // Clientes no-master reciben posiciones del master y las aplican con interpolación suave
                     data.payload.forEach(snap => {
                         let e = window.entities.find(en => en.id === snap.id);
                         if (e) {
-                            // Interpolación suave hacia la posición del servidor
                             e.x  += (snap.x  - e.x)  * 0.3;
                             e.y  += (snap.y  - e.y)  * 0.3;
                             e.vx  = snap.vx;
@@ -353,7 +351,7 @@ window.addEventListener('mousedown', (e) => {
                     if (ent.hp <= 0) { 
                         window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                         window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
-                        if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
+                        if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
                         else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
                         else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); }
                         else if (ent.type === 'archer') { 
@@ -406,7 +404,7 @@ window.addEventListener('mousedown', (e) => {
                     if (r.hp <= 0) { 
                         window.sendWorldUpdate('destroy_rock', { x: r.x });
                         window.spawnParticles(r.x + 15, r.y + 15, '#888', 20, 1.5); 
-                        let ni = { id: Math.random().toString(36).substring(2,9), x:r.x+15, y:r.y+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:6 + Math.floor(Math.random()*5), life:1.0};
+                        let ni = { id: Math.random().toString(36).substring(2,9), x:r.x+15, y:r.y+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:15 + Math.floor(Math.random()*10), life:1.0};
                         window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
                         window.rocks.splice(i, 1); window.gainXP(25); 
                     } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: rockDmg }); }
@@ -464,7 +462,7 @@ window.addEventListener('mouseup', (e) => {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
                 let pCX = window.player.x + window.player.width/2; 
-                let pCY = window.player.y + 6; // mismo origen que la guía
+                let pCY = window.player.y + 24; // mismo origen que la guía
                 let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
                 let power = 4 + (window.player.chargeLevel / 100) * 6; 
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
@@ -512,7 +510,6 @@ function update() {
             window.game.isRaining = isDay && (hourFloat >= rainStart && hourFloat <= (rainStart + rainDuration));
         }
 
-        // SEGURIDAD: Evita que un error matemático congele al personaje
         if (isNaN(window.player.vx) || !isFinite(window.player.vx)) window.player.vx = 0;
         if (isNaN(window.player.vy) || !isFinite(window.player.vy)) window.player.vy = 0;
 
@@ -679,7 +676,7 @@ function update() {
                     if(ent.hp <= 0) {
                             window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                             window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
-                            if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
+                            if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
                             else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
                             else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); }
                             else if (ent.type === 'archer') { 
@@ -744,6 +741,20 @@ function update() {
             ent.vy += window.game.gravity; ent.y += ent.vy; window.checkEntityCollisions(ent, 'y'); 
             if (ent.y + ent.height >= window.game.groundLevel) { ent.y = window.game.groundLevel - ent.height; ent.vy = 0; }
             
+            let targetPlayer = window.player;
+            let targetCX = pCX, targetCY = pCY;
+            let minDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
+            
+            if (window.game.isMultiplayer && window.otherPlayers) {
+                Object.values(window.otherPlayers).forEach(op => {
+                    if (op.isDead) return;
+                    let opCX = op.x + (op.width||24)/2;
+                    let opCY = op.y + (op.height||48)/2;
+                    let dist = Math.hypot(opCX - (ent.x + ent.width/2), opCY - (ent.y + ent.height/2));
+                    if (dist < minDist) { minDist = dist; targetPlayer = op; targetCX = opCX; targetCY = opCY; }
+                });
+            }
+
             if (isDay && ent.type === 'zombie') {
                 if (window.game.frameCount % 30 === 0) {
                     ent.hp -= 5; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ffa500', 5); window.spawnDamageText(ent.x, ent.y, "-5", '#ffa500');
@@ -759,32 +770,33 @@ function update() {
 
             if (!repelled && (ent.type === 'spider' || ent.type === 'zombie')) {
                 if (ent.ignorePlayer > 0) ent.ignorePlayer--;
-                let distToPlayer = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
-                let aggroRange = 180; if (isNight && !window.player.isStealth) aggroRange = 600; if (ent.type === 'zombie' && !window.player.isStealth) aggroRange = 800; 
+                let aggroRange = 180; if (isNight && !targetPlayer.isStealth) aggroRange = 600; if (ent.type === 'zombie' && !targetPlayer.isStealth) aggroRange = 800; 
 
-                let repelledByTorch = isHoldingTorch && distToPlayer < 250 && ent.level <= 3;
+                let repelledByTorch = isHoldingTorch && minDist < 250 && ent.level <= 3 && targetPlayer === window.player;
 
                 if (repelledByTorch) {
-                    ent.vx = (ent.x > pCX) ? 1.5 : -1.5;
+                    ent.vx = (ent.x > targetCX) ? 1.5 : -1.5;
                     ent.ignorePlayer = 60; 
-                } else if (distToPlayer < aggroRange && ent.ignorePlayer <= 0) {
-                    let speed = ent.type === 'zombie' ? 0.4 : 0.8; let targetVx = (window.player.x > ent.x) ? speed : -speed; ent.vx = targetVx;
+                } else if (minDist < aggroRange && ent.ignorePlayer <= 0) {
+                    let speed = ent.type === 'zombie' ? 0.4 : 0.8; let targetVx = (targetPlayer.x > ent.x) ? speed : -speed; ent.vx = targetVx;
                     if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; if (ent.stuckFrames > 60 && ent.type !== 'zombie') { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
-                    if (distToPlayer < 40 && ent.attackCooldown <= 0 && !window.player.inBackground && !window.player.isDead) { window.damagePlayer(ent.damage, ent.name); ent.attackCooldown = 150; }
+                    if (minDist < 40 && ent.attackCooldown <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) { 
+                        if (targetPlayer === window.player) window.damagePlayer(ent.damage, ent.name); 
+                        ent.attackCooldown = 150; 
+                    }
                 } else { if(ent.type === 'spider' && Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.5 : -0.5); }
                 if (ent.attackCooldown > 0) ent.attackCooldown--;
             } 
             else if (!repelled && ent.type === 'archer') {
-                let distToPlayer = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
-                let aggroRange = (isNight && !window.player.isStealth) ? 1000 : 800; 
-                if (distToPlayer < aggroRange && ent.ignorePlayer <= 0 && !window.player.inBackground && !window.player.isDead) {
-                    let dirX = window.player.x > ent.x ? 1 : -1;
-                    if (distToPlayer > 600) ent.vx = dirX * 0.5; else if (distToPlayer < 400) ent.vx = -dirX * 0.8; else ent.vx = 0;
+                let aggroRange = (isNight && !targetPlayer.isStealth) ? 1000 : 800; 
+                if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
+                    let dirX = targetPlayer.x > ent.x ? 1 : -1;
+                    if (minDist > 600) ent.vx = dirX * 0.5; else if (minDist < 400) ent.vx = -dirX * 0.8; else ent.vx = 0;
                     if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { ent.stuckFrames++; if (ent.stuckFrames > 60) { ent.ignorePlayer = 180; ent.vx = -dirX * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
-                    if (ent.attackCooldown <= 0 && distToPlayer < 950) {
-                        let vx_base = pCX - (ent.x + ent.width/2); let vy_base = pCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
+                    if (ent.attackCooldown <= 0 && minDist < 950) {
+                        let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
                         let arrowSpeed = 9; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
-                        let timeInAir = distToPlayer / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
+                        let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
                         let angle = Math.atan2(vy, vx); let errorMargin = Math.max(0, 0.2 - (ent.level * 0.02)); angle += (Math.random() - 0.5) * errorMargin;
                         window.projectiles.push({ x: ent.x + ent.width/2, y: ent.y + ent.height/2, vx: Math.cos(angle)*arrowSpeed, vy: Math.sin(angle)*arrowSpeed, life: 250, damage: ent.damage, isEnemy: true });
                         ent.attackCooldown = Math.max(180, 350 - (ent.level * 10)); 

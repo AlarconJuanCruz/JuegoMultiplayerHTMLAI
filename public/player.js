@@ -16,6 +16,9 @@ window.useTool = function() {
     if(window.renderToolbar) window.renderToolbar();
     
     if (window.player.toolHealth[tool] <= 0) {
+        let availIdx = window.player.availableTools.indexOf(tool);
+        if(availIdx > -1) window.player.availableTools.splice(availIdx, 1);
+
         window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[tool].name} Rota!`, '#ff4444');
         window.player.toolbar[window.player.activeSlot] = null;
         window.selectToolbarSlot(0); 

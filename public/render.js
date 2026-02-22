@@ -406,131 +406,84 @@ window.draw = function() {
 
             if (t.isStump) {
                 let stumpH = 15 + t.width * 0.22;
-                // Tronco
                 let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
                 trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.4, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
                 window.ctx.fillStyle = isHitColor || trunkGrad;
                 window.ctx.fillRect(-hw*0.6, -stumpH, hw*1.2, stumpH);
-                // Tapa del tocón
                 window.ctx.fillStyle = isHitColor || '#c8a882';
                 window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.62, 4, 0, 0, Math.PI*2); window.ctx.fill();
-                // Anillos del tronco
-                if (!isHitColor) {
-                    window.ctx.strokeStyle = 'rgba(80,40,10,0.4)'; window.ctx.lineWidth = 0.8;
-                    [0.3, 0.55].forEach(s => { window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.62*s, 3*s, 0, 0, Math.PI*2); window.ctx.stroke(); });
-                }
                 window.ctx.restore(); return;
             }
 
-            if (t.type === 0) {
-                // Árbol redondeado (roble)
-                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
-                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.45, '#6D4C41'); trunkGrad.addColorStop(1, '#3E2723');
-                window.ctx.fillStyle = isHitColor || trunkGrad;
+            // --- Tronco Universal ---
+            let trunkGrad = window.ctx.createLinearGradient(-hw*0.5, 0, hw*0.5, 0);
+            if(t.type === 2) { trunkGrad.addColorStop(0, '#bdbdbd'); trunkGrad.addColorStop(0.5, '#eeeeee'); trunkGrad.addColorStop(1, '#9e9e9e'); }
+            else { trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.5, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723'); }
+            
+            window.ctx.fillStyle = isHitColor || trunkGrad;
+            window.ctx.beginPath();
+            window.ctx.moveTo(-hw*0.4, 0); window.ctx.lineTo(-hw*0.2, -th*0.8);
+            window.ctx.lineTo(hw*0.2, -th*0.8); window.ctx.lineTo(hw*0.4, 0);
+            window.ctx.fill();
+
+            // Marcas si es abedul (tipo 2)
+            if(t.type === 2 && !isHitColor) {
+                window.ctx.fillStyle = '#3E2723';
+                window.ctx.fillRect(-hw*0.2, -th*0.6, hw*0.3, 2);
+                window.ctx.fillRect(-hw*0.1, -th*0.3, hw*0.4, 3);
+            }
+
+            // --- Ramas (Tipos 0 y 2) ---
+            if (t.type === 0 || t.type === 2) {
+                window.ctx.lineWidth = 4; window.ctx.strokeStyle = isHitColor || trunkGrad;
+                window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.4); window.ctx.lineTo(-t.width, -th*0.6); window.ctx.stroke();
+                window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.5); window.ctx.lineTo(t.width, -th*0.7); window.ctx.stroke();
+            }
+
+            // --- Follaje ---
+            if (t.type === 0 || t.type === 2) {
+                let baseColor = t.type === 0 ? '#1B5E20' : '#33691E';
+                let midColor = t.type === 0 ? '#2E7D32' : '#558B2F';
+                let lightColor = t.type === 0 ? '#4CAF50' : '#8BC34A';
+
+                window.ctx.fillStyle = isHitColor || baseColor;
                 window.ctx.beginPath();
-                window.ctx.roundRect(-hw*0.55, -th, hw*1.1, th, [hw*0.2, hw*0.2, 0, 0]);
+                window.ctx.arc(0, -th*0.8, t.width*1.1, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.8, -th*0.5, t.width*0.8, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.8, -th*0.5, t.width*0.8, 0, Math.PI*2);
                 window.ctx.fill();
 
-                // Follaje - capa oscura (sombra)
-                window.ctx.fillStyle = isHitColor || '#1B5E20';
+                window.ctx.fillStyle = isHitColor || midColor;
                 window.ctx.beginPath();
-                window.ctx.arc(3, -th*0.78, t.width*1.38, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.78, -th*0.52, t.width*1.1, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.82, -th*0.52, t.width*1.1, 0, Math.PI*2);
+                window.ctx.arc(0, -th*0.8, t.width*0.9, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.7, -th*0.55, t.width*0.6, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.7, -th*0.55, t.width*0.6, 0, Math.PI*2);
                 window.ctx.fill();
 
-                // Capa media
-                window.ctx.fillStyle = isHitColor || '#388E3C';
+                window.ctx.fillStyle = isHitColor || lightColor;
                 window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.82, t.width*1.25, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.65, -th*0.58, t.width*0.95, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.65, -th*0.58, t.width*0.95, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.2, -th*0.9, t.width*0.6, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.4, -th*0.65, t.width*0.4, 0, Math.PI*2);
                 window.ctx.fill();
-
-                // Capa clara (luz)
-                window.ctx.fillStyle = isHitColor || '#4CAF50';
-                window.ctx.beginPath();
-                window.ctx.arc(-t.width*0.2, -th*0.9, t.width*0.95, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.5, -th*0.65, t.width*0.75, 0, Math.PI*2);
-                window.ctx.fill();
-
-                // Brillo especular
-                if (!isHitColor) {
-                    window.ctx.fillStyle = 'rgba(160,230,120,0.18)';
-                    window.ctx.beginPath();
-                    window.ctx.arc(-t.width*0.25, -th*0.95, t.width*0.55, 0, Math.PI*2);
-                    window.ctx.fill();
-                }
 
             } else if (t.type === 1) {
-                // Pino / conífera
-                let trunkGrad = window.ctx.createLinearGradient(-hw*0.5, 0, hw*0.5, 0);
-                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.5, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
-                window.ctx.fillStyle = isHitColor || trunkGrad;
-                window.ctx.fillRect(-hw*0.45, -th*0.72, hw*0.9, th*0.72);
-
-                let leafH = th * 0.82;
-                let stepY = leafH / 5;
-                for (let i = 0; i < 5; i++) {
-                    let layerW = t.width * 1.6 - i * 8;
-                    let baseY = -th - 12 + i * stepY;
-                    // Capa principal (sin sombra desplazada)
-                    window.ctx.fillStyle = isHitColor || (i % 2 === 0 ? '#2E7D32' : '#388E3C');
-                    window.ctx.beginPath();
-                    window.ctx.moveTo(0, baseY);
-                    window.ctx.lineTo(-layerW, baseY + stepY * 1.55);
-                    window.ctx.lineTo(layerW, baseY + stepY * 1.55);
-                    window.ctx.fill();
-                    // Brillo izquierdo
-                    if (!isHitColor) {
-                        window.ctx.fillStyle = 'rgba(120,200,100,0.15)';
-                        window.ctx.beginPath();
-                        window.ctx.moveTo(-layerW * 0.05, baseY + 2);
-                        window.ctx.lineTo(-layerW * 0.65, baseY + stepY * 1.3);
-                        window.ctx.lineTo(-layerW * 0.05, baseY + stepY * 1.0);
-                        window.ctx.fill();
+                for (let i = 0; i < 4; i++) {
+                    let layerW = t.width * 1.5 - (i * 10);
+                    let yPos = -th - 10 + (i * (th*0.8/4));
+                    
+                    window.ctx.fillStyle = isHitColor || '#1B5E20';
+                    window.ctx.beginPath(); window.ctx.moveTo(0, yPos); window.ctx.lineTo(-layerW, yPos + th*0.35); window.ctx.lineTo(layerW, yPos + th*0.35); window.ctx.fill();
+                    
+                    if(!isHitColor) {
+                        window.ctx.fillStyle = '#2E7D32';
+                        window.ctx.beginPath(); window.ctx.moveTo(0, yPos); window.ctx.lineTo(-layerW*0.9, yPos + th*0.35); window.ctx.lineTo(0, yPos + th*0.32); window.ctx.fill();
                     }
-                }
-
-            } else if (t.type === 2) {
-                // Abedul / árbol blanco
-                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
-                trunkGrad.addColorStop(0, '#bdbdbd'); trunkGrad.addColorStop(0.4, '#eeeeee'); trunkGrad.addColorStop(1, '#9e9e9e');
-                window.ctx.fillStyle = isHitColor || trunkGrad;
-                window.ctx.beginPath();
-                window.ctx.roundRect(-hw*0.55, -th, hw*1.1, th, [hw*0.2, hw*0.2, 0, 0]);
-                window.ctx.fill();
-
-                // Marcas negras del abedul
-                if (!isHitColor) {
-                    window.ctx.fillStyle = '#3E2723';
-                    [[-hw*0.5, -th*0.65, t.width*0.45, 3], [hw*0.1, -th*0.4, t.width*0.35, 4], [-hw*0.3, -th*0.25, t.width*0.3, 2.5]].forEach(([bx,by,bw,bh]) => {
-                        window.ctx.fillRect(bx, by, bw, bh);
-                    });
-                }
-
-                // Follaje - verde claro característico
-                window.ctx.fillStyle = isHitColor || '#558B2F';
-                window.ctx.beginPath();
-                window.ctx.arc(0, -th*0.88, t.width*1.25, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.72, -th*0.62, t.width*1.05, 0, Math.PI*2);
-                window.ctx.arc(t.width*0.72, -th*0.62, t.width*1.05, 0, Math.PI*2);
-                window.ctx.fill();
-                window.ctx.fillStyle = isHitColor || '#8BC34A';
-                window.ctx.beginPath();
-                window.ctx.arc(-t.width*0.18, -th*0.92, t.width*0.88, 0, Math.PI*2);
-                window.ctx.arc(-t.width*0.5, -th*0.68, t.width*0.72, 0, Math.PI*2);
-                window.ctx.fill();
-                if (!isHitColor) {
-                    window.ctx.fillStyle = 'rgba(180,255,120,0.15)';
-                    window.ctx.beginPath(); window.ctx.arc(-t.width*0.22, -th*0.97, t.width*0.5, 0, Math.PI*2); window.ctx.fill();
                 }
             }
 
-            // Barra de vida
             if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) {
-                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, -th - 22, t.width + 10, 7);
-                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 21, (t.hp / t.maxHp) * (t.width + 8), 5);
+                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, -th - 30, t.width + 10, 7);
+                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 29, (t.hp / t.maxHp) * (t.width + 8), 5);
             }
             window.ctx.restore();
         }
@@ -627,9 +580,8 @@ window.draw = function() {
     }
 
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
-        // Origen a la altura de la mano/brazo del personaje (~14px desde arriba del sprite)
         let pCX = window.player.x + window.player.width / 2;
-        let pCY = window.player.y + 6; // altura del pecho/brazo
+        let pCY = window.player.y + 24; // altura del pecho/brazo
         let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY;
         let angle = Math.atan2(dy, dx);
         let power = 4 + (window.player.chargeLevel / 100) * 6;
@@ -653,7 +605,6 @@ window.draw = function() {
         window.ctx.strokeStyle = grad;
         window.ctx.stroke();
 
-        // Punto de impacto estimado
         window.ctx.setLineDash([]);
         window.ctx.beginPath();
         window.ctx.arc(simX, simY, 4, 0, Math.PI * 2);

@@ -44,7 +44,7 @@ window.addGlobalMessage = function(text, color = '#fff') {
     el.style.color = color;
     el.innerHTML = text;
     log.appendChild(el);
-    if (log.childNodes.length > 30) { log.removeChild(log.firstChild); }
+    if (log.childNodes.length > 200) { log.removeChild(log.firstChild); }
     setTimeout(() => { el.classList.add('fade-out'); }, 15000);
     if (window.isChatLogPinned) { log.scrollTop = log.scrollHeight; }
 };
