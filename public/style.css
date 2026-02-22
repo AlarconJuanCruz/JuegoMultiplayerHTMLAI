@@ -315,9 +315,8 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 
 /* ============================================
-   CHAT / LOG
+   CHAT / LOG (SISTEMA CORREGIDO)
    ============================================ */
-/* Reemplaza todo tu bloque de .log-msg actual por este: */
 .log-msg {
     background: rgba(4, 8, 14, 0.85);
     backdrop-filter: blur(8px);
@@ -336,7 +335,6 @@ canvas { display: block; width: 100%; height: 100%; }
     transition: opacity 0.4s ease-out, max-height 0.4s ease-out, padding 0.4s ease-out, margin 0.4s ease-out;
 }
 
-/* El secreto: Cuando NO está pineado, encoge su altura a 0 luego del fade-out */
 #global-chat-log:not(.pinned) .log-msg.fade-out { 
     opacity: 0; 
     pointer-events: none; 
@@ -345,11 +343,21 @@ canvas { display: block; width: 100%; height: 100%; }
     padding-bottom: 0; 
     margin-bottom: 0; 
     border-width: 0; 
-    /* Primero hace el fade, y luego colapsa la caja para no empujar otros mensajes */
     transition: opacity 0.4s ease-out, max-height 0.3s ease-out 0.4s, padding 0.3s ease-out 0.4s, margin 0.3s ease-out 0.4s, border-width 0.3s ease-out 0.4s;
 }
 
-/* Si el jugador abre el registro completo, se restaura todo */
+#global-chat-log.pinned {
+    background: rgba(4,8,14,0.95);
+    padding: 8px;
+    border-radius: var(--radius-md);
+    pointer-events: auto;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border-dim);
+}
+#global-chat-log.pinned::-webkit-scrollbar { width: 3px; }
+#global-chat-log.pinned::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
 #global-chat-log.pinned .log-msg {
     opacity: 1 !important;
     pointer-events: auto !important;
@@ -590,11 +598,24 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 
 /* ============================================
-   INVENTARIO
+   INVENTARIO Y GRILLA (NUEVO)
    ============================================ */
+#inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 45px);
+    grid-auto-rows: 45px;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+#inventory-grid::-webkit-scrollbar { width: 3px; }
+#inventory-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
 .inv-split { display: flex; gap: 16px; }
 .inv-left, .inv-right { flex: 1; }
-.inv-grid { display: flex; flex-wrap: wrap; gap: 5px; }
 
 .inv-slot {
     position: relative;
@@ -607,12 +628,19 @@ canvas { display: block; width: 100%; height: 100%; }
     justify-content: center;
     cursor: pointer;
     transition: var(--t);
+    overflow: hidden;
 }
 .inv-slot:hover {
     border-color: rgba(255,255,255,0.25);
     background: rgba(12,20,32,0.98);
 }
 .inv-slot:hover .custom-tooltip { display: block; }
+
+/* Para armas/herramientas grandes que ocupan 2 slots verticales */
+.inv-slot.span-2 {
+    grid-row: span 2;
+    height: 96px; /* 45px + 45px + 6px de gap */
+}
 
 .inv-icon {
     width: 26px; height: 26px;
@@ -772,9 +800,4 @@ canvas { display: block; width: 100%; height: 100%; }
     font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.05em;
-}
-
-#global-chat-log.pinned .log-msg {
-    opacity: 1 !important;
-    pointer-events: auto !important;
 }
