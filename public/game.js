@@ -62,7 +62,7 @@ window.checkBlockCollisions = function(axis) {
         if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) {
-            if (axis === 'x') { if (window.player.vx > 0) window.player.x = b.x - window.player.width; else if (window.player.vx < 0) window.player.x = b.x + window.game.blockSize; window.player.vx = 0; } 
+            if (axis === 'x') { if (window.player.vx > 0) window.player.x = b.x - window.player.width - 0.05; else if (window.player.vx < 0) window.player.x = b.x + window.game.blockSize + 0.05; window.player.vx = 0; } 
             else if (axis === 'y') { if (window.player.vy > 0) { window.player.y = b.y - window.player.height; window.player.isGrounded = true; } else if (window.player.vy < 0) window.player.y = b.y + itemHeight; window.player.vy = 0; }
         }
     }
@@ -293,7 +293,7 @@ window.addEventListener('mousedown', (e) => {
                     
                     if (window.player.inventory[window.player.placementMode] <= 0) {
                         window.player.toolbar[window.player.activeSlot] = null;
-                        window.selectToolbarSlot(0);
+                        window.selectToolbarSlot(0); 
                     }
                     if(window.updateUI) window.updateUI();
                     if(window.renderToolbar) window.renderToolbar();
@@ -483,6 +483,7 @@ function update() {
             window.game.isRaining = isDay && (hourFloat >= rainStart && hourFloat <= (rainStart + rainDuration));
         }
 
+        // SEGURIDAD: Evita que un error matemático congele al personaje
         if (isNaN(window.player.vx) || !isFinite(window.player.vx)) window.player.vx = 0;
         if (isNaN(window.player.vy) || !isFinite(window.player.vy)) window.player.vy = 0;
 
@@ -611,7 +612,6 @@ function update() {
             item.life += 0.05;
         }
 
-        // FIX "MANTÉN Y" TOOLTIP
         if (promptEl && textEl) {
             if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
                 let hoveringInteractable = interactables[0];
