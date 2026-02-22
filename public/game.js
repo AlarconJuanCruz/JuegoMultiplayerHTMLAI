@@ -29,12 +29,27 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
     }
+    
+    let isItem = !isStructure; // cajas, fogatas y camas
+
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
+        
+        // 1. Verificación básica: No podemos atravesar algo que ya existe
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
+        
+        // 2. Reglas de Puertas y Bloques contiguos
         if (isStructure && b.type === 'door') {
-            if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) &&
-                (y < b.y + bh && y + h > b.y)) {
+            if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) && (y < b.y + bh && y + h > b.y)) return false; 
+        }
+        if (isStructure && h > window.game.blockSize && b.type === 'block') { 
+            if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) && (y < b.y + bh && y + h > b.y)) return false; 
+        }
+        
+        // 3. Regla: No puedes colocar Cajas/Fogatas/Camas SOBRE Cajas/Fogatas/Camas
+        if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave')) {
+            // Si el nuevo objeto descansa exactamente encima del existente
+            if (x < b.x + window.game.blockSize && x + w > b.x && y + h === b.y) {
                 return false; 
             }
         }
@@ -254,7 +269,7 @@ window.addEventListener('keydown', (e) => {
                     if (window.socket) window.socket.emit('chatMessage', msg);
                 }
                 chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none';
-                if(window.player) window.player.isTyping = false; // Se aseguró de quitar el estado
+                if(window.player) window.player.isTyping = false; 
             } else {
                 e.preventDefault(); window.openChat();
             }
@@ -594,8 +609,8 @@ function update() {
         if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.placementMode && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
 
-        // NUEVO: Emitiendo estado de "isTyping"
         if (window.game.isMultiplayer && window.socket) {
+            // Se envía si el estado "isTyping" ha cambiado
             if (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState) {
                 window.socket.emit('playerMovement', { 
                     x: window.player.x, y: window.player.y, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame,

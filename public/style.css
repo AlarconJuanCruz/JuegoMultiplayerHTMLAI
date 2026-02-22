@@ -315,7 +315,7 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 
 /* ============================================
-   CHAT / LOG (SISTEMA CORREGIDO)
+   CHAT / LOG (SISTEMA DE OCULTAMIENTO CORREGIDO)
    ============================================ */
 .log-msg {
     background: rgba(4, 8, 14, 0.85);
@@ -329,21 +329,18 @@ canvas { display: block; width: 100%; height: 100%; }
     color: var(--text-main);
     text-shadow: 0 1px 3px rgba(0,0,0,0.9);
     border-right: 3px solid var(--green);
+    transition: opacity 0.4s ease-out;
     opacity: 1;
-    max-height: 100px;
-    overflow: hidden;
-    transition: opacity 0.4s ease-out, max-height 0.4s ease-out, padding 0.4s ease-out, margin 0.4s ease-out;
 }
 
 #global-chat-log:not(.pinned) .log-msg.fade-out { 
     opacity: 0; 
-    pointer-events: none; 
-    max-height: 0; 
-    padding-top: 0; 
-    padding-bottom: 0; 
-    margin-bottom: 0; 
-    border-width: 0; 
-    transition: opacity 0.4s ease-out, max-height 0.3s ease-out 0.4s, padding 0.3s ease-out 0.4s, margin 0.3s ease-out 0.4s, border-width 0.3s ease-out 0.4s;
+    pointer-events: none;
+}
+
+/* Esta clase se agrega por JS luego de terminar la transición de opacidad */
+.log-msg.hidden-msg {
+    display: none !important;
 }
 
 #global-chat-log.pinned {
@@ -361,10 +358,7 @@ canvas { display: block; width: 100%; height: 100%; }
 #global-chat-log.pinned .log-msg {
     opacity: 1 !important;
     pointer-events: auto !important;
-    max-height: 500px !important;
-    padding: 5px 11px !important;
-    margin-bottom: 4px !important;
-    border-right-width: 3px !important;
+    display: block !important;
 }
 
 /* ============================================
@@ -598,7 +592,7 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 
 /* ============================================
-   INVENTARIO Y GRILLA (NUEVO)
+   INVENTARIO Y GRILLA
    ============================================ */
 #inventory-grid {
     display: grid;
@@ -636,10 +630,9 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 .inv-slot:hover .custom-tooltip { display: block; }
 
-/* Para armas/herramientas grandes que ocupan 2 slots verticales */
 .inv-slot.span-2 {
     grid-row: span 2;
-    height: 96px; /* 45px + 45px + 6px de gap */
+    height: 96px; 
 }
 
 .inv-icon {

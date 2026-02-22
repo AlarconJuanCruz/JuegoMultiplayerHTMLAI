@@ -25,11 +25,11 @@ if (!isLocalEnv) {
     if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
-// NUEVO: Inicializar límites de chat y detectar cuando el jugador escribe
+// INICIALIZAR CHAT: Límites y detección de escritura (Typing...)
 window.addEventListener('DOMContentLoaded', () => {
     const chatInp = window.getEl('chat-input');
     if (chatInp) {
-        chatInp.maxLength = 70; // Límite de caracteres en el chat
+        chatInp.maxLength = 70; // Límite de caracteres
         chatInp.addEventListener('focus', () => { if(window.player) window.player.isTyping = true; });
         chatInp.addEventListener('blur', () => { if(window.player) window.player.isTyping = false; });
     }
@@ -40,8 +40,20 @@ window.toggleChatLog = function() {
     window.isChatLogPinned = !window.isChatLogPinned;
     let log = window.getEl('global-chat-log');
     if (log) {
-        if (window.isChatLogPinned) { log.classList.add('pinned'); log.scrollTop = log.scrollHeight; } 
-        else { log.classList.remove('pinned'); }
+        if (window.isChatLogPinned) { 
+            log.classList.add('pinned'); 
+            // Mostrar todos los chats que estaban ocultos
+            log.querySelectorAll('.hidden-msg').forEach(el => el.style.display = 'block');
+            log.scrollTop = log.scrollHeight; 
+        } 
+        else { 
+            log.classList.remove('pinned'); 
+            // Ocultar los que ya deberían haberse desvanecido
+            log.querySelectorAll('.fade-out').forEach(el => {
+                el.style.display = 'none';
+                el.classList.add('hidden-msg');
+            });
+        }
     }
 };
 
@@ -55,7 +67,18 @@ window.addGlobalMessage = function(text, color = '#fff') {
     el.innerHTML = text;
     log.appendChild(el);
     if (log.childNodes.length > 200) { log.removeChild(log.firstChild); }
-    setTimeout(() => { el.classList.add('fade-out'); }, 15000);
+    
+    setTimeout(() => { 
+        el.classList.add('fade-out'); 
+        // En lugar de encoger la caja (que aplasta el texto), la ocultamos después de desvanecerse
+        setTimeout(() => {
+            if (!window.isChatLogPinned && el.parentNode) {
+                el.style.display = 'none';
+                el.classList.add('hidden-msg');
+            }
+        }, 500); 
+    }, 10000);
+    
     if (window.isChatLogPinned) { log.scrollTop = log.scrollHeight; }
 };
 
@@ -164,7 +187,7 @@ window.handleToolbarDrop = function(e, slotIndex) {
     let type = e.dataTransfer.getData('text/plain');
     if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
     
-    if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type) || window.itemDefs[type])) {
+    if (type) {
         let oldIdx = window.player.toolbar.indexOf(type);
         if (oldIdx !== -1) window.player.toolbar[oldIdx] = null;
         window.player.toolbar[slotIndex] = type;
@@ -186,7 +209,7 @@ window.selectToolbarSlot = function(index) {
     if (item && window.toolDefs[item]) {
         window.player.activeTool = item;
         window.player.placementMode = null;
-    } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0) {
+    } else if (item && window.player.inventory[item] > 0) {
         if (['boxes', 'campfire_item', 'bed_item'].includes(item)) {
             window.player.activeTool = 'hand';
             window.player.placementMode = item;
@@ -199,6 +222,18 @@ window.selectToolbarSlot = function(index) {
         window.player.placementMode = null;
     }
 };
+
+// Función segura para obtener colores de items de colocación
+function getInvDef(type, isTool) {
+    let def = isTool ? window.toolDefs[type] : window.itemDefs[type];
+    if (!def) {
+        if (type === 'boxes') return { name: 'Caja', color: '#8B4513' };
+        if (type === 'campfire_item') return { name: 'Fogata', color: '#e67e22' };
+        if (type === 'bed_item') return { name: 'Cama', color: '#c0392b' };
+        return { name: type, color: '#aaa' };
+    }
+    return def;
+}
 
 window.renderToolbar = function() {
     let tb = window.getEl('toolbar');
@@ -236,8 +271,8 @@ window.renderToolbar = function() {
                     durHTML = `<div style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#111;"><div style="height:100%; width:${pct.toFixed(1)}%; background:${color}; transition: width 0.2s;"></div></div>`;
                 }
                 content += `<div style="margin-top:10px; font-size:11px;">${tool.name}</div>${durHTML}`;
-            } else if (window.itemDefs[itemId]) {
-                let def = window.itemDefs[itemId];
+            } else {
+                let def = getInvDef(itemId, false);
                 let count = window.player.inventory[itemId] || 0;
                 if (count <= 0) {
                     window.player.toolbar[i] = null;
@@ -263,12 +298,12 @@ window.getReqText = function(rW, rS, rWeb, rInt) {
 // SISTEMA DE INVENTARIO (GRILLA DINÁMICA)
 // ============================================
 window.updateUI = function() { 
-    // CORRECCIÓN BUG ARRASTRE: Toda la ventana del inventario atrapa el ítem
-    let menuInv = window.getEl('menu-inventory');
-    if (menuInv && !menuInv.dataset.dragBind) {
-        menuInv.dataset.dragBind = "true";
-        menuInv.addEventListener('dragover', (e) => e.preventDefault());
-        menuInv.addEventListener('drop', (e) => {
+    // CORRECCIÓN BUG ARRASTRE: Ahora toda la ventana de Inventario recibe los ítems soltados
+    const grid = window.getEl('inventory-grid'); 
+    if(grid && !grid.dataset.dragBind) {
+        grid.dataset.dragBind = "true";
+        grid.addEventListener('dragover', (e) => e.preventDefault());
+        grid.addEventListener('drop', (e) => {
             e.preventDefault();
             let type = e.dataTransfer.getData('text/plain');
             let source = e.dataTransfer.getData('source');
@@ -284,7 +319,6 @@ window.updateUI = function() {
         });
     }
 
-    const grid = window.getEl('inventory-grid'); 
     if(grid) {
         grid.innerHTML = '';
         let itemsToRender = [];
@@ -330,8 +364,7 @@ window.updateUI = function() {
                 e.dataTransfer.setData('source', 'inventory');
             };
 
-            let def = slotData.isTool ? window.toolDefs[slotData.type] : window.itemDefs[slotData.type];
-            if (!def) def = { name: slotData.type, color: '#fff' };
+            let def = getInvDef(slotData.type, slotData.isTool);
 
             if (slotData.isTool) {
                 slot.onclick = () => { window.autoEquip(slotData.type); window.toggleMenu('inventory'); };
