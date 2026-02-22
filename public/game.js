@@ -31,9 +31,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     }
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
-        
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
-        
         if (isStructure && b.type === 'door') {
             if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) &&
                 (y < b.y + bh && y + h > b.y)) {
@@ -150,7 +148,17 @@ window.startGame = function(multiplayer, ip = null) {
             window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level }); });
             window.socket.on('disconnect', () => { alert("⚠ Se perdió la conexión con el Servidor. La partida se reiniciará."); window.location.reload(); });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
-            window.socket.on('playerMoved', (pInfo) => { if(window.otherPlayers[pInfo.id]) { let cText = window.otherPlayers[pInfo.id].chatText || ''; let cExpires = window.otherPlayers[pInfo.id].chatExpires || 0; Object.assign(window.otherPlayers[pInfo.id], pInfo); window.otherPlayers[pInfo.id].chatText = cText; window.otherPlayers[pInfo.id].chatExpires = cExpires; } });
+            
+            window.socket.on('playerMoved', (pInfo) => { 
+                if(window.otherPlayers[pInfo.id]) { 
+                    let cText = window.otherPlayers[pInfo.id].chatText || ''; 
+                    let cExpires = window.otherPlayers[pInfo.id].chatExpires || 0; 
+                    Object.assign(window.otherPlayers[pInfo.id], pInfo); 
+                    window.otherPlayers[pInfo.id].chatText = cText; 
+                    window.otherPlayers[pInfo.id].chatExpires = cExpires; 
+                } 
+            });
+            
             window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
             
             window.socket.on('initWorldState', (state) => {
@@ -246,6 +254,7 @@ window.addEventListener('keydown', (e) => {
                     if (window.socket) window.socket.emit('chatMessage', msg);
                 }
                 chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none';
+                if(window.player) window.player.isTyping = false; // Se aseguró de quitar el estado
             } else {
                 e.preventDefault(); window.openChat();
             }
@@ -304,7 +313,6 @@ document.addEventListener('drop', (e) => {
 window.addEventListener('mousedown', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
     
-    // MODO COLOCACIÓN DE OBJETOS (Cajas, Fogatas, Camas)
     if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
         if (e.button === 0) {
@@ -453,7 +461,6 @@ window.addEventListener('mousedown', (e) => {
         }
     }
 
-    // MODO CONSTRUCCIÓN DE ESTRUCTURAS (Martillo)
     if (!actionDone && window.player.activeTool === 'hammer') {
         let offsetY = window.game.groundLevel % window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
@@ -587,13 +594,15 @@ function update() {
         if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.placementMode && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
 
+        // NUEVO: Emitiendo estado de "isTyping"
         if (window.game.isMultiplayer && window.socket) {
-            if (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead) {
+            if (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState) {
                 window.socket.emit('playerMovement', { 
                     x: window.player.x, y: window.player.y, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame,
                     isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead,
-                    level: window.player.level
+                    level: window.player.level, isTyping: window.player.isTyping || false
                 });
+                window.player._lastTypingState = window.player.isTyping;
             }
         }
 
