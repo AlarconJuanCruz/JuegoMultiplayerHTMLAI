@@ -15,26 +15,19 @@ window.openChat = function() {
     if (chatContainer && chatInput && !window.player.isDead) { chatContainer.style.display = 'block'; chatInput.focus(); }
 };
 
-// FIX CONSTRUCCIÓN: "isStructure" bloquea que bloques y puertas se encimen
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
     if (y + h > window.game.groundLevel) return false;
-    
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
-    
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
     }
-    
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
-        
-        // Bloqueo estricto para que no se peguen o encimen puertas con bloques/puertas en su misma columna
         if (isStructure && (b.type === 'door' || h > window.game.blockSize)) {
             if (x === b.x && (y <= b.y + bh && y + h >= b.y)) return false;
         }
     }
-    
     for (let t of window.trees) { let th = t.isStump ? 15 + t.width*0.2 : t.height; let ty = t.isStump ? t.y + t.height - th : t.y; if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; }
     for (let r of window.rocks) { if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false; }
     if (requireAdjacency) { if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false; }
@@ -147,9 +140,8 @@ window.startGame = function(multiplayer, ip = null) {
                 if(window.updateUI) window.updateUI();
             });
 
-            // FIX CHAT: IGNORA TU PROPIO MENSAJE PARA NO DUPLICARLO
             window.socket.on('chatMessage', (data) => { 
-                if (data.id === window.socket.id) return; // Ya lo mostramos nosotros mismos
+                if (data.id === window.socket.id) return;
                 if (window.otherPlayers[data.id]) { 
                     window.otherPlayers[data.id].chatText = data.text; 
                     window.otherPlayers[data.id].chatExpires = Date.now() + 6500; 
@@ -225,12 +217,6 @@ window.addEventListener('keydown', (e) => {
     const num = parseInt(e.key); if (!isNaN(num) && num > 0 && num <= window.player.availableTools.length) { window.player.activeTool = window.player.availableTools[num - 1]; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; if(window.renderToolbar) window.renderToolbar(); }
 });
 
-window.addEventListener('keyup', (e) => {
-    if (!window.game || !window.game.isRunning) return;
-    if (e.key === 'a' || e.key === 'A') window.keys.a = false; if (e.key === 'd' || e.key === 'D') window.keys.d = false; if (e.key === 'Shift') window.keys.shift = false; 
-    if (e.key === 'y' || e.key === 'Y') window.keys.y = false; if (e.key === 'w' || e.key === 'W' || e.key === ' ') { window.keys.jumpPressed = false; window.player.jumpKeyReleased = true; }
-});
-
 window.addEventListener('mousemove', (e) => {
     if(!window.canvas || !window.player || window.player.isDead) return;
     const rect = window.canvas.getBoundingClientRect(); const scaleX = window.canvas.width / rect.width; const scaleY = window.canvas.height / rect.height;
@@ -265,10 +251,9 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) {
             const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
+                let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
-                    let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                     let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
-                    
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') {
@@ -401,7 +386,6 @@ window.addEventListener('mousedown', (e) => {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
         if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-            // Clickeo al construir: Pasamos "isStructure = true" para que detecte las colisiones severas con puertas
             if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                 let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                 window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
@@ -409,24 +393,6 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if(actionDone && window.useTool) window.useTool();
-});
-
-window.addEventListener('mouseup', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead) return;
-    if (window.player.activeTool === 'bow') {
-        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
-        if (e.button === 0 && window.player.isCharging) {
-            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
-                window.player.inventory.arrows--;
-                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + window.player.height/2;
-                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
-                let power = 4 + (window.player.chargeLevel / 100) * 6; 
-                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
-                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
-            }
-            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
-        }
-    }
 });
 
 function update() {
@@ -440,6 +406,7 @@ function update() {
     if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
         if (window.player.activeTool === 'torch' && window.player.toolHealth['torch']) {
             window.player.toolHealth['torch']--;
+            if (window.renderToolbar) window.renderToolbar(); 
             if (window.player.toolHealth['torch'] <= 0) {
                 window.player.availableTools = window.player.availableTools.filter(t => t !== 'torch');
                 window.player.activeTool = 'hand';
@@ -557,19 +524,8 @@ function update() {
     let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
     let promptEl = window.getEl('interaction-prompt'); let textEl = window.getEl('prompt-text');
     
-    if (promptEl && textEl) {
-        if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
-            let hoveringInteractable = interactables[0];
-            if (hoveringInteractable.type !== 'bed') {
-                promptEl.style.display = 'block'; 
-                let tName = hoveringInteractable.type === 'box' ? 'Caja' : (hoveringInteractable.type === 'campfire' ? 'Fogata' : (hoveringInteractable.type === 'grave' ? 'Tumba' : 'Puerta'));
-                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar <span style="color:#D2B48C;">${tName}</span>`; 
-            } else { promptEl.style.display = 'none'; }
-        } else if (anyItemHovered && !window.player.isDead) {
-            promptEl.style.display = 'block'; textEl.innerHTML = `Mantén <span class="key-btn">Y</span> para atraer objetos cercanos`;
-        } else { promptEl.style.display = 'none'; }
-    }
-
+    // LOGICA DE TEXTOS AL RECOGER ITEMS O TOCAR BLOQUES
+    window.player.nearbyItem = null;
     for (let i = window.droppedItems.length - 1; i >= 0; i--) {
         let item = window.droppedItems[i]; let s = window.itemDefs[item.type].size; let d = Math.hypot(pCX - item.x, pCY - item.y);
         if (window.keys.y && d < 250 && !window.player.isDead) {
@@ -591,6 +547,22 @@ function update() {
             if (d < 60 && !window.player.isDead) { anyItemHovered = true; window.player.nearbyItem = item; }
         }
         item.life += 0.05;
+    }
+
+    if (promptEl && textEl) {
+        if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
+            let hoveringInteractable = interactables[0];
+            if (hoveringInteractable.type !== 'bed') {
+                promptEl.style.display = 'block'; 
+                let tName = hoveringInteractable.type === 'box' ? 'Caja' : (hoveringInteractable.type === 'campfire' ? 'Fogata' : (hoveringInteractable.type === 'grave' ? 'Tumba' : 'Puerta'));
+                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar <span style="color:#D2B48C;">${tName}</span>`; 
+            } else { promptEl.style.display = 'none'; }
+        } else if (anyItemHovered && !window.player.isDead && window.player.nearbyItem) {
+            // FIX 2: VUELVE EL MENSAJE CON EL NOMBRE ESPECÍFICO DEL ITEM
+            let itData = window.itemDefs[window.player.nearbyItem.type];
+            promptEl.style.display = 'block'; 
+            textEl.innerHTML = `Mantén <span class="key-btn">Y</span> atraer <span style="color:${itData.color};">${itData.name} x${window.player.nearbyItem.amount}</span>`;
+        } else { promptEl.style.display = 'none'; }
     }
 
     for (let i = window.projectiles.length - 1; i >= 0; i--) {
@@ -621,6 +593,7 @@ function update() {
                         window.entities.splice(e, 1); if(window.updateUI) window.updateUI(); 
                    } else {
                        window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage });
+                       // FIX 1: Gallina con velocidad normal
                        if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
                    }
                    hitEnt = true; break;
@@ -720,7 +693,8 @@ function update() {
             if (ent.attackCooldown > 0) ent.attackCooldown--;
         }
         else if (ent.type === 'chicken') { 
-            if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 2.5; } 
+            // FIX 1: Gallina con velocidad normal de huida (1.5)
+            if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 1.5; } 
             else if(Math.random() < 0.02) { ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); } 
         }
     });

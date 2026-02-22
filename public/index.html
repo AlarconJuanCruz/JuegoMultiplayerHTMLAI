@@ -11,9 +11,22 @@
         .inv-slot:hover .custom-tooltip { display: block; }
         .custom-tooltip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2); }
         .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
-        /* NUEVO: ESTILO PARA EL CHAT GLOBAL */
-        #global-chat-log { position: absolute; bottom: 90px; left: 20px; width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 150; }
-        .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; }
+        
+        #global-chat-log { 
+            position: absolute !important; top: 70px !important; right: 20px !important; left: auto !important; bottom: auto !important;
+            width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 150; align-items: flex-end; text-align: right;
+        }
+        
+        .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; opacity: 1; }
+        .log-msg.fade-out { opacity: 0; }
+        
+        /* ESTILO PARA CUANDO EL REGISTRO ESTÁ FIJADO (ABIERTO) */
+        #global-chat-log.pinned { background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; pointer-events: auto; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); }
+        #global-chat-log.pinned .log-msg.fade-out { opacity: 0.7; }
+        #global-chat-log.pinned::-webkit-scrollbar { width: 5px; }
+        #global-chat-log.pinned::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+
+        #toolbar { position: absolute !important; bottom: 20px !important; left: 50% !important; transform: translateX(-50%) !important; display: flex !important; flex-direction: row !important; gap: 10px; z-index: 100; }
     </style>
 </head>
 <body>
@@ -54,10 +67,12 @@
         </div>
 
         <div id="ui-layer" style="display: none;">
+            
             <div id="global-chat-log"></div>
 
             <div id="distance-display" class="glass-panel">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
-            <div id="server-info" class="glass-panel">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
+            <div id="server-info" class="glass-panel" style="position: absolute; top: 20px; right: 20px;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
+            
             <div id="clock-display">Día 1 - 08:00</div>
             <div id="entity-hud"></div>
             
@@ -70,6 +85,7 @@
 
             <div id="top-controls">
                 <button class="toggle-btn" onclick="window.openChat()" style="color: #3498db;">💬 Chat (H)</button>
+                <button class="toggle-btn" onclick="window.toggleChatLog()" style="color: #a29bfe;">📜 Registro</button>
                 <button class="toggle-btn" onclick="window.toggleMenu('inventory')">Personaje (I) <span id="stat-notif" class="stat-notif">!</span></button>
                 <button class="toggle-btn" onclick="window.toggleMenu('crafting')">Crafteo (C)</button>
                 <button id="btn-help" class="toggle-btn">?</button>

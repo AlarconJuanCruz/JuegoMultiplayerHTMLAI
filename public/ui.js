@@ -15,18 +15,29 @@ if (!isLocalEnv) {
     if (urlArea) urlArea.style.display = 'none'; if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
-// NUEVO: SISTEMA DE LOGS Y EVENTOS GLOBALES
+// SISTEMA DE LOGS Y CHAT GLOBAL FIJABLE
+window.isChatLogPinned = false;
+window.toggleChatLog = function() {
+    window.isChatLogPinned = !window.isChatLogPinned;
+    let log = window.getEl('global-chat-log');
+    if (log) {
+        if (window.isChatLogPinned) log.classList.add('pinned');
+        else log.classList.remove('pinned');
+    }
+};
+
 window.addGlobalMessage = function(text, color = '#fff') {
     let log = window.getEl('global-chat-log');
     if (!log) return;
     let el = document.createElement('div');
     el.className = 'log-msg';
-    el.style.borderLeft = `3px solid ${color}`;
+    el.style.borderRight = `3px solid ${color}`;
     el.style.color = color;
     el.innerHTML = text;
     log.appendChild(el);
-    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { if (el.parentNode) el.remove(); }, 500); }, 8000);
-    if (log.childNodes.length > 5) { log.removeChild(log.firstChild); }
+    
+    if (log.childNodes.length > 30) { log.removeChild(log.firstChild); }
+    setTimeout(() => { el.classList.add('fade-out'); }, 20000); // 20 Segundos antes de volverse invisible
 };
 
 window.getEl('btn-single')?.addEventListener('click', () => window.startGame(false));
@@ -167,7 +178,6 @@ window.updateUI = function() {
         if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.availableTools.includes(t));
     };
 
-    // NUEVO: CHEQUEO DE LA ANTORCHA
     checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
     checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
 
@@ -197,7 +207,6 @@ window.bindCraft('btn-craft-sword', () => window.craftItem(30, 30, 0, 3, 'sword'
 window.bindCraft('btn-craft-box', () => window.craftItem(40, 0, 0, 1, null, 'boxes')); 
 window.bindCraft('btn-craft-campfire', () => window.craftItem(20, 5, 0, 0, null, 'campfire_item')); 
 window.bindCraft('btn-craft-bed', () => window.craftItem(30, 0, 10, 0, null, 'bed_item'));
-
 window.bindCraft('btn-craft-arrow', () => window.craftItem(5, 0, 0, 0, null, 'arrows', 1)); 
 window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
 window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
