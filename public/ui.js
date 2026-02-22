@@ -44,7 +44,6 @@ window.addGlobalMessage = function(text, color = '#fff') {
     el.style.color = color;
     el.innerHTML = text;
     log.appendChild(el);
-    
     if (log.childNodes.length > 30) { log.removeChild(log.firstChild); }
     setTimeout(() => { el.classList.add('fade-out'); }, 15000);
     if (window.isChatLogPinned) { log.scrollTop = log.scrollHeight; }
@@ -86,8 +85,12 @@ window.eatFood = function(hpG, hunG) {
 };
 
 window.invItemClick = function(type) {
-    if (type === 'meat') window.eatFood(15, 30); else if (type === 'cooked_meat') window.eatFood(30, 60);
-    else if (type === 'boxes' || type === 'campfire_item' || type === 'bed_item') { window.player.placementMode = type; window.toggleMenu('inventory'); }
+    if (type === 'meat') window.eatFood(15, 30); 
+    else if (type === 'cooked_meat') window.eatFood(30, 60);
+    else if (['boxes', 'campfire_item', 'bed_item'].includes(type) || window.toolDefs[type]) { 
+        window.autoEquip(type);
+        window.toggleMenu('inventory'); 
+    }
 };
 
 window.upgradeStat = function(stat) { if (window.player.statPoints > 0) { window.player.stats[stat]++; window.player.statPoints--; window.recalculateStats(); window.updateUI(); } };
@@ -130,20 +133,88 @@ window.renderCampfireUI = function() {
     if (window.currentCampfire.isBurning) { btn.innerText = "APAGAR"; btn.style.background = "#555"; } else { btn.innerText = "🔥 ENCENDER"; btn.style.background = "#e67e22"; }
 };
 
-window.renderToolbar = function() {
-    if(!window.getEl('toolbar')) return;
-    window.getEl('toolbar').innerHTML = '';
-    window.player.availableTools.forEach((toolId, index) => {
-        const tool = window.toolDefs[toolId]; const div = document.createElement('div'); div.className = `tool-slot ${window.player.activeTool === toolId ? 'active' : ''}`; 
-        let durHTML = '';
-        if (toolId !== 'hand' && window.player.toolHealth[toolId] !== undefined) { 
-            let pct = (window.player.toolHealth[toolId] / window.toolMaxDurability[toolId]) * 100; 
-            let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c'); 
-            durHTML = `<div class="tool-durability-bg"><div class="tool-durability-fill" style="width: ${pct}%; background: ${color};"></div></div>`; 
+// CINTURÓN INTELIGENTE: Drag and Drop, Selección y Slots Fijos
+window.autoEquip = function(id) {
+    if (!window.player.toolbar.includes(id)) {
+        let idx = window.player.toolbar.indexOf(null);
+        if (idx !== -1) { 
+            window.player.toolbar[idx] = id; 
+            window.selectToolbarSlot(idx);
+            if(window.renderToolbar) window.renderToolbar();
         }
-        div.innerHTML = `<span style="font-size:0.5rem; opacity:0.7; position:absolute; top:2px; left:4px;">${index + 1}</span><br>${tool.name}${durHTML}`; 
-        div.onclick = () => { window.player.activeTool = toolId; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; window.renderToolbar(); }; window.getEl('toolbar').appendChild(div);
-    });
+    } else {
+        let existingIdx = window.player.toolbar.indexOf(id);
+        window.selectToolbarSlot(existingIdx);
+        if(window.renderToolbar) window.renderToolbar();
+    }
+};
+
+window.handleToolbarDrop = function(e, slotIndex) {
+    e.preventDefault();
+    let type = e.dataTransfer.getData('text/plain');
+    if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type))) {
+        let oldIdx = window.player.toolbar.indexOf(type);
+        if (oldIdx !== -1) window.player.toolbar[oldIdx] = null;
+        window.player.toolbar[slotIndex] = type;
+        window.selectToolbarSlot(slotIndex);
+        window.renderToolbar();
+    }
+};
+
+window.selectToolbarSlot = function(index) {
+    window.player.activeSlot = index;
+    let item = window.player.toolbar[index];
+    window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0;
+    if (item && window.toolDefs[item]) {
+        window.player.activeTool = item;
+        window.player.placementMode = null;
+    } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0) {
+        window.player.activeTool = 'hand';
+        window.player.placementMode = item;
+    } else {
+        window.player.activeTool = 'hand';
+        window.player.placementMode = null;
+    }
+};
+
+window.renderToolbar = function() {
+    let tb = window.getEl('toolbar');
+    if(!tb) return;
+    tb.innerHTML = '';
+    for(let i=0; i<6; i++) {
+        let itemId = window.player.toolbar[i];
+        let div = document.createElement('div');
+        div.className = `tool-slot ${window.player.activeSlot === i ? 'active' : ''}`;
+        
+        div.ondragover = (e) => e.preventDefault();
+        div.ondrop = (e) => window.handleToolbarDrop(e, i);
+
+        let content = `<span style="position:absolute; top:2px; left:4px; font-size:10px; color:#aaa; font-weight:bold;">${i+1}</span>`;
+        
+        if (itemId) {
+            if (window.toolDefs[itemId]) {
+                let tool = window.toolDefs[itemId]; let durHTML = '';
+                if (itemId !== 'hand' && window.player.toolHealth[itemId] !== undefined) {
+                    let pct = (window.player.toolHealth[itemId] / window.toolMaxDurability[itemId]) * 100;
+                    let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
+                    durHTML = `<div class="tool-durability-bg"><div class="tool-durability-fill" style="width: ${pct}%; background: ${color};"></div></div>`;
+                }
+                content += `<div style="margin-top:10px;">${tool.name}</div>${durHTML}`;
+            } else if (window.itemDefs[itemId]) {
+                let def = window.itemDefs[itemId];
+                let count = window.player.inventory[itemId] || 0;
+                if (count <= 0) {
+                    window.player.toolbar[i] = null;
+                    if (window.player.activeSlot === i) { window.selectToolbarSlot(0); }
+                } else {
+                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto;"></div><div class="inv-amount" style="bottom:2px; right:4px;">${count}</div>`;
+                }
+            }
+        }
+        div.innerHTML = content;
+        div.onclick = () => { window.selectToolbarSlot(i); window.renderToolbar(); };
+        tb.appendChild(div);
+    }
 };
 
 window.getReqText = function(rW, rS, rWeb, rInt) {
@@ -184,8 +255,8 @@ window.updateUI = function() {
 
     const checkBtn = (idReq, idBtn, w, s, web, intR, t) => {
         let reqDOM = window.getEl(idReq), btnDOM = window.getEl(idBtn);
-        if(reqDOM) reqDOM.innerHTML = (t && window.player.availableTools.includes(t)) ? '<span style="color:#4CAF50">Equipado</span>' : window.getReqText(w, s, web, intR);
-        if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.availableTools.includes(t));
+        if(reqDOM) reqDOM.innerHTML = (t && window.player.toolbar.includes(t)) ? '<span style="color:#4CAF50">Fabricado</span>' : window.getReqText(w, s, web, intR);
+        if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.toolbar.includes(t));
     };
 
     checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
@@ -194,7 +265,6 @@ window.updateUI = function() {
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
 };
 
-// FIX: HUD DE ENEMIGOS CREADO ACORDE A LAS NUEVAS CLASES CSS ESTRICTAS
 window.updateEntityHUD = function() {
     if(!window.getEl('entity-hud')) return;
     let html = '';
@@ -210,12 +280,14 @@ window.updateEntityHUD = function() {
 window.bindCraft = function(id, fn) { const el = window.getEl(id); if(el) el.addEventListener('click', fn); };
 window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
     if(window.player.inventory.wood >= reqW && (window.player.inventory.stone||0) >= reqS && (window.player.inventory.web||0) >= reqWeb && window.player.stats.int >= reqInt) {
-        if(tool && !window.player.availableTools.includes(tool)) { 
-            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.availableTools.push(tool); window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
+        if(tool && !window.player.toolbar.includes(tool)) { 
+            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
+            window.autoEquip(tool);
         } 
         else if(item) { 
             if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
             window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
+            if (['boxes', 'campfire_item', 'bed_item'].includes(item)) window.autoEquip(item);
         }
         window.updateUI(); window.renderToolbar();
     }

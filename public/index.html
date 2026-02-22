@@ -17,10 +17,11 @@
         
         .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; color: white; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; opacity: 1; border-right: 3px solid #fff;}
         .log-msg.fade-out { opacity: 0; pointer-events: none; }
-        #global-chat-log.pinned { background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; pointer-events: auto; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); }
-        #global-chat-log.pinned .log-msg.fade-out { opacity: 0.9 !important; }
-        #global-chat-log.pinned::-webkit-scrollbar { width: 5px; }
-        #global-chat-log.pinned::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        
+        /* CINTURÓN: ESTILOS FIJOS Y 6 SLOTS */
+        #toolbar { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 8px; pointer-events: auto; z-index: 1000; }
+        .tool-slot { width: 50px; height: 50px; background: rgba(0,0,0,0.7); border: 2px solid #555; border-radius: 5px; position: relative; color: white; text-align: center; font-size: 11px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: 0.1s; }
+        .tool-slot.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.2); transform: scale(1.1); box-shadow: 0 0 10px rgba(255,215,0,0.5); z-index: 2; }
         
         .entity-bar-container { background: rgba(0,0,0,0.8); padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .entity-info { color: white; font-size: 12px; display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
@@ -67,41 +68,42 @@
 
         <div id="ui-layer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
             
-            <div id="clock-display" class="glass-panel" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 200; font-size: 1.2rem; font-weight: bold; margin: 0;">Día 1 - 08:00</div>
-
-            <div id="status-bars" style="position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; z-index: 200;">
-                <div class="bar-wrapper"><div class="bar-label"><span>Salud</span><span id="hp-text">100/100</span></div><div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div></div>
-                <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
-                <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
+            <div style="position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; z-index: 200;">
+                <div id="server-info" class="glass-panel" style="pointer-events: auto; margin: 0;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
+                <div id="distance-display" class="glass-panel" style="margin: 0;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
+                <div id="entity-hud" style="display: flex; flex-direction: column; gap: 8px;"></div>
             </div>
 
-            <div id="entity-hud" style="position: absolute; top: 120px; left: 20px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; z-index: 200;"></div>
+            <div id="clock-display" class="glass-panel" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 200; font-size: 1.2rem; font-weight: bold; margin: 0;">Día 1 - 08:00</div>
 
-            <div style="position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: auto; z-index: 200;">
-                <div id="server-info" class="glass-panel" style="margin: 0;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
-                <div id="top-controls" style="display: flex; gap: 5px; background: transparent; border: none; box-shadow: none; padding: 0;">
+            <div style="position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: none; z-index: 200; width: 350px;">
+                <div id="top-controls" style="display: flex; gap: 5px; background: transparent; border: none; box-shadow: none; padding: 0; pointer-events: auto;">
                     <button class="toggle-btn" onclick="window.openChat()" style="color: #3498db;">💬 Chat</button>
                     <button class="toggle-btn" onclick="window.toggleChatLog()" style="color: #a29bfe;">📜 Registro</button>
                     <button class="toggle-btn" onclick="window.toggleMenu('inventory')">Personaje (I) <span id="stat-notif" class="stat-notif">!</span></button>
                     <button class="toggle-btn" onclick="window.toggleMenu('crafting')">Crafteo (C)</button>
                     <button id="btn-help" class="toggle-btn">?</button>
                 </div>
+                
+                <div id="status-bars" style="display: flex; flex-direction: column; gap: 10px; width: 250px; pointer-events: auto;">
+                    <div class="bar-wrapper"><div class="bar-label"><span>Salud</span><span id="hp-text">100/100</span></div><div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div></div>
+                    <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
+                    <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
+                </div>
+
+                <div id="global-chat-log" style="display: flex; flex-direction: column; gap: 5px; width: 100%; align-items: flex-end; text-align: right;"></div>
+
+                <div id="chat-container" style="display: none; width: 100%; pointer-events: auto; margin-top: 10px;">
+                    <input type="text" id="chat-input" placeholder="Escribe y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                </div>
             </div>
 
-            <div id="global-chat-log" style="position: absolute; top: 120px; right: 20px; width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 150; align-items: flex-end; text-align: right;"></div>
-
-            <div id="toolbar" style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 10px; pointer-events: auto; z-index: 150;"></div>
-
-            <div id="chat-container" style="display: none; position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 400px; z-index: 200; pointer-events: auto;">
-                <input type="text" id="chat-input" placeholder="Escribe un mensaje y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
-            </div>
-
-            <div id="distance-display" class="glass-panel" style="position: absolute; bottom: 20px; left: 20px; pointer-events: none; margin: 0; z-index: 100;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
+            <div id="toolbar"></div>
             
             <div id="interaction-prompt" class="glass-panel" style="position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%);"><span id="prompt-text"></span></div>
             <div id="placement-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px #000;">MODO UBICACIÓN<br><span style="font-size: 0.7rem; color: #fff; font-weight: normal;">Clic Izq: Colocar | Clic Der: Cancelar</span></div>
             
-            <div id="game-tips" class="glass-panel" style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
+            <div id="game-tips" class="glass-panel" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
                 <strong style="color: #fff;">Controles Básicos:</strong><br><br>
                 <span class="tip-highlight">ENTER</span>: Abrir/Enviar Chat<br>
                 <span class="tip-highlight">F</span>: Comer Rápido<br>
@@ -113,7 +115,7 @@
             <div id="menu-inventory" class="window-menu glass-panel" style="pointer-events: auto;">
                 <div class="window-header"><h3>Personaje</h3><button class="close-btn" onclick="window.toggleMenu('inventory')">✖</button></div>
                 <div class="inv-split">
-                    <div class="inv-left"><div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Clic para usar)</div><div id="inventory-grid"></div></div>
+                    <div class="inv-left"><div style="font-size: 0.8rem; color: #aaa; margin-bottom: 8px; text-align: center;">Mochila (Arrastra al Cinturón)</div><div id="inventory-grid"></div></div>
                     <div class="inv-right">
                         <div class="stat-header">Atributos (Puntos: <span id="stat-points">0</span>)</div>
                         <div class="stat-row"><span>💪 Fuerza</span> <div><span class="stat-val" id="stat-str">0</span><button class="stat-btn" onclick="window.upgradeStat('str')">+</button></div></div>
