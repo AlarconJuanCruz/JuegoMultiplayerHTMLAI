@@ -140,6 +140,7 @@ window.autoEquip = function(id) {
             window.player.toolbar[idx] = id; 
             window.selectToolbarSlot(idx);
             if(window.renderToolbar) window.renderToolbar();
+            if(window.updateUI) window.updateUI(); // Refresca inventario
         }
     } else {
         let existingIdx = window.player.toolbar.indexOf(id);
@@ -152,18 +153,17 @@ window.handleToolbarDrop = function(e, slotIndex) {
     e.preventDefault();
     let type = e.dataTransfer.getData('text/plain');
     if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
-    // Se permite equipar herramientas y muebles
-    if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type))) {
+    
+    if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type) || window.itemDefs[type])) {
         let oldIdx = window.player.toolbar.indexOf(type);
         if (oldIdx !== -1) window.player.toolbar[oldIdx] = null;
         window.player.toolbar[slotIndex] = type;
         window.selectToolbarSlot(slotIndex);
         if(window.renderToolbar) window.renderToolbar();
+        if(window.updateUI) window.updateUI(); // Refresca para sacar del inventario principal
     }
 };
 
-// FIX QUE EVITA QUE EL PERSONAJE SE QUEDE TRABADO:
-// Solo permite entrar en "placementMode" si el item es un mueble colocable.
 window.selectToolbarSlot = function(index) {
     if (!window.player.toolbar) return;
     window.player.activeSlot = index;
@@ -177,7 +177,6 @@ window.selectToolbarSlot = function(index) {
         window.player.activeTool = item;
         window.player.placementMode = null;
     } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0) {
-        // Validación estricta para no congelar el motor
         if (['boxes', 'campfire_item', 'bed_item'].includes(item)) {
             window.player.activeTool = 'hand';
             window.player.placementMode = item;
@@ -209,14 +208,19 @@ window.renderToolbar = function() {
         let content = `<span style="position:absolute; top:2px; left:4px; font-size:10px; color:#aaa; font-weight:bold;">${i+1}</span>`;
         
         if (itemId) {
+            if (itemId !== 'hand') {
+                div.draggable = true;
+                div.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', itemId);
+                    e.dataTransfer.setData('source', 'toolbar');
+                };
+            }
+            
             if (window.toolDefs[itemId]) {
                 let tool = window.toolDefs[itemId]; let durHTML = '';
                 if (itemId !== 'hand' && window.toolMaxDurability[itemId] !== undefined) {
                     const maxDur = window.toolMaxDurability[itemId];
-                    // Garantizar que toolHealth esté inicializado y sea válido
-                    if (typeof window.player.toolHealth[itemId] !== 'number' || isNaN(window.player.toolHealth[itemId])) {
-                        window.player.toolHealth[itemId] = maxDur;
-                    }
+                    if (typeof window.player.toolHealth[itemId] !== 'number' || isNaN(window.player.toolHealth[itemId])) { window.player.toolHealth[itemId] = maxDur; }
                     let pct = Math.max(0, Math.min(100, (window.player.toolHealth[itemId] / maxDur) * 100));
                     let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
                     durHTML = `<div style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#111;"><div style="height:100%; width:${pct.toFixed(1)}%; background:${color}; transition: width 0.2s;"></div></div>`;
@@ -245,24 +249,116 @@ window.getReqText = function(rW, rS, rWeb, rInt) {
     if (mW > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mW} Mad.</span>`; if (mWeb > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mWeb} Tela</span>`; if (mS > 0) t += `<span style="color:#ff6b6b; margin-left:5px;">Falta ${mS} Pie.</span>`; return t === "" ? '<span class="req-text-ok">Recursos OK</span>' : t;
 };
 
+// ============================================
+// NUEVO SISTEMA DE INVENTARIO (GRILLA DINÁMICA)
+// ============================================
 window.updateUI = function() { 
     const grid = window.getEl('inventory-grid'); 
     if(grid) {
         grid.innerHTML = '';
-        let slotsArray = new Array(10).fill(null); let slotIdx = 0;
+        
+        // Permitir desequipar cosas arrastrándolas desde el cinturón de nuevo al inventario
+        grid.ondragover = (e) => e.preventDefault();
+        grid.ondrop = (e) => {
+            e.preventDefault();
+            let type = e.dataTransfer.getData('text/plain');
+            let source = e.dataTransfer.getData('source');
+            if (source === 'toolbar' && window.player.toolbar) {
+                let idx = window.player.toolbar.indexOf(type);
+                if (idx !== -1) {
+                    window.player.toolbar[idx] = null;
+                    if (window.player.activeSlot === idx) window.selectToolbarSlot(0);
+                    if(window.renderToolbar) window.renderToolbar();
+                    window.updateUI();
+                }
+            }
+        };
+
+        let itemsToRender = [];
+
+        // 1. Agregar Herramientas/Armas (si NO están en el cinturón)
+        if (window.player.availableTools) {
+            window.player.availableTools.forEach(tool => {
+                if (tool !== 'hand' && (!window.player.toolbar || !window.player.toolbar.includes(tool))) {
+                    itemsToRender.push({ type: tool, isTool: true, amount: 1 });
+                }
+            });
+        }
+
+        // 2. Agregar Recursos (si NO están en el cinturón)
         for (const [type, amt] of Object.entries(window.player.inventory)) {
             if (amt <= 0) continue;
-            let max = window.itemDefs[type].maxStack || 100; let remaining = amt;
-            while (remaining > 0 && slotIdx < 10) { let inSlot = Math.min(remaining, max); slotsArray[slotIdx] = { type, amount: inSlot }; remaining -= inSlot; slotIdx++; }
+            // Si está en el cinturón, la exclusión mutua lo saltea del inventario grande
+            if (window.player.toolbar && window.player.toolbar.includes(type)) continue;
+
+            let def = window.itemDefs[type] || {};
+            let max = def.maxStack || 100;
+            let remaining = amt;
+            while (remaining > 0) {
+                let inSlot = Math.min(remaining, max);
+                itemsToRender.push({ type, isTool: false, amount: inSlot });
+                remaining -= inSlot;
+            }
         }
-        slotsArray.forEach((slotData) => {
-            const slot = document.createElement('div'); slot.className = 'inv-slot';
-            if (slotData) {
-                let def = window.itemDefs[slotData.type]; slot.draggable = true; slot.ondragstart = (e) => { e.dataTransfer.setData('text/plain', slotData.type); }; slot.onclick = () => window.invItemClick(slotData.type);
+
+        let totalCells = 25; // 5 columnas x 5 filas
+        let cellsUsed = 0;
+
+        itemsToRender.forEach((slotData) => {
+            if (cellsUsed >= totalCells) return; // Si el inventario está hiper lleno
+
+            const slot = document.createElement('div');
+            
+            // Lógica de Slot Doble (Arco u otras cosas grandes)
+            let isLarge = slotData.type === 'bow'; 
+            let cellsTaken = isLarge ? 2 : 1;
+
+            if (cellsUsed + cellsTaken > totalCells) return;
+
+            slot.className = 'inv-slot' + (isLarge ? ' span-2' : '');
+            slot.draggable = true;
+            slot.ondragstart = (e) => { 
+                e.dataTransfer.setData('text/plain', slotData.type); 
+                e.dataTransfer.setData('source', 'inventory');
+            };
+
+            let def = slotData.isTool ? window.toolDefs[slotData.type] : window.itemDefs[slotData.type];
+            if (!def) def = { name: slotData.type, color: '#fff' };
+
+            if (slotData.isTool) {
+                slot.onclick = () => { window.autoEquip(slotData.type); window.toggleMenu('inventory'); };
+                
+                let maxDur = window.toolMaxDurability[slotData.type];
+                let durHTML = '';
+                if (maxDur) {
+                    let currentDur = window.player.toolHealth[slotData.type] || maxDur;
+                    let pct = Math.max(0, Math.min(100, (currentDur / maxDur) * 100));
+                    let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
+                    durHTML = `<div style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#111;"><div style="height:100%; width:${pct}%; background:${color};"></div></div>`;
+                }
+                
+                // Si es un item grande de 2 espacios (como el arco), ajustamos el ícono
+                let iconStyle = `background-color: ${def.color};`;
+                if (isLarge) iconStyle += ' height: 80%; width: 80%; border-radius: 8px;';
+                
+                slot.innerHTML = `<div class="inv-icon" style="${iconStyle}"></div><div class="custom-tooltip">${def.name}</div>${durHTML}`;
+            } else {
+                slot.onclick = () => window.invItemClick(slotData.type);
                 slot.innerHTML = `<div class="inv-icon" style="background-color: ${def.color}"></div><div class="inv-amount">${slotData.amount}</div><div class="custom-tooltip">${def.name}</div>`;
-            } else { slot.style.background = 'rgba(0,0,0,0.5)'; slot.style.border = '1px dashed rgba(255,255,255,0.2)'; }
+            }
             grid.appendChild(slot);
+            cellsUsed += cellsTaken;
         });
+
+        // Rellenar espacios vacíos visuales
+        while (cellsUsed < totalCells) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot empty';
+            slot.style.background = 'rgba(0,0,0,0.5)';
+            slot.style.border = '1px dashed rgba(255,255,255,0.2)';
+            grid.appendChild(slot);
+            cellsUsed++;
+        }
     }
     
     let elTxt = (id, t) => { let e = window.getEl(id); if(e) e.innerText = t; }; let elW = (id, w) => { let e = window.getEl(id); if(e) e.style.width = w; };

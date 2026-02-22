@@ -23,6 +23,7 @@ window.openChat = function() {
     }
 };
 
+// === (1) REEMPLAZA ESTA FUNCIÓN ===
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
     if (y + h > window.game.groundLevel) return false;
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
@@ -31,9 +32,18 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     }
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
+        
+        // Verifica si choca con otro bloque (No se puede pisar nada)
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
-        if (isStructure && (b.type === 'door' || h > window.game.blockSize)) {
-            if (x === b.x && (y <= b.y + bh && y + h >= b.y)) return false;
+        
+        // REGLAS ESPECÍFICAS DE ESTRUCTURA Y PUERTAS
+        if (isStructure && b.type === 'door') {
+            // Verifica si intentas poner un bloque exactamente pegado A LOS LADOS de la puerta
+            if ((x === b.x - window.game.blockSize || x === b.x + window.game.blockSize) &&
+                (y < b.y + bh && y + h > b.y)) {
+                return false; // NO permite construir a los lados
+            }
+            // Pero al no hacer "return false" si (y + h <= b.y), SÍ permitirá construir ARRIBA.
         }
     }
     for (let t of window.trees) { let th = t.isStump ? 15 + t.width*0.2 : t.height; let ty = t.isStump ? t.y + t.height - th : t.y; if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; }
@@ -42,273 +52,21 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     return true;
 };
 
-window.isOverlappingSolidBlock = function() {
-    for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
-        let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-        if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) return true;
-    } return false;
-};
-
-window.isAdjacentToBlockOrGround = function(x, y, w, h) {
-    if (y + h >= window.game.groundLevel) return true; 
-    const expX = x - 2, expY = y - 2, expW = w + 4, expH = h + 4;
-    for (let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
-}
-
-window.checkBlockCollisions = function(axis) {
-    if (window.player.inBackground) return;
-    for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
-        let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-        if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) {
-            if (axis === 'x') { if (window.player.vx > 0) window.player.x = b.x - window.player.width - 0.05; else if (window.player.vx < 0) window.player.x = b.x + window.game.blockSize + 0.05; window.player.vx = 0; } 
-            else if (axis === 'y') { if (window.player.vy > 0) { window.player.y = b.y - window.player.height; window.player.isGrounded = true; } else if (window.player.vy < 0) window.player.y = b.y + itemHeight; window.player.vy = 0; }
-        }
-    }
-};
-
-window.checkEntityCollisions = function(ent, axis) {
-    let hitWall = false;
-    for (let i = window.blocks.length - 1; i >= 0; i--) {
-        let b = window.blocks[i];
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
-        let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-        if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
-            if (axis === 'x') {
-                if (ent.vx > 0) { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; } else if (ent.vx < 0) { ent.x = b.x + window.game.blockSize; ent.vx *= -1; hitWall = true; }
-                if (ent.type === 'zombie' && b.type === 'door') {
-                    if (window.game.frameCount % 40 === 0) { 
-                        b.hp -= 20; window.setHit(b); window.spawnParticles(b.x + 10, b.y + 10, '#ff4444', 5); window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 20 });
-                        if (b.hp <= 0) { let ni = { id: Math.random().toString(36).substring(2,9), x: b.x, y: b.y, vx: 0, vy: -2, type: 'wood', amount: 2, life: 1.0 }; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', { item: ni }); window.blocks.splice(i, 1); window.spawnParticles(b.x, b.y, '#C19A6B', 15); }
-                    }
-                }
-            } else if (axis === 'y') { if (ent.vy > 0) { ent.y = b.y - ent.height; ent.vy = 0; } else if (ent.vy < 0) { ent.y = b.y + itemHeight; ent.vy = 0; } }
-        }
-    } return hitWall;
-};
-
-window.generateWorldSector = function(startX, endX) {
-    if (startX < window.game.shoreX + 50) startX = window.game.shoreX + 50; 
-    let seed = Math.floor(startX); function sRandom() { let x = Math.sin(seed++) * 10000; return x - Math.floor(x); }
-    const numTrees = Math.floor(sRandom() * 6) + 4; 
-    
-    if (!window.removedTrees) window.removedTrees = [];
-    if (!window.treeState) window.treeState = {};
-    if (!window.removedRocks) window.removedRocks = [];
-    if (!window.killedEntities) window.killedEntities = [];
-
-    for (let i = 0; i < numTrees; i++) { 
-        let tx = startX + 50 + sRandom() * (endX - startX - 100); 
-        let tHeight = 160 + sRandom() * 120; let tWidth = 28 + sRandom() * 16;
-        if (!window.removedTrees.includes(tx)) {
-            let tState = window.treeState[tx];
-            let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
-            let hp = isStump ? 50 : 100;
-            window.trees.push({ id: 't_'+Math.floor(tx), x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); 
-        }
-    }
-    if (startX > 800 && sRandom() < 0.75) { 
-        const numRocks = Math.floor(sRandom() * 3) + 2; 
-        for (let i=0; i<numRocks; i++) { 
-            let rx = startX + sRandom() * (endX - startX); let rW = 50 + sRandom()*40; let rH = 35 + sRandom()*25; 
-            if (!window.removedRocks.includes(rx)) window.rocks.push({id: 'r_'+Math.floor(rx), x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); 
-        }
-    }
-    let cx = startX + 100 + sRandom() * (endX - startX - 200); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
-    let newId = 'e_' + Math.floor(cx);
-    if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
-        if (distToShore > 2000) {
-            if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
-            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
-            else { let spiderMaxHp = 20 + (lvl * 15); let sWidth = 14 + (lvl * 2), sHeight = 8 + (lvl * 1.5); window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: window.game.groundLevel - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); }
-        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); }
-    }
-};
-
-window.startGame = function(multiplayer, ip = null) {
-    const nameInput = window.getEl('player-name'); 
-    let rawName = (nameInput && nameInput.value) ? nameInput.value.trim() : "Jugador " + Math.floor(Math.random()*1000);
-    window.player.name = rawName.substring(0, 15);
-
-    let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
-    window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
-    
-    window.generateWorldSector(window.game.shoreX, window.game.exploredRight);
-
-    if (multiplayer && typeof io !== 'undefined') {
-        try {
-            const connectionURL = ip ? `http://${ip}:3000` : window.location.origin; window.socket = io(connectionURL);
-            let sInfo = window.getEl('server-info'); if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = ip ? ip : 'Servidor Web'; }
-            if (ip && ip !== window.location.hostname && ip !== 'localhost' && ip !== '127.0.0.1') { let list = JSON.parse(localStorage.getItem('savedServers') || '[]'); if (!list.includes(ip)) { list.push(ip); localStorage.setItem('savedServers', JSON.stringify(list)); if(window.refreshServerList) window.refreshServerList(); } }
-            
-            window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level }); });
-            window.socket.on('disconnect', () => { alert("⚠ Se perdió la conexión con el Servidor. La partida se reiniciará."); window.location.reload(); });
-            window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
-            window.socket.on('playerMoved', (pInfo) => { if(window.otherPlayers[pInfo.id]) { let cText = window.otherPlayers[pInfo.id].chatText || ''; let cExpires = window.otherPlayers[pInfo.id].chatExpires || 0; Object.assign(window.otherPlayers[pInfo.id], pInfo); window.otherPlayers[pInfo.id].chatText = cText; window.otherPlayers[pInfo.id].chatExpires = cExpires; } });
-            window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
-            
-            window.socket.on('initWorldState', (state) => {
-                window.blocks = state.blocks; window.removedTrees = state.removedTrees; window.removedRocks = state.removedRocks; window.treeState = state.treeState || {}; window.killedEntities = state.killedEntities || [];
-                window.trees = window.trees.filter(t => !window.removedTrees.includes(t.x)); 
-                window.trees.forEach(t => { if (window.treeState[t.x]) { t.isStump = window.treeState[t.x].isStump; t.regrowthCount = window.treeState[t.x].regrowthCount; t.grownDay = window.treeState[t.x].grownDay; if (t.isStump) { t.hp = 50; t.maxHp = 50; } } });
-                window.rocks = window.rocks.filter(r => !window.removedRocks.includes(r.x));
-                window.entities = window.entities.filter(e => !window.killedEntities.includes(e.id));
-                if(window.updateUI) window.updateUI();
-            });
-
-            window.socket.on('chatMessage', (data) => { 
-                if (data.id === window.socket.id) return;
-                if (window.otherPlayers[data.id]) { 
-                    window.otherPlayers[data.id].chatText = data.text; 
-                    window.otherPlayers[data.id].chatExpires = Date.now() + 6500; 
-                    if(window.addGlobalMessage) window.addGlobalMessage(`💬 [${window.otherPlayers[data.id].name}]: ${data.text}`, '#a29bfe');
-                } 
-            });
-            
-            window.socket.on('worldUpdate', (data) => {
-                if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
-                else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
-                else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
-                else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
-                else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); delete window.treeState[data.payload.x]; window.trees = window.trees.filter(t => t.x !== data.payload.x); }
-                else if (data.action === 'hit_rock') { let r = window.rocks.find(ro => Math.abs(ro.x - data.payload.x) < 1); if (r) { r.hp -= data.payload.dmg; window.setHit(r); } }
-                else if (data.action === 'destroy_rock') { window.removedRocks.push(data.payload.x); window.rocks = window.rocks.filter(r => r.x !== data.payload.x); }
-                else if (data.action === 'hit_block') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y); if (b) { b.hp -= data.payload.dmg; window.setHit(b); if(data.payload.destroyed || b.hp <= 0) { if (window.currentOpenBox && window.currentOpenBox.x === b.x) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } window.blocks = window.blocks.filter(bl => bl !== b); } } }
-                else if (data.action === 'destroy_grave') { if (window.currentOpenBox && window.currentOpenBox.id === data.payload.id) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } window.blocks = window.blocks.filter(b => b.id !== data.payload.id); }
-                else if (data.action === 'place_block') { let exists = window.blocks.find(bl => bl.x === data.payload.block.x && bl.y === data.payload.block.y); if (!exists) window.blocks.push(data.payload.block); }
-                else if (data.action === 'remove_old_bed') { window.blocks = window.blocks.filter(b => b.type !== 'bed' || b.owner !== data.payload.owner); }
-                else if (data.action === 'interact_door') { let d = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y); if (d) d.open = !d.open; }
-                else if (data.action === 'drop_item') { let exists = window.droppedItems.find(i => i.id === data.payload.item.id); if(!exists) window.droppedItems.push(data.payload.item); }
-                else if (data.action === 'pickup_item') { let index = window.droppedItems.findIndex(i => i.id === data.payload.id); if (index !== -1) window.droppedItems.splice(index, 1); }
-                else if (data.action === 'spawn_projectile') { window.projectiles.push(data.payload); }
-                else if (data.action === 'spawn_entity') { if (!window.entities.some(e => e.id === data.payload.entity.id) && !window.killedEntities.includes(data.payload.entity.id)) { window.entities.push(data.payload.entity); } }
-                else if (data.action === 'kill_entity') { window.killedEntities.push(data.payload.id); window.entities = window.entities.filter(en => en.id !== data.payload.id); }
-                else if (data.action === 'hit_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.hp -= data.payload.dmg; window.setHit(e); } }
-                else if (data.action === 'flee_entity') { let e = window.entities.find(en => en.id === data.payload.id); if (e) { e.fleeTimer = 180; e.fleeDir = data.payload.dir; } }
-                else if (data.action === 'sync_entities') {
-                    data.payload.forEach(snap => {
-                        let e = window.entities.find(en => en.id === snap.id);
-                        if (e) {
-                            e.x  += (snap.x  - e.x)  * 0.3;
-                            e.y  += (snap.y  - e.y)  * 0.3;
-                            e.vx  = snap.vx;
-                            e.vy  = snap.vy;
-                            e.hp  = snap.hp;
-                        }
-                    });
-                }
-                else if (data.action === 'update_box') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && (bl.type === 'box' || bl.type === 'grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && window.currentOpenBox.x === b.x) if(window.renderBoxUI) window.renderBoxUI(); } }
-                else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => bl.x === data.payload.x && bl.y === data.payload.y && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && window.currentCampfire.x === b.x) if(window.renderCampfireUI) window.renderCampfireUI(); } }
-            });
-        } catch(e) { console.error("Error Socket:", e); alert("No se pudo conectar al servidor. Verifica la IP."); }
-    }
-    
-    window.recalculateStats(); 
-    if(window.updateUI) window.updateUI(); 
-    if(window.renderToolbar) window.renderToolbar(); 
-};
-
-window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
-window.addEventListener('blur', () => { if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; } if(window.player) window.player.isCharging = false; });
-
-window.addEventListener('keyup', (e) => {
-    if (!window.game || !window.game.isRunning) return;
-    let chatInput = window.getEl('chat-input');
-    if (chatInput && document.activeElement === chatInput) return;
-
-    if (e.key === 'a' || e.key === 'A') window.keys.a = false;
-    if (e.key === 'd' || e.key === 'D') window.keys.d = false;
-    if (e.key === 'Shift') window.keys.shift = false;
-    if (e.key === 'y' || e.key === 'Y') window.keys.y = false;
-    if (e.key === 'w' || e.key === 'W' || e.key === ' ') {
-        window.keys.jumpPressed = false;
-        window.player.jumpKeyReleased = true;
-    }
-});
-
-window.addEventListener('keydown', (e) => {
-    if (!window.game || !window.game.isRunning) return;
-    let chatContainer = window.getEl('chat-container'); let chatInput = window.getEl('chat-input');
-    
-    if (chatContainer && chatInput && !window.player.isDead) {
-        if (e.key === 'Enter') {
-            if (document.activeElement === chatInput) {
-                let msg = chatInput.value.trim();
-                if (msg.length > 0) {
-                    window.player.chatText = msg; window.player.chatExpires = Date.now() + 6500;
-                    if(window.addGlobalMessage) window.addGlobalMessage(`💬 [Tú]: ${msg}`, '#3498db');
-                    if (window.socket) window.socket.emit('chatMessage', msg);
-                }
-                chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none';
-            } else {
-                e.preventDefault(); window.openChat();
-            }
-            return;
-        }
-        if (document.activeElement === chatInput) return; 
-    }
-
-    if (window.player.isDead || window.player.placementMode) return; 
-    if (e.key === 'a' || e.key === 'A') window.keys.a = true; if (e.key === 'd' || e.key === 'D') window.keys.d = true; if (e.key === 'Shift') window.keys.shift = true; 
-    if (e.key === 'w' || e.key === 'W' || e.key === ' ') window.keys.jumpPressed = true; if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
-    if (e.key === 'i' || e.key === 'I') { if(window.toggleMenu) window.toggleMenu('inventory'); } if (e.key === 'c' || e.key === 'C') { if(window.toggleMenu) window.toggleMenu('crafting'); } if (e.key === 'f' || e.key === 'F') { if(window.eatFood) window.eatFood(15, 30); }
-    if (e.key === 'r' || e.key === 'R') { if(window.player.activeTool === 'hammer') { window.player.buildMode = window.player.buildMode === 'block' ? 'door' : 'block'; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Modo: ${window.player.buildMode}`, '#fff'); } }
-
-    if (e.key === 'e' || e.key === 'E') {
-        const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2; let actionDone = false;
-        let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
-        if (interactables.length > 0) {
-            let b = interactables[0];
-            if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y });
-            } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
-            } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
-        }
-    }
-    const num = parseInt(e.key); 
-    if (!isNaN(num) && num >= 1 && num <= 6) { 
-        if(window.selectToolbarSlot) window.selectToolbarSlot(num - 1); 
-        if(window.renderToolbar) window.renderToolbar(); 
-    }
-});
-
-window.addEventListener('mousemove', (e) => {
-    if(!window.canvas || !window.player || window.player.isDead) return;
-    const rect = window.canvas.getBoundingClientRect(); const scaleX = window._canvasLogicW / rect.width; const scaleY = window._canvasLogicH / rect.height;
-    window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY; window.mouseWorldX = window.screenMouseX + window.camera.x; window.mouseWorldY = window.screenMouseY + window.camera.y;
-    if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
-});
-
-window.addEventListener('wheel', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
-    if (e.deltaY > 0) window.selectToolbarSlot((window.player.activeSlot + 1) % 6);
-    else window.selectToolbarSlot((window.player.activeSlot - 1 + 6) % 6);
-    if(window.renderToolbar) window.renderToolbar();
-}, {passive: false}); 
-
-document.addEventListener('dragover', (e) => e.preventDefault());
-document.addEventListener('drop', (e) => {
-    e.preventDefault(); if (!window.player || e.target.closest('.window-menu') || window.player.isDead) return; 
-    const type = e.dataTransfer.getData('text/plain');
-    if (type && window.player.inventory[type] > 0) { 
-        let amt = window.player.inventory[type]; let ni = { id: Math.random().toString(36).substring(2,9), x: window.player.x + window.player.width/2 + (Math.random() * 10 - 5), y: window.player.y - 20 + (Math.random() * 10 - 5), vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 1) * 3 - 1, type: type, amount: amt, life: 1.0 };
-        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', { item: ni }); window.player.inventory[type] = 0; if(window.updateUI) window.updateUI(); 
-    }
-});
-
+// === (2) REEMPLAZA ESTE EVENTO COMPLETO ===
 window.addEventListener('mousedown', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
     
-if (window.player.placementMode) {
+    // MODO COLOCACIÓN DE OBJETOS (Cajas, Fogatas, Camas)
+    if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
         if (e.button === 0) {
-            // NUEVO CÁLCULO DE GRILLA ALINEADO AL SUELO
             let offsetY = window.game.groundLevel % window.game.blockSize;
             const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
             const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
             
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
                 let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
+                
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
                     let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
@@ -328,6 +86,8 @@ if (window.player.placementMode) {
                     }
                     if(window.updateUI) window.updateUI();
                     if(window.renderToolbar) window.renderToolbar();
+                } else {
+                    window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00');
                 }
             }
         } return;
@@ -445,22 +205,31 @@ if (window.player.placementMode) {
         }
     }
 
+    // MODO CONSTRUCCIÓN DE ESTRUCTURAS (Martillo)
     if (!actionDone && window.player.activeTool === 'hammer') {
-            let offsetY = window.game.groundLevel % window.game.blockSize;
-            const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
-            const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
-
-            const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
-            if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-                if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
+        let offsetY = window.game.groundLevel % window.game.blockSize;
+        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
+        const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        
+        const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
+        
+        if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
+            if (window.player.inventory.wood >= cost) {
+                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                     let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
+                } else {
+                    // Texto cuando estás demasiado cerca de ti mismo, bloques, o una zona indebida.
+                    window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00');
                 }
+            } else {
+                // TEXTO FLOTANTE DE ADVERTENCIA POR MATERIALES
+                window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `Faltan ${cost} Mad.`, '#ff4444');
             }
         }
+    }
     if(actionDone && window.useTool) window.useTool();
 });
-
 window.addEventListener('mouseup', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead) return;
     if (window.player.activeTool === 'bow') {
