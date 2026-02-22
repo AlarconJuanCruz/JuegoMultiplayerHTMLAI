@@ -6,7 +6,6 @@ window.useTool = function() {
     if (window.player.toolHealth[window.player.activeTool] <= 0) {
         window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[window.player.activeTool].name} Rota!`, '#ff4444');
         
-        // El ítem se borra del cinturón y volvemos a la mano
         window.player.toolbar[window.player.activeSlot] = null;
         window.selectToolbarSlot(0); 
         
@@ -70,8 +69,8 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
         window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }; 
-        window.player.toolbar = ['hand', null, null, null, null, null]; // Se vacía el cinturón
-        window.selectToolbarSlot(0);
+        window.player.toolbar = ['hand', null, null, null, null, null];
+        if(window.selectToolbarSlot) window.selectToolbarSlot(0);
         window.player.xp = 0; 
         
         let deathScreen = window.getEl('death-screen');

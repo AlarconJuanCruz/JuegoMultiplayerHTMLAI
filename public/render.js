@@ -219,7 +219,7 @@ window.draw = function() {
 
     window.droppedItems.forEach(item => {
         if (item.x + 20 > window.camera.x && item.x < window.camera.x + window.canvas.width) {
-            window.ctx.fillStyle = window.itemDefs[item.type].color; let s = window.itemDefs[item.type].size; let floatOffset = Math.sin(item.life) * 3; window.ctx.fillRect(item.x, item.y + floatOffset, s, s);
+            window.ctx.fillStyle = window.itemDefs[item.type] ? window.itemDefs[item.type].color : '#fff'; let s = window.itemDefs[item.type] ? window.itemDefs[item.type].size : 10; let floatOffset = Math.sin(item.life) * 3; window.ctx.fillRect(item.x, item.y + floatOffset, s, s);
         }
     });
 

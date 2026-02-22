@@ -88,7 +88,7 @@ window.invItemClick = function(type) {
     if (type === 'meat') window.eatFood(15, 30); 
     else if (type === 'cooked_meat') window.eatFood(30, 60);
     else if (['boxes', 'campfire_item', 'bed_item'].includes(type) || window.toolDefs[type]) { 
-        if(typeof window.autoEquip==='function') window.autoEquip(type); window.toggleMenu('inventory'); 
+        if (typeof window.autoEquip === 'function') window.autoEquip(type); window.toggleMenu('inventory'); 
     }
 };
 
@@ -132,7 +132,6 @@ window.renderCampfireUI = function() {
     if (window.currentCampfire.isBurning) { btn.innerText = "APAGAR"; btn.style.background = "#555"; } else { btn.innerText = "🔥 ENCENDER"; btn.style.background = "#e67e22"; }
 };
 
-// CINTURÓN Y PROTECCIÓN ANTI-CONGELAMIENTO
 window.autoEquip = function(id) {
     if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
     if (!window.player.toolbar.includes(id)) {
@@ -152,8 +151,9 @@ window.autoEquip = function(id) {
 window.handleToolbarDrop = function(e, slotIndex) {
     e.preventDefault();
     let type = e.dataTransfer.getData('text/plain');
+    if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+    // Se permite equipar herramientas y muebles
     if (type && (window.toolDefs[type] || ['boxes', 'campfire_item', 'bed_item'].includes(type))) {
-        if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
         let oldIdx = window.player.toolbar.indexOf(type);
         if (oldIdx !== -1) window.player.toolbar[oldIdx] = null;
         window.player.toolbar[slotIndex] = type;
@@ -162,20 +162,29 @@ window.handleToolbarDrop = function(e, slotIndex) {
     }
 };
 
-// LA LÓGICA QUE EVITA EL BUG DEL CONGELAMIENTO:
+// FIX QUE EVITA QUE EL PERSONAJE SE QUEDE TRABADO:
+// Solo permite entrar en "placementMode" si el item es un mueble colocable.
 window.selectToolbarSlot = function(index) {
     if (!window.player.toolbar) return;
     window.player.activeSlot = index;
     let item = window.player.toolbar[index];
-    window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0;
+    
+    window.player.isAiming = false; 
+    window.player.isCharging = false; 
+    window.player.chargeLevel = 0;
     
     if (item && window.toolDefs[item]) {
         window.player.activeTool = item;
         window.player.placementMode = null;
-    } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0 && ['boxes', 'campfire_item', 'bed_item'].includes(item)) {
-        // Solo activa el Placement Mode si es un mueble válido. Esto evita el freeze.
-        window.player.activeTool = 'hand';
-        window.player.placementMode = item;
+    } else if (item && window.itemDefs[item] && window.player.inventory[item] > 0) {
+        // Validación estricta para no congelar el motor
+        if (['boxes', 'campfire_item', 'bed_item'].includes(item)) {
+            window.player.activeTool = 'hand';
+            window.player.placementMode = item;
+        } else {
+            window.player.activeTool = 'hand';
+            window.player.placementMode = null;
+        }
     } else {
         window.player.activeTool = 'hand';
         window.player.placementMode = null;
@@ -294,7 +303,9 @@ window.bindCraft = function(id, fn) { const el = window.getEl(id); if(el) el.add
 window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
     if(window.player.inventory.wood >= reqW && (window.player.inventory.stone||0) >= reqS && (window.player.inventory.web||0) >= reqWeb && window.player.stats.int >= reqInt) {
         if(tool && !window.player.toolbar.includes(tool)) { 
-            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
+            window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; 
+            window.player.toolHealth[tool] = window.toolMaxDurability[tool]; 
+            if (!window.player.availableTools.includes(tool)) window.player.availableTools.push(tool);
             if(typeof window.autoEquip === 'function') window.autoEquip(tool);
         } 
         else if(item) { 
