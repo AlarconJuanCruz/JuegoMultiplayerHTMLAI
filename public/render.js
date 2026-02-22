@@ -337,12 +337,6 @@ window.draw = function() {
                 window.ctx.lineTo(r.x + r.width, r.y + r.height);
                 window.ctx.fill();
             } else {
-                // Sombra base
-                window.ctx.fillStyle = 'rgba(0,0,0,0.18)';
-                window.ctx.beginPath();
-                window.ctx.ellipse(r.x + r.width/2 + 3, r.y + r.height + 2, r.width * 0.52, 5, 0, 0, Math.PI*2);
-                window.ctx.fill();
-
                 // Cara oscura (derecha/abajo)
                 let darkGrad = window.ctx.createLinearGradient(r.x, r.y, r.x + r.width, r.y + r.height);
                 darkGrad.addColorStop(0, '#5a5a5a');
@@ -412,9 +406,6 @@ window.draw = function() {
 
             if (t.isStump) {
                 let stumpH = 15 + t.width * 0.22;
-                // Sombra
-                window.ctx.fillStyle = 'rgba(0,0,0,0.15)';
-                window.ctx.beginPath(); window.ctx.ellipse(4, 2, hw*0.7, 4, 0, 0, Math.PI*2); window.ctx.fill();
                 // Tronco
                 let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
                 trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.4, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
@@ -430,10 +421,6 @@ window.draw = function() {
                 }
                 window.ctx.restore(); return;
             }
-
-            // Sombra en el suelo
-            window.ctx.fillStyle = 'rgba(0,0,0,0.12)';
-            window.ctx.beginPath(); window.ctx.ellipse(2, 0, hw * 1.3, 6, 0, 0, Math.PI*2); window.ctx.fill();
 
             if (t.type === 0) {
                 // Árbol redondeado (roble)
@@ -642,7 +629,7 @@ window.draw = function() {
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
         // Origen a la altura de la mano/brazo del personaje (~14px desde arriba del sprite)
         let pCX = window.player.x + window.player.width / 2;
-        let pCY = window.player.y + 14;
+        let pCY = window.player.y + 6; // altura del pecho/brazo
         let dx = window.mouseWorldX - pCX; let dy = window.mouseWorldY - pCY;
         let angle = Math.atan2(dy, dx);
         let power = 4 + (window.player.chargeLevel / 100) * 6;

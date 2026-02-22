@@ -464,7 +464,7 @@ window.addEventListener('mouseup', (e) => {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
                 let pCX = window.player.x + window.player.width/2; 
-                let pCY = window.player.y + 14; // misma altura que la guía de trayectoria
+                let pCY = window.player.y + 6; // mismo origen que la guía
                 let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
                 let power = 4 + (window.player.chargeLevel / 100) * 6; 
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };

@@ -167,10 +167,12 @@
                 <div id="top-controls" style="display:flex; gap:5px; pointer-events:auto;">
                     <button class="toggle-btn" onclick="window.openChat()" style="color:#5bb4f5;">💬</button>
                     <button class="toggle-btn" onclick="window.toggleChatLog()" style="color:#a478f0;">📜</button>
-                    <button class="toggle-btn" onclick="window.toggleMenu('inventory')" style="pointer-events:auto;">
-                        👤 Personaje
+                    <div style="position:relative; display:inline-block;">
+                        <button class="toggle-btn" onclick="window.toggleMenu('inventory')" style="pointer-events:auto;">
+                            👤 Personaje
+                        </button>
                         <span id="stat-notif" class="stat-notif">!</span>
-                    </button>
+                    </div>
                     <button class="toggle-btn" onclick="window.toggleMenu('crafting')">⚒️ Crafteo</button>
                     <button id="btn-help" class="toggle-btn" style="padding: 5px 8px;">?</button>
                 </div>
