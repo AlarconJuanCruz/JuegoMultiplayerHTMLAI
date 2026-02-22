@@ -25,10 +25,11 @@ if (!isLocalEnv) {
     if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
+// INICIALIZAR CHAT: Límites y detección de escritura (Typing...)
 window.addEventListener('DOMContentLoaded', () => {
     const chatInp = window.getEl('chat-input');
     if (chatInp) {
-        chatInp.maxLength = 70; 
+        chatInp.maxLength = 70; // Límite de caracteres
         chatInp.addEventListener('focus', () => { if(window.player) window.player.isTyping = true; });
         chatInp.addEventListener('blur', () => { if(window.player) window.player.isTyping = false; });
     }
@@ -462,16 +463,3 @@ window.bindCraft('btn-craft-arrow', () => window.craftItem(5, 0, 0, 0, null, 'ar
 window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, 'arrows', 2)); 
 window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
 window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
-
-// EVENTO DE SCROLL MEJORADO
-window.addEventListener('wheel', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead) return;
-    
-    // Si el puntero está sobre algún menú o el chat, ignora este evento
-    if (e.target.closest('#global-chat-log') || e.target.closest('.window-menu')) return; 
-    
-    e.preventDefault(); 
-    if (e.deltaY > 0) window.selectToolbarSlot((window.player.activeSlot + 1) % 6);
-    else window.selectToolbarSlot((window.player.activeSlot - 1 + 6) % 6);
-    if(window.renderToolbar) window.renderToolbar();
-}, {passive: false});

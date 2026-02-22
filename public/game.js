@@ -83,7 +83,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     let isItem = !isStructure;
     let isDoor = isStructure && h > window.game.blockSize;
 
-    // 1. REGLA ESTRICTA DE SOPORTE PARA OBJETOS/PUERTAS (A 1px de tolerancia)
+    // REGLA ESTRICTA DE SOPORTE PARA OBJETOS/PUERTAS
     if (isItem || isDoor) {
         let supported = false;
         if (Math.abs((y + h) - window.game.groundLevel) < 1) {
@@ -95,29 +95,23 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
                 }
             }
         }
-        if (!supported) return false; // Bloquea completamente esquinas/aires
+        if (!supported) return false; 
     }
 
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
         
-        // No chocar con otros
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
         
-        // Puertas
         if (isDoor) {
-            // No puertas encima/debajo de otras puertas
             if (b.type === 'door' && Math.abs(b.x - x) < 1 && (Math.abs(b.y - (y + h)) < 1 || Math.abs((b.y + bh) - y) < 1)) return false;
-            // No poner a los lados
             if (b.type === 'door' && (Math.abs(x - (b.x - window.game.blockSize)) < 1 || Math.abs(x - (b.x + window.game.blockSize)) < 1) && (y < b.y + bh && y + h > b.y)) return false;
         }
 
-        // Si soy un bloque, no puedo pegarme al lateral de la puerta
         if (isStructure && !isDoor && b.type === 'door') {
             if ((Math.abs(x - (b.x - window.game.blockSize)) < 1 || Math.abs(x - (b.x + window.game.blockSize)) < 1) && (y < b.y + bh && y + h > b.y)) return false;
         }
 
-        // Objetos no se stackean
         if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave')) {
             if (Math.abs(b.x - x) < window.game.blockSize && Math.abs(b.y - (y + h)) < 1) {
                 return false; 
@@ -278,7 +272,7 @@ window.startGame = function(multiplayer, ip = null) {
                     if (b) { 
                         b.hp -= data.payload.dmg; window.setHit(b); 
                         if(data.payload.destroyed || b.hp <= 0) { 
-                            if (window.currentOpenBox && window.currentOpenBox.x === b.x) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } 
+                            if (window.currentOpenBox && window.currentOpenBox.x === b.x && window.currentOpenBox.y === b.y) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } 
                             window.blocks = window.blocks.filter(bl => bl !== b); 
                         } 
                     } 
@@ -317,10 +311,124 @@ window.startGame = function(multiplayer, ip = null) {
     if(window.renderToolbar) window.renderToolbar(); 
 };
 
-window.addEventListener('mousedown', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead || document.querySelector('.window-menu.open')) return;
+// === EVENTOS DEL JUEGO (TECLADO Y MOUSE) ===
+
+window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+window.addEventListener('blur', () => { 
+    if(window.keys) { 
+        window.keys.a = false; window.keys.d = false; window.keys.w = false; 
+        window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; 
+    } 
+    if(window.player) window.player.isCharging = false; 
+});
+
+window.addEventListener('keyup', (e) => {
+    if (!window.game || !window.game.isRunning) return;
+    let chatInput = window.getEl('chat-input');
+    if (chatInput && document.activeElement === chatInput) return;
+
+    if (!window.keys) return;
+    if (e.key === 'a' || e.key === 'A') window.keys.a = false;
+    if (e.key === 'd' || e.key === 'D') window.keys.d = false;
+    if (e.key === 'Shift') window.keys.shift = false;
+    if (e.key === 'y' || e.key === 'Y') window.keys.y = false;
+    if (e.key === 'w' || e.key === 'W' || e.key === ' ') {
+        window.keys.jumpPressed = false;
+        if(window.player) window.player.jumpKeyReleased = true;
+    }
+});
+
+window.addEventListener('keydown', (e) => {
+    if (!window.game || !window.game.isRunning || !window.player) return;
     
-    // EVITAR DISPARAR HERRAMIENTAS SI HAGO CLIC EN EL CHAT
+    let chatContainer = window.getEl('chat-container'); 
+    let chatInput = window.getEl('chat-input');
+    
+    if (chatContainer && chatInput && !window.player.isDead) {
+        if (e.key === 'Enter') {
+            if (document.activeElement === chatInput) {
+                let msg = chatInput.value.trim();
+                if (msg.length > 0) {
+                    window.player.chatText = msg; window.player.chatExpires = Date.now() + 6500;
+                    if(window.addGlobalMessage) window.addGlobalMessage(`💬 [Tú]: ${msg}`, '#3498db');
+                    if (window.socket) window.socket.emit('chatMessage', msg);
+                }
+                chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none';
+                window.player.isTyping = false; 
+            } else {
+                e.preventDefault(); window.openChat();
+            }
+            return;
+        }
+        if (document.activeElement === chatInput) return; 
+    }
+
+    if (window.player.isDead) return; 
+    
+    // NOTA: No podemos hacer return aquí si tiene placementMode, o no podrá moverse.
+    // Simplemente evitamos usar inventario, y update() se encarga de frenarlo.
+
+    if (!window.keys) window.keys = {};
+    if (e.key === 'a' || e.key === 'A') window.keys.a = true; 
+    if (e.key === 'd' || e.key === 'D') window.keys.d = true; 
+    if (e.key === 'Shift') window.keys.shift = true; 
+    if (e.key === 'w' || e.key === 'W' || e.key === ' ') window.keys.jumpPressed = true; 
+    if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
+    
+    if (!window.player.placementMode) {
+        if (e.key === 'i' || e.key === 'I') { if(window.toggleMenu) window.toggleMenu('inventory'); } 
+        if (e.key === 'c' || e.key === 'C') { if(window.toggleMenu) window.toggleMenu('crafting'); } 
+        if (e.key === 'f' || e.key === 'F') { if(window.eatFood) window.eatFood(15, 30); }
+        if (e.key === 'r' || e.key === 'R') { 
+            if(window.player.activeTool === 'hammer') { 
+                window.player.buildMode = window.player.buildMode === 'block' ? 'door' : 'block'; 
+                window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Modo: ${window.player.buildMode}`, '#fff'); 
+            } 
+        }
+
+        if (e.key === 'e' || e.key === 'E') {
+            const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2;
+            let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
+            if (interactables.length > 0) {
+                let b = interactables[0];
+                if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y });
+                } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
+                } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
+            }
+        }
+        
+        const num = parseInt(e.key); 
+        if (!isNaN(num) && num >= 1 && num <= 6) { 
+            if(window.selectToolbarSlot) window.selectToolbarSlot(num - 1); 
+            if(window.renderToolbar) window.renderToolbar(); 
+        }
+    }
+});
+
+window.addEventListener('mousemove', (e) => {
+    if(!window.canvas || !window.player || window.player.isDead) return;
+    const rect = window.canvas.getBoundingClientRect(); const scaleX = window._canvasLogicW / rect.width; const scaleY = window._canvasLogicH / rect.height;
+    window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY; window.mouseWorldX = window.screenMouseX + window.camera.x; window.mouseWorldY = window.screenMouseY + window.camera.y;
+    if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
+});
+
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
+    e.preventDefault(); 
+    if (!window.player || window.player.isDead) return; 
+    
+    if (e.target.closest('.window-menu') || e.target.closest('#toolbar')) return;
+
+    const type = e.dataTransfer.getData('text/plain');
+    if (type && window.player.inventory[type] > 0) { 
+        let amt = window.player.inventory[type]; let ni = { id: Math.random().toString(36).substring(2,9), x: window.player.x + window.player.width/2 + (Math.random() * 10 - 5), y: window.player.y - 20 + (Math.random() * 10 - 5), vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 1) * 3 - 1, type: type, amount: amt, life: 1.0 };
+        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', { item: ni }); window.player.inventory[type] = 0; if(window.updateUI) window.updateUI(); 
+    }
+});
+
+window.addEventListener('mousedown', (e) => {
+    if (!window.game || !window.game.isRunning || !window.player || window.player.isDead || document.querySelector('.window-menu.open')) return;
+    
     if (e.target.closest('#global-chat-log') || e.target.closest('.log-msg') || e.target.closest('#chat-container')) return;
 
     if (window.player.placementMode) {
@@ -512,20 +620,24 @@ window.addEventListener('mouseup', (e) => {
 function update() {
     try {
         if (!window.game || !window.game.isRunning) return;
-        if (!window.canvas) return;
+        if (!window.canvas || !window.player) return;
+
+        // SE DEFINE AL PRINCIPIO PARA EVITAR ERRORES DE LECTURA (El bug que te congelaba)
+        let pCX = window.player.x + window.player.width/2; 
+        let pCY = window.player.y + window.player.height/2;
 
         window.game.frameCount++;
         if (window.game.screenShake > 0) window.game.screenShake--;
         if (window.player.attackFrame > 0) window.player.attackFrame--;
         
         if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
-            if (window.player.activeTool === 'torch' && window.player.toolHealth['torch']) {
+            if (window.player.activeTool === 'torch' && window.player.toolHealth && window.player.toolHealth['torch']) {
                 window.player.toolHealth['torch']--;
                 if (window.renderToolbar) window.renderToolbar(); 
                 if (window.player.toolHealth['torch'] <= 0) {
                     window.player.toolbar[window.player.activeSlot] = null;
                     window.selectToolbarSlot(0); 
-                    window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "¡Antorcha Apagada!", '#ff4444');
+                    window.spawnDamageText(pCX, window.player.y - 20, "¡Antorcha Apagada!", '#ff4444');
                     if (window.renderToolbar) window.renderToolbar();
                 }
             }
@@ -640,9 +752,7 @@ function update() {
             }
         });
 
-        let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + window.player.height/2;
         let anyItemHovered = false;
-
         let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
         let promptEl = window.getEl('interaction-prompt'); let textEl = window.getEl('prompt-text');
         
@@ -656,7 +766,6 @@ function update() {
                         window.player.inventory[item.type] = (window.player.inventory[item.type]||0) + item.amount; 
                         window.droppedItems.splice(i, 1); window.sendWorldUpdate('pickup_item', { id: item.id }); 
                         
-                        // Solo auto-equipa herramientas reales (no muebles de colocación)
                         if (window.toolDefs[item.type]) { 
                             if(typeof window.autoEquip==='function') window.autoEquip(item.type); 
                         }
