@@ -15,13 +15,26 @@ window.openChat = function() {
     if (chatContainer && chatInput && !window.player.isDead) { chatContainer.style.display = 'block'; chatInput.focus(); }
 };
 
-window.isValidPlacement = function(x, y, w, h, requireAdjacency = true) {
+// FIX CONSTRUCCIÓN: "isStructure" bloquea que bloques y puertas se encimen
+window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
     if (y + h > window.game.groundLevel) return false;
+    
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
+    
     if (window.game.isMultiplayer && window.otherPlayers) {
         for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; }
     }
-    for (let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; }
+    
+    for (let b of window.blocks) { 
+        let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
+        if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
+        
+        // Bloqueo estricto para que no se peguen o encimen puertas con bloques/puertas en su misma columna
+        if (isStructure && (b.type === 'door' || h > window.game.blockSize)) {
+            if (x === b.x && (y <= b.y + bh && y + h >= b.y)) return false;
+        }
+    }
+    
     for (let t of window.trees) { let th = t.isStump ? 15 + t.width*0.2 : t.height; let ty = t.isStump ? t.y + t.height - th : t.y; if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; }
     for (let r of window.rocks) { if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false; }
     if (requireAdjacency) { if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false; }
@@ -134,8 +147,9 @@ window.startGame = function(multiplayer, ip = null) {
                 if(window.updateUI) window.updateUI();
             });
 
-            // GESTIÓN DE CHAT GLOBAL MULTIJUGADOR
+            // FIX CHAT: IGNORA TU PROPIO MENSAJE PARA NO DUPLICARLO
             window.socket.on('chatMessage', (data) => { 
+                if (data.id === window.socket.id) return; // Ya lo mostramos nosotros mismos
                 if (window.otherPlayers[data.id]) { 
                     window.otherPlayers[data.id].chatText = data.text; 
                     window.otherPlayers[data.id].chatExpires = Date.now() + 6500; 
@@ -144,9 +158,7 @@ window.startGame = function(multiplayer, ip = null) {
             });
             
             window.socket.on('worldUpdate', (data) => {
-                // Notificación global de muertes
                 if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
-                
                 else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
                 else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
@@ -253,9 +265,10 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 0) {
             const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
-                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true)) {
+                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
                     let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
                     let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
+                    
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') {
@@ -388,13 +401,32 @@ window.addEventListener('mousedown', (e) => {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
         if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-            if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true)) {
+            // Clickeo al construir: Pasamos "isStructure = true" para que detecte las colisiones severas con puertas
+            if (window.player.inventory.wood >= cost && window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                 let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
                 window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
             }
         }
     }
     if(actionDone && window.useTool) window.useTool();
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (!window.game || !window.game.isRunning || window.player.isDead) return;
+    if (window.player.activeTool === 'bow') {
+        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
+        if (e.button === 0 && window.player.isCharging) {
+            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
+                window.player.inventory.arrows--;
+                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + window.player.height/2;
+                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
+                let power = 4 + (window.player.chargeLevel / 100) * 6; 
+                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
+                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+            }
+            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
+        }
+    }
 });
 
 function update() {
@@ -405,7 +437,6 @@ function update() {
     if (window.game.screenShake > 0) window.game.screenShake--;
     if (window.player.attackFrame > 0) window.player.attackFrame--;
     
-    // NUEVO: CONSUMO DE LA ANTORCHA (Dura 300 segundos = 5 minutos si está en la mano)
     if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
         if (window.player.activeTool === 'torch' && window.player.toolHealth['torch']) {
             window.player.toolHealth['torch']--;
@@ -582,9 +613,12 @@ function update() {
                         window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
                         if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:1+Math.floor(ent.level/2), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
                         else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
-                        else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(40 * ent.level); }
-                        else if (ent.type === 'archer') { let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(30 * ent.level); }
-                        window.entities.splice(e, 1); if(typeof window.updateUI==='function') window.updateUI();
+                        else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); }
+                        else if (ent.type === 'archer') { 
+                            let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); 
+                            let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(40 * ent.level); 
+                        }
+                        window.entities.splice(e, 1); if(window.updateUI) window.updateUI(); 
                    } else {
                        window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage });
                        if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
@@ -655,12 +689,11 @@ function update() {
             let distToPlayer = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
             let aggroRange = 180; if (isNight && !window.player.isStealth) aggroRange = 600; if (ent.type === 'zombie' && !window.player.isStealth) aggroRange = 800; 
 
-            // NUEVO: LA ANTORCHA ESPANTA MONSTRUOS DE NIVEL BAJO (NIVEL <= 3)
             let repelledByTorch = isHoldingTorch && distToPlayer < 250 && ent.level <= 3;
 
             if (repelledByTorch) {
                 ent.vx = (ent.x > pCX) ? 1.5 : -1.5;
-                ent.ignorePlayer = 60; // Lo mantiene huyendo
+                ent.ignorePlayer = 60; 
             } else if (distToPlayer < aggroRange && ent.ignorePlayer <= 0) {
                 let speed = ent.type === 'zombie' ? 0.4 : 0.8; let targetVx = (window.player.x > ent.x) ? speed : -speed; ent.vx = targetVx;
                 if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; if (ent.stuckFrames > 60 && ent.type !== 'zombie') { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;

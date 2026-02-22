@@ -51,9 +51,8 @@ window.drawCharacter = function(charData, isLocal) {
     }
 
     let aimAngle = 0;
-    // La antorcha se sujeta de frente
     if (charData.activeTool === 'torch') {
-        armR = -Math.PI / 2.5; elbowR = -0.3; // Brazo levantado hacia adelante
+        armR = -Math.PI / 2.5; elbowR = -0.3; 
     } else if (charData.activeTool === 'bow' && charData.isAiming) {
         aimAngle = Math.atan2(targetY - (pCY - 24 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
@@ -78,7 +77,6 @@ window.drawCharacter = function(charData, isLocal) {
         let pull = charData.isAiming ? ((charData.chargeLevel || 0) / 100) * 15 : 0; window.ctx.strokeStyle = '#eee'; window.ctx.lineWidth = 1; window.ctx.beginPath(); window.ctx.moveTo(4.6, -14.2); window.ctx.lineTo(4.6 - pull, 0); window.ctx.lineTo(4.6, 14.2); window.ctx.stroke();
         if (charData.isCharging && (isLocal ? charData.inventory.arrows > 0 : true)) { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(4.6 - pull, -1, 20 + pull, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(4.6 - pull + 20 + pull, -2, 4, 4); }
     } else if (charData.activeTool === 'torch') {
-        // DIBUJO DE LA ANTORCHA EN MANO
         window.ctx.rotate(Math.PI/2); 
         window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 25);
         let fSize = 5 + Math.random() * 3;
@@ -149,7 +147,6 @@ window.draw = function() {
         window.ctx.fillStyle = '#1ca3ec'; window.ctx.fillRect(window.camera.x, window.game.groundLevel + 5 + waveOffset, window.game.shoreX - 60 - window.camera.x, 15 - waveOffset);
     }
 
-    // CAPA TRASERA: ROCAS, ÁRBOLES Y OBJETOS DEL SUELO
     window.rocks.forEach(r => {
         if (r.x + r.width > window.camera.x && r.x < window.camera.x + window.canvas.width) {
             window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath(); window.ctx.moveTo(r.x, r.y + r.height); window.ctx.lineTo(r.x + r.width * 0.2, r.y); window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5); window.ctx.lineTo(r.x + r.width, r.y + r.height); window.ctx.fill();
@@ -187,10 +184,7 @@ window.draw = function() {
                 window.ctx.beginPath(); window.ctx.arc(-t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.arc(t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.fill();
             }
             
-            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) { 
-                window.ctx.fillStyle = 'black'; window.ctx.fillRect(-hw-5, -th - 20, t.width + 10, 6); 
-                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 19, (t.hp / t.maxHp) * (t.width + 8), 4); 
-            }
+            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(-hw-5, -th - 20, t.width + 10, 6); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 19, (t.hp / t.maxHp) * (t.width + 8), 4); }
             window.ctx.restore();
         }
     });
@@ -229,7 +223,6 @@ window.draw = function() {
         }
     });
 
-    // CAPA FRONTAL: ENTIDADES Y JUGADORES
     if (window.game.isMultiplayer) {
         Object.values(window.otherPlayers).forEach(p => { 
             if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + window.canvas.width + 50) { window.drawCharacter(p, false); }
@@ -260,7 +253,7 @@ window.draw = function() {
 
     if (window.player.placementMode && !window.player.isDead) {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
-        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true);
+        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
         let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
 
         window.ctx.globalAlpha = 0.6;
@@ -277,7 +270,7 @@ window.draw = function() {
         const gridY = Math.floor(window.mouseWorldY / window.game.blockSize) * window.game.blockSize;
         const isDoor = window.player.buildMode === 'door'; const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize;
         
-        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true);
+        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true);
         let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
 
         window.ctx.globalAlpha = 0.5; window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.setLineDash([4, 2]);
@@ -312,7 +305,6 @@ window.draw = function() {
     window.damageTexts.forEach(dt => { window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life)); window.ctx.fillStyle = dt.color; window.ctx.font = 'bold 18px Inter, sans-serif'; window.ctx.fillText(dt.text, dt.x, dt.y); });
     window.ctx.globalAlpha = 1.0; 
 
-    // CAPA SUPERIOR: LA LLUVIA PASA POR DELANTE DE TODO
     if (window.game.isRaining) {
         window.ctx.save(); window.ctx.strokeStyle = 'rgba(150, 180, 220, 0.5)'; window.ctx.lineWidth = 1; window.ctx.beginPath();
         for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window.canvas.width; let ry = (i * 93 + window.game.frameCount * 25) % window.canvas.height; window.ctx.moveTo(window.camera.x + rx, window.camera.y + ry); window.ctx.lineTo(window.camera.x + rx - 3, window.camera.y + ry + 25); }
@@ -329,16 +321,13 @@ window.draw = function() {
         
         window.lightCtx.globalCompositeOperation = 'destination-out';
         
-        // NUEVO SISTEMA DE LUZ: SOLO ILUMINA LA ANTORCHA
         if (!window.player.isDead && window.player.activeTool === 'torch') {
-            let flicker = Math.random() * 20;
-            let pGlowSize = 250 + flicker; 
+            let flicker = Math.random() * 20; let pGlowSize = 250 + flicker; 
             let pGrad = window.lightCtx.createRadialGradient(window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, 0, window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, pGlowSize);
             pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.8)'); pGrad.addColorStop(1, 'rgba(255, 150, 50, 0)');
             window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
         }
 
-        // LUZ DE ANTORCHA DE OTROS JUGADORES
         if (window.game.isMultiplayer) {
             Object.values(window.otherPlayers).forEach(p => { 
                 if (p.id !== window.socket?.id && !p.isDead && p.activeTool === 'torch') {
