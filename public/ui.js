@@ -25,18 +25,13 @@ if (!isLocalEnv) {
     if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
-// SISTEMA DE LOGS Y CHAT GLOBAL FIJABLE
 window.isChatLogPinned = false;
 window.toggleChatLog = function() {
     window.isChatLogPinned = !window.isChatLogPinned;
     let log = window.getEl('global-chat-log');
     if (log) {
-        if (window.isChatLogPinned) {
-            log.classList.add('pinned');
-            log.scrollTop = log.scrollHeight;
-        } else {
-            log.classList.remove('pinned');
-        }
+        if (window.isChatLogPinned) { log.classList.add('pinned'); log.scrollTop = log.scrollHeight; } 
+        else { log.classList.remove('pinned'); }
     }
 };
 
@@ -197,6 +192,19 @@ window.updateUI = function() {
     checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
 
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
+};
+
+// FIX: HUD DE ENEMIGOS CREADO ACORDE A LAS NUEVAS CLASES CSS ESTRICTAS
+window.updateEntityHUD = function() {
+    if(!window.getEl('entity-hud')) return;
+    let html = '';
+    window.entities.forEach(ent => {
+        if (ent.hp < ent.maxHp && (Date.now() - (ent.lastHitTime || 0) < 3000) && ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window.canvas.width) {
+            let hpPercent = (ent.hp / ent.maxHp) * 100; let color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : '#ffaa00'));
+            html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
+        }
+    });
+    window.getEl('entity-hud').innerHTML = html;
 };
 
 window.bindCraft = function(id, fn) { const el = window.getEl(id); if(el) el.addEventListener('click', fn); };
