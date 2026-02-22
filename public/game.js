@@ -200,6 +200,21 @@ window.startGame = function(multiplayer, ip = null) {
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 window.addEventListener('blur', () => { if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; } if(window.player) window.player.isCharging = false; });
 
+window.addEventListener('keyup', (e) => {
+    if (!window.game || !window.game.isRunning) return;
+    let chatInput = window.getEl('chat-input');
+    if (chatInput && document.activeElement === chatInput) return;
+
+    if (e.key === 'a' || e.key === 'A') window.keys.a = false;
+    if (e.key === 'd' || e.key === 'D') window.keys.d = false;
+    if (e.key === 'Shift') window.keys.shift = false;
+    if (e.key === 'y' || e.key === 'Y') window.keys.y = false;
+    if (e.key === 'w' || e.key === 'W' || e.key === ' ') {
+        window.keys.jumpPressed = false;
+        window.player.jumpKeyReleased = true;
+    }
+});
+
 window.addEventListener('keydown', (e) => {
     if (!window.game || !window.game.isRunning) return;
     let chatContainer = window.getEl('chat-container'); let chatInput = window.getEl('chat-input');
