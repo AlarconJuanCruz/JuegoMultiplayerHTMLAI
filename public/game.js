@@ -262,7 +262,7 @@ window.addEventListener('keydown', (e) => {
 
 window.addEventListener('mousemove', (e) => {
     if(!window.canvas || !window.player || window.player.isDead) return;
-    const rect = window.canvas.getBoundingClientRect(); const scaleX = window.canvas.width / rect.width; const scaleY = window.canvas.height / rect.height;
+    const rect = window.canvas.getBoundingClientRect(); const scaleX = window._canvasLogicW / rect.width; const scaleY = window._canvasLogicH / rect.height;
     window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY; window.mouseWorldX = window.screenMouseX + window.camera.x; window.mouseWorldY = window.screenMouseY + window.camera.y;
     if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
 });
@@ -693,7 +693,7 @@ function update() {
         if (window.game.isRaining && isMasterClient && window.game.frameCount % 60 === 0) {
             window.trees.forEach(t => {
                 if (t.isStump && t.regrowthCount < 3 && t.grownDay !== window.game.days) {
-                    let isOffScreen = (t.x < window.camera.x - 300 || t.x > window.camera.x + window.canvas.width + 300);
+                    let isOffScreen = (t.x < window.camera.x - 300 || t.x > window.camera.x + window._canvasLogicW + 300);
                     if (isOffScreen && Math.random() < 0.2) {
                         t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount++; t.grownDay = window.game.days;
                         window.sendWorldUpdate('grow_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay });
@@ -779,9 +779,9 @@ function update() {
             }
         });
 
-        window.camera.x = window.player.x - (window.canvas.width / 2) + (window.player.width / 2);
-        if (window.camera.x < window.game.shoreX - window.canvas.width/2) window.camera.x = window.game.shoreX - window.canvas.width/2; 
-        if (window.player.x + (window.canvas.width / 2) > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
+        window.camera.x = window.player.x - (window._canvasLogicW / 2) + (window.player.width / 2);
+        if (window.camera.x < window.game.shoreX - window._canvasLogicW/2) window.camera.x = window.game.shoreX - window._canvasLogicW/2; 
+        if (window.player.x + (window._canvasLogicW / 2) > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
 
         for (let i = window.particles.length - 1; i >= 0; i--) {
             let p = window.particles[i]; p.x += p.vx; p.y += p.vy; p.vy += window.game.gravity * 0.4; p.life -= p.decay;

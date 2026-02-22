@@ -2,13 +2,23 @@
 
 window.useTool = function() {
     if (window.player.activeTool === 'hand') return;
-    window.player.toolHealth[window.player.activeTool]--;
-    if (window.player.toolHealth[window.player.activeTool] <= 0) {
-        window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[window.player.activeTool].name} Rota!`, '#ff4444');
-        
+    const tool = window.player.activeTool;
+    const maxDur = window.toolMaxDurability[tool];
+    if (!maxDur) return; // no tiene durabilidad (mano, ítems de mueble)
+    
+    // Si por alguna razón no está inicializada, inicializarla ahora
+    if (typeof window.player.toolHealth[tool] !== 'number' || isNaN(window.player.toolHealth[tool])) {
+        window.player.toolHealth[tool] = maxDur;
+    }
+    
+    window.player.toolHealth[tool]--;
+    
+    if(window.renderToolbar) window.renderToolbar();
+    
+    if (window.player.toolHealth[tool] <= 0) {
+        window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[tool].name} Rota!`, '#ff4444');
         window.player.toolbar[window.player.activeSlot] = null;
         window.selectToolbarSlot(0); 
-        
         if(window.updateUI) window.updateUI();
         if(window.renderToolbar) window.renderToolbar();
     }

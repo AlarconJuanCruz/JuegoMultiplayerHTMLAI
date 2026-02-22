@@ -211,12 +211,17 @@ window.renderToolbar = function() {
         if (itemId) {
             if (window.toolDefs[itemId]) {
                 let tool = window.toolDefs[itemId]; let durHTML = '';
-                if (itemId !== 'hand' && window.player.toolHealth[itemId] !== undefined) {
-                    let pct = (window.player.toolHealth[itemId] / window.toolMaxDurability[itemId]) * 100;
+                if (itemId !== 'hand' && window.toolMaxDurability[itemId] !== undefined) {
+                    const maxDur = window.toolMaxDurability[itemId];
+                    // Garantizar que toolHealth esté inicializado y sea válido
+                    if (typeof window.player.toolHealth[itemId] !== 'number' || isNaN(window.player.toolHealth[itemId])) {
+                        window.player.toolHealth[itemId] = maxDur;
+                    }
+                    let pct = Math.max(0, Math.min(100, (window.player.toolHealth[itemId] / maxDur) * 100));
                     let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
-                    durHTML = `<div class="tool-durability-bg" style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#222;"><div class="tool-durability-fill" style="height:100%; width: ${pct}%; background: ${color};"></div></div>`;
+                    durHTML = `<div style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#111;"><div style="height:100%; width:${pct.toFixed(1)}%; background:${color}; transition: width 0.2s;"></div></div>`;
                 }
-                content += `<div style="margin-top:10px;">${tool.name}</div>${durHTML}`;
+                content += `<div style="margin-top:10px; font-size:11px;">${tool.name}</div>${durHTML}`;
             } else if (window.itemDefs[itemId]) {
                 let def = window.itemDefs[itemId];
                 let count = window.player.inventory[itemId] || 0;

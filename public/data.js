@@ -4,14 +4,30 @@ window.getEl = function(id) { return document.getElementById(id); };
 
 window.canvas = document.getElementById('gameCanvas');
 window.ctx = window.canvas.getContext('2d');
+
+// Alta resolución (2x) para canvas nítido
+(function setupHiDPI() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const logicW = 1280, logicH = 720;
+    window.canvas.width  = logicW * dpr;
+    window.canvas.height = logicH * dpr;
+    window.canvas.style.width  = logicW + 'px';
+    window.canvas.style.height = logicH + 'px';
+    window.ctx.scale(dpr, dpr);
+    window._canvasLogicW = logicW;
+    window._canvasLogicH = logicH;
+    window._dpr = dpr;
+})();
+
 window.lightCanvas = document.createElement('canvas');
-window.lightCanvas.width = window.canvas.width;
+window.lightCanvas.width  = window.canvas.width;
 window.lightCanvas.height = window.canvas.height;
 window.lightCtx = window.lightCanvas.getContext('2d');
+window.lightCtx.scale(window._dpr, window._dpr);
 
 window.socket = null; window.otherPlayers = {}; 
 
-window.game = { gravity: 0.5, blockSize: 30, groundLevel: 660, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false, serverStartTime: 0 };
+window.game = { gravity: 0.5, blockSize: 30, groundLevel: 580, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false, serverStartTime: 0 };
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 

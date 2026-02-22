@@ -96,101 +96,397 @@ window.drawCharacter = function(charData, isLocal) {
 
 window.draw = function() {
     if (!window.ctx) return;
-    if (!window.game.isRunning) { window.ctx.fillStyle = '#050505'; window.ctx.fillRect(0, 0, window.canvas.width, window.canvas.height); return; }
+    const W = window._canvasLogicW || 1280;
+    const H = window._canvasLogicH || 720;
+    if (!window.game.isRunning) { window.ctx.fillStyle = '#050505'; window.ctx.fillRect(0, 0, W, H); return; }
 
     let currentUptime = window.game.serverStartTime ? (Date.now() - window.game.serverStartTime) : (window.game.frameCount * (1000/60));
     let totalFrames = Math.floor(currentUptime / (1000 / 60)) + 28800; 
     let hourFloat = (totalFrames / 3600) % 24; 
     let darkness = (Math.cos((hourFloat / 24) * Math.PI * 2) + 1) / 2;
-    
-    let r = Math.floor(135 - (130 * darkness)); let g = Math.floor(206 - (200 * darkness)); let b = Math.floor(235 - (215 * darkness)); 
-    if (window.game.isRaining) { r = Math.max(30, r - 60); g = Math.max(40, g - 60); b = Math.max(50, b - 40); }
-    
-    window.ctx.fillStyle = `rgb(${r},${g},${b})`; window.ctx.fillRect(0, 0, window.canvas.width, window.canvas.height);
+
+    // ── CIELO CON GRADIENTE ───────────────────────────────────────────────
+    let r = Math.floor(135 - (130 * darkness));
+    let g = Math.floor(206 - (200 * darkness));
+    let b = Math.floor(235 - (215 * darkness));
+    if (window.game.isRaining) { r = Math.max(28, r - 65); g = Math.max(38, g - 65); b = Math.max(50, b - 45); }
+
+    let skyGrad = window.ctx.createLinearGradient(0, 0, 0, window.game.groundLevel);
+    if (darkness < 0.3) {
+        // Día
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
+        skyGrad.addColorStop(0.5, `rgb(${Math.min(255,r+30)},${Math.min(255,g+20)},${Math.min(255,b+10)})`);
+        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+60)},${Math.min(255,g+45)},${Math.min(255,b+20)})`);
+    } else if (darkness < 0.6) {
+        // Amanecer/atardecer
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
+        skyGrad.addColorStop(0.4, `rgb(${Math.min(255,r+40)},${Math.min(255,g+25)},${Math.min(255,b-10)})`);
+        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+80)},${Math.min(255,g+50)},${Math.min(255,b)})`);
+    } else {
+        // Noche
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
+        skyGrad.addColorStop(1, `rgb(${Math.max(0,r+15)},${Math.max(0,g+10)},${Math.max(0,b+20)})`);
+    }
+    window.ctx.fillStyle = skyGrad;
+    window.ctx.fillRect(0, 0, W, H);
+
     window.ctx.save(); 
-    if (window.game.screenShake > 0) { let dx = (Math.random() - 0.5) * window.game.screenShake; let dy = (Math.random() - 0.5) * window.game.screenShake; window.ctx.translate(dx, dy); }
+    if (window.game.screenShake > 0) {
+        let dx = (Math.random() - 0.5) * window.game.screenShake;
+        let dy = (Math.random() - 0.5) * window.game.screenShake;
+        window.ctx.translate(dx, dy);
+    }
     
+    // ── ESTRELLAS ──────────────────────────────────────────────────────────
+    if (darkness > 0.45 && !window.game.isRaining) {
+        let starAlpha = Math.min(1, (darkness - 0.45) * 3);
+        window.stars.forEach(st => {
+            let twinkle = 0.5 + 0.5 * Math.sin(window.game.frameCount * 0.05 + st.x * 0.1);
+            window.ctx.globalAlpha = starAlpha * (0.6 + 0.4 * twinkle);
+            window.ctx.fillStyle = '#fff';
+            window.ctx.fillRect(st.x, st.y, st.s * 0.8, st.s * 0.8);
+        });
+        window.ctx.globalAlpha = 1;
+    }
+
+    // ── SOL ────────────────────────────────────────────────────────────────
     if (hourFloat > 5 && hourFloat < 19) {
-        let dayProgress = (hourFloat - 5) / 14; let sunX = window.canvas.width * dayProgress; let sunY = window.canvas.height * 0.8 - Math.sin(dayProgress * Math.PI) * (window.canvas.height * 0.7);
-        window.ctx.fillStyle = '#FFD700'; window.ctx.shadowColor = '#FF8C00'; window.ctx.shadowBlur = window.game.isRaining ? 10 : 50; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 45, 0, Math.PI*2); window.ctx.fill(); window.ctx.shadowBlur = 0;
+        let dayProgress = (hourFloat - 5) / 14;
+        let sunX = W * dayProgress;
+        let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7);
+        // Halo exterior
+        if (!window.game.isRaining) {
+            let haloGrad = window.ctx.createRadialGradient(sunX, sunY, 30, sunX, sunY, 120);
+            haloGrad.addColorStop(0, 'rgba(255,220,80,0.25)');
+            haloGrad.addColorStop(1, 'rgba(255,150,30,0)');
+            window.ctx.fillStyle = haloGrad;
+            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 120, 0, Math.PI*2); window.ctx.fill();
+        }
+        window.ctx.fillStyle = '#FFE566';
+        window.ctx.shadowColor = '#FF9500'; window.ctx.shadowBlur = window.game.isRaining ? 8 : 45;
+        window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill();
+        window.ctx.fillStyle = '#FFF5A0';
+        window.ctx.shadowBlur = 0;
+        window.ctx.beginPath(); window.ctx.arc(sunX - 6, sunY - 8, 28, 0, Math.PI*2); window.ctx.fill();
+        window.ctx.shadowBlur = 0;
     }
+
+    // ── LUNA ───────────────────────────────────────────────────────────────
     if (hourFloat >= 17 || hourFloat <= 7) {
-        let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14; let moonX = window.canvas.width * nightProgress; let moonY = window.canvas.height * 0.8 - Math.sin(nightProgress * Math.PI) * (window.canvas.height * 0.7);
-        window.ctx.fillStyle = '#F4F6F0'; window.ctx.shadowColor = '#FFF'; window.ctx.shadowBlur = window.game.isRaining ? 5 : 40; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 35, 0, Math.PI*2); window.ctx.fill();
-        window.ctx.fillStyle = 'rgba(0,0,0,0.1)'; window.ctx.beginPath(); window.ctx.arc(moonX - 10, moonY + 5, 8, 0, Math.PI*2); window.ctx.fill(); window.ctx.beginPath(); window.ctx.arc(moonX + 12, moonY - 8, 5, 0, Math.PI*2); window.ctx.fill(); window.ctx.beginPath(); window.ctx.arc(moonX + 2, moonY + 12, 6, 0, Math.PI*2); window.ctx.fill(); window.ctx.shadowBlur = 0;
+        let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14;
+        let moonX = W * nightProgress;
+        let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7);
+        window.ctx.fillStyle = '#E8EEE0';
+        window.ctx.shadowColor = '#CCDDFF'; window.ctx.shadowBlur = window.game.isRaining ? 4 : 30;
+        window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill();
+        // Cráteres
+        window.ctx.shadowBlur = 0;
+        window.ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        [[- 8, 6, 7], [11, -7, 5], [2, 11, 5], [-4, -10, 4]].forEach(([ox, oy, or]) => {
+            window.ctx.beginPath(); window.ctx.arc(moonX + ox, moonY + oy, or, 0, Math.PI*2); window.ctx.fill();
+        });
+        window.ctx.shadowBlur = 0;
     }
 
-    if (darkness > 0.5 && !window.game.isRaining) { window.ctx.fillStyle = `rgba(255, 255, 255, ${(darkness - 0.5) * 2})`; window.stars.forEach(st => { window.ctx.fillRect(st.x, st.y, st.s, st.s); }); }
-
+    // ── NUBES ──────────────────────────────────────────────────────────────
     window.clouds.forEach(c => {
-        c.x += c.v; if (c.x > window.canvas.width + 100) c.x = -100; window.ctx.fillStyle = window.game.isRaining ? `rgba(100,100,100,${0.9})` : `rgba(255,255,255,${0.6 * (1 - darkness)})`;
-        window.ctx.beginPath(); window.ctx.arc(c.x, c.y, 30*c.s, 0, Math.PI*2); window.ctx.arc(c.x + 25*c.s, c.y - 15*c.s, 35*c.s, 0, Math.PI*2); window.ctx.arc(c.x + 50*c.s, c.y, 25*c.s, 0, Math.PI*2); window.ctx.fill();
+        c.x += c.v; if (c.x > W + 150) c.x = -150;
+        let cloudAlpha = window.game.isRaining ? 0.75 : Math.max(0, 0.7 * (1 - darkness * 1.2));
+        if (cloudAlpha <= 0) return;
+        window.ctx.save();
+        window.ctx.globalAlpha = cloudAlpha;
+        // Sombra suave de la nube
+        window.ctx.fillStyle = window.game.isRaining ? 'rgba(70,80,100,0.6)' : 'rgba(200,215,240,0.4)';
+        window.ctx.beginPath();
+        window.ctx.arc(c.x + 2, c.y + 6, 28*c.s, 0, Math.PI*2);
+        window.ctx.arc(c.x + 27*c.s + 2, c.y - 13*c.s + 6, 33*c.s, 0, Math.PI*2);
+        window.ctx.arc(c.x + 52*c.s + 2, c.y + 6, 23*c.s, 0, Math.PI*2);
+        window.ctx.fill();
+        // Cuerpo principal
+        window.ctx.fillStyle = window.game.isRaining ? 'rgba(110,120,140,0.85)' : 'rgba(255,255,255,0.88)';
+        window.ctx.beginPath();
+        window.ctx.arc(c.x, c.y, 28*c.s, 0, Math.PI*2);
+        window.ctx.arc(c.x + 25*c.s, c.y - 14*c.s, 33*c.s, 0, Math.PI*2);
+        window.ctx.arc(c.x + 50*c.s, c.y, 23*c.s, 0, Math.PI*2);
+        window.ctx.fill();
+        // Brillo superior
+        if (!window.game.isRaining) {
+            window.ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            window.ctx.beginPath();
+            window.ctx.arc(c.x + 22*c.s, c.y - 18*c.s, 18*c.s, 0, Math.PI*2);
+            window.ctx.fill();
+        }
+        window.ctx.restore();
     });
 
-    let gradMountains = window.ctx.createLinearGradient(0, window.game.groundLevel - 200, 0, window.game.groundLevel);
-    gradMountains.addColorStop(0, `rgb(${Math.max(5, r-30)},${Math.max(5, g-30)},${Math.max(15, b-20)})`); gradMountains.addColorStop(1, `rgb(${Math.max(5, r-50)},${Math.max(5, g-50)},${Math.max(15, b-40)})`);
-    window.ctx.fillStyle = gradMountains; window.ctx.beginPath(); let mX = -(window.camera.x * 0.1) % 600; 
-    for(let i=0; i<5; i++) { window.ctx.moveTo(mX + i*600, window.game.groundLevel); window.ctx.lineTo(mX + i*600 + 300, window.game.groundLevel - 200); window.ctx.lineTo(mX + i*600 + 600, window.game.groundLevel); } window.ctx.fill();
+    // ── MONTAÑAS LEJANAS (parallax 0.05x) ─────────────────────────────────
+    let mCol1 = `rgb(${Math.max(5,r-50)},${Math.max(5,g-50)},${Math.max(15,b-30)})`;
+    let mCol2 = `rgb(${Math.max(5,r-35)},${Math.max(5,g-35)},${Math.max(15,b-18)})`;
+    window.ctx.fillStyle = mCol1;
+    window.ctx.beginPath();
+    let mX = -(window.camera.x * 0.05) % 900;
+    for (let i = -1; i < 5; i++) {
+        let bx = mX + i * 900;
+        window.ctx.moveTo(bx, window.game.groundLevel);
+        window.ctx.lineTo(bx + 120, window.game.groundLevel - 260);
+        window.ctx.lineTo(bx + 280, window.game.groundLevel - 210);
+        window.ctx.lineTo(bx + 420, window.game.groundLevel - 320);
+        window.ctx.lineTo(bx + 600, window.game.groundLevel - 180);
+        window.ctx.lineTo(bx + 750, window.game.groundLevel - 240);
+        window.ctx.lineTo(bx + 900, window.game.groundLevel);
+    }
+    window.ctx.fill();
+    // Nieve en picos
+    if (darkness < 0.7) {
+        window.ctx.fillStyle = `rgba(255,255,255,${0.25 * (1-darkness)})`;
+        window.ctx.beginPath();
+        for (let i = -1; i < 5; i++) {
+            let bx = mX + i * 900;
+            [[120,260,50],[420,320,60],[750,240,45]].forEach(([px, py, pw]) => {
+                window.ctx.moveTo(bx+px, window.game.groundLevel - py);
+                window.ctx.lineTo(bx+px-pw*0.5, window.game.groundLevel - py + pw*0.7);
+                window.ctx.lineTo(bx+px+pw*0.5, window.game.groundLevel - py + pw*0.7);
+            });
+        }
+        window.ctx.fill();
+    }
 
-    window.ctx.fillStyle = `rgb(${Math.max(5, r-60)},${Math.max(5, g-50)},${Math.max(15, b-30)})`; window.ctx.beginPath(); let hX = -(window.camera.x * 0.3) % 800; 
-    for(let i=0; i<4; i++) { window.ctx.moveTo(hX + i*800, window.game.groundLevel); window.ctx.quadraticCurveTo(hX + i*800 + 400, window.game.groundLevel - 150, hX + i*800 + 800, window.game.groundLevel); } window.ctx.fill();
+    // ── COLINAS MEDIAS (parallax 0.2x) ────────────────────────────────────
+    window.ctx.fillStyle = mCol2;
+    window.ctx.beginPath();
+    let hX = -(window.camera.x * 0.2) % 1000;
+    for (let i = -1; i < 4; i++) {
+        let bx = hX + i * 1000;
+        window.ctx.moveTo(bx, window.game.groundLevel);
+        window.ctx.bezierCurveTo(bx + 100, window.game.groundLevel - 80, bx + 200, window.game.groundLevel - 130, bx + 350, window.game.groundLevel - 100);
+        window.ctx.bezierCurveTo(bx + 500, window.game.groundLevel - 70, bx + 650, window.game.groundLevel - 160, bx + 800, window.game.groundLevel - 90);
+        window.ctx.bezierCurveTo(bx + 900, window.game.groundLevel - 50, bx + 950, window.game.groundLevel - 30, bx + 1000, window.game.groundLevel);
+    }
+    window.ctx.fill();
 
     window.ctx.translate(-window.camera.x, -window.camera.y);
 
-    window.ctx.fillStyle = '#557A27'; window.ctx.fillRect(Math.max(window.camera.x, window.game.shoreX), window.game.groundLevel, window.canvas.width, 10);
-    window.ctx.fillStyle = '#654321'; window.ctx.fillRect(Math.max(window.camera.x, window.game.shoreX), window.game.groundLevel + 10, window.canvas.width, window.canvas.height - window.game.groundLevel - 10);
+    // ── SUELO ──────────────────────────────────────────────────────────────
+    const gL = window.game.groundLevel;
+    const startX = Math.max(window.camera.x, window.game.shoreX);
+    const endX = window.camera.x + W + 100;
+
+    // Capa de hierba
+    let grassGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 16);
+    grassGrad.addColorStop(0, window.game.isRaining ? '#3d6b24' : '#528c2a');
+    grassGrad.addColorStop(1, window.game.isRaining ? '#2d5019' : '#3a6b1e');
+    window.ctx.fillStyle = grassGrad;
+    window.ctx.fillRect(startX, gL, endX - startX, 16);
+
+    // Tierra
+    let dirtGrad = window.ctx.createLinearGradient(0, gL + 16, 0, gL + 80);
+    dirtGrad.addColorStop(0, '#6b4226');
+    dirtGrad.addColorStop(0.4, '#5a3620');
+    dirtGrad.addColorStop(1, '#3d2412');
+    window.ctx.fillStyle = dirtGrad;
+    window.ctx.fillRect(startX, gL + 16, endX - startX, H - gL - 16);
+
+    // Detalles de tierra: líneas horizontales sutiles
+    window.ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    window.ctx.lineWidth = 1;
+    [30, 50, 75].forEach(dy => {
+        window.ctx.beginPath();
+        window.ctx.moveTo(startX, gL + dy);
+        window.ctx.lineTo(endX, gL + dy);
+        window.ctx.stroke();
+    });
+
+    // Piedritas decorativas en la hierba
+    if (darkness < 0.8) {
+        window.ctx.fillStyle = 'rgba(80,120,40,0.6)';
+        for (let px = startX - ((startX) % 80); px < endX; px += 80) {
+            let seed = Math.sin(px * 0.017) * 0.5 + 0.5;
+            let grassH = 4 + seed * 6;
+            window.ctx.fillRect(px + seed * 30, gL - grassH, 2, grassH);
+            window.ctx.fillRect(px + seed * 55, gL - grassH * 0.7, 2, grassH * 0.7);
+        }
+    }
     
+    // ── AGUA / ORILLA ──────────────────────────────────────────────────────
     if (window.camera.x < window.game.shoreX) {
-        window.ctx.fillStyle = '#E2D2A0'; window.ctx.fillRect(window.game.shoreX - 60, window.game.groundLevel, 60, window.canvas.height - window.game.groundLevel);
-        let waveOffset = Math.sin(window.game.frameCount * 0.03) * 5;
-        window.ctx.fillStyle = '#0a5c8a'; window.ctx.fillRect(window.camera.x, window.game.groundLevel + 15, window.game.shoreX - 60 - window.camera.x, window.canvas.height - window.game.groundLevel - 15);
-        window.ctx.fillStyle = '#1ca3ec'; window.ctx.fillRect(window.camera.x, window.game.groundLevel + 5 + waveOffset, window.game.shoreX - 60 - window.camera.x, 15 - waveOffset);
+        window.ctx.fillStyle = '#C8B878';
+        window.ctx.fillRect(window.game.shoreX - 70, gL, 70, H - gL);
+        // Olas
+        let waveOffset = Math.sin(window.game.frameCount * 0.04) * 6;
+        let waterGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 60);
+        waterGrad.addColorStop(0, '#1a8fc0');
+        waterGrad.addColorStop(1, '#0a5c8a');
+        window.ctx.fillStyle = waterGrad;
+        window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H - gL);
+        window.ctx.fillStyle = 'rgba(100,200,255,0.4)';
+        window.ctx.fillRect(window.camera.x, gL + 6 + waveOffset, window.game.shoreX - 70 - window.camera.x, 12);
+        // Espuma
+        window.ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
     }
 
     window.rocks.forEach(r => {
-        if (r.x + r.width > window.camera.x && r.x < window.camera.x + window.canvas.width) {
+        if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
             window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath(); window.ctx.moveTo(r.x, r.y + r.height); window.ctx.lineTo(r.x + r.width * 0.2, r.y); window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5); window.ctx.lineTo(r.x + r.width, r.y + r.height); window.ctx.fill();
             if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(r.x, r.y - 10, r.width, 4); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(r.x+1, r.y - 9, (r.hp / r.maxHp) * (r.width-2), 2); }
         }
     });
 
     window.trees.forEach(t => {
-        if (t.x + t.width > window.camera.x && t.x < window.camera.x + window.canvas.width) {
-            let isHitColor = t.isHit ? '#ff4444' : null; window.ctx.save(); window.ctx.translate(t.x + t.width/2, t.y + t.height); 
-            let hw = t.width / 2; let th = t.height; 
-            
+        if (t.x + t.width > window.camera.x && t.x < window.camera.x + window._canvasLogicW) {
+            let isHitColor = t.isHit ? '#ff4444' : null;
+            window.ctx.save();
+            window.ctx.translate(t.x + t.width/2, t.y + t.height);
+            let hw = t.width / 2; let th = t.height;
+
             if (t.isStump) {
-                let stumpH = 15 + t.width * 0.2; let trunkGrad = window.ctx.createLinearGradient(-hw, 0, hw, 0); 
-                trunkGrad.addColorStop(0, '#3E2723'); trunkGrad.addColorStop(1, '#5D4037');
-                window.ctx.fillStyle = isHitColor || trunkGrad; window.ctx.fillRect(-hw*0.6, -stumpH, hw*1.2, stumpH);
-                window.ctx.fillStyle = isHitColor || '#D2B48C'; window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.6, 3, 0, 0, Math.PI*2); window.ctx.fill();
-                window.ctx.restore(); return; 
+                let stumpH = 15 + t.width * 0.22;
+                // Sombra
+                window.ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                window.ctx.beginPath(); window.ctx.ellipse(4, 2, hw*0.7, 4, 0, 0, Math.PI*2); window.ctx.fill();
+                // Tronco
+                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
+                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.4, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
+                window.ctx.fillStyle = isHitColor || trunkGrad;
+                window.ctx.fillRect(-hw*0.6, -stumpH, hw*1.2, stumpH);
+                // Tapa del tocón
+                window.ctx.fillStyle = isHitColor || '#c8a882';
+                window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.62, 4, 0, 0, Math.PI*2); window.ctx.fill();
+                // Anillos del tronco
+                if (!isHitColor) {
+                    window.ctx.strokeStyle = 'rgba(80,40,10,0.4)'; window.ctx.lineWidth = 0.8;
+                    [0.3, 0.55].forEach(s => { window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.62*s, 3*s, 0, 0, Math.PI*2); window.ctx.stroke(); });
+                }
+                window.ctx.restore(); return;
             }
-            
-            if (t.type === 0) { 
-                let trunkGrad = window.ctx.createLinearGradient(-hw, 0, hw, 0); trunkGrad.addColorStop(0, '#3E2723'); trunkGrad.addColorStop(1, '#5D4037');
-                window.ctx.fillStyle = isHitColor || trunkGrad; window.ctx.fillRect(-hw*0.6, -th, hw*1.2, th); 
-                window.ctx.fillStyle = isHitColor || '#388E3C'; window.ctx.beginPath(); window.ctx.arc(0, -th*0.8, t.width*1.4, 0, Math.PI*2); window.ctx.arc(-t.width*0.8, -th*0.5, t.width*1.1, 0, Math.PI*2); window.ctx.arc(t.width*0.8, -th*0.5, t.width*1.1, 0, Math.PI*2); window.ctx.fill();
-                window.ctx.fillStyle = isHitColor || '#4CAF50'; window.ctx.beginPath(); window.ctx.arc(0, -th*0.9, t.width*1.1, 0, Math.PI*2); window.ctx.arc(-t.width*0.4, -th*0.6, t.width*0.9, 0, Math.PI*2); window.ctx.fill();
-            } else if (t.type === 1) { 
-                window.ctx.fillStyle = isHitColor || '#3E2723'; window.ctx.fillRect(-hw*0.5, -th*0.7, hw*1.0, th*0.7);
-                window.ctx.fillStyle = isHitColor || '#1B5E20'; 
-                let leafH = th * 0.8; let stepY = leafH / 5;
-                for(let i=0; i<5; i++) { window.ctx.beginPath(); window.ctx.moveTo(0, -th - 15 + (i*stepY)); window.ctx.lineTo(-t.width*1.5 + (i*6), -th - 15 + stepY*1.6 + (i*stepY)); window.ctx.lineTo(t.width*1.5 - (i*6), -th - 15 + stepY*1.6 + (i*stepY)); window.ctx.fill(); }
-            } else if (t.type === 2) { 
-                window.ctx.fillStyle = isHitColor || '#D7CCC8'; window.ctx.fillRect(-hw*0.6, -th, hw*1.2, th);
-                if(!t.isHit) { window.ctx.fillStyle = '#4E342E'; window.ctx.fillRect(-hw*0.6, -th*0.7, t.width*0.4, 3); window.ctx.fillRect(hw*0.2, -th*0.4, t.width*0.3, 4); }
-                window.ctx.fillStyle = isHitColor || '#8BC34A'; window.ctx.beginPath(); window.ctx.arc(0, -th*0.9, t.width*1.2, 0, Math.PI*2); window.ctx.fill(); 
-                window.ctx.beginPath(); window.ctx.arc(-t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.arc(t.width*0.7, -th*0.6, t.width*1.0, 0, Math.PI*2); window.ctx.fill();
+
+            // Sombra en el suelo
+            window.ctx.fillStyle = 'rgba(0,0,0,0.12)';
+            window.ctx.beginPath(); window.ctx.ellipse(2, 0, hw * 1.3, 6, 0, 0, Math.PI*2); window.ctx.fill();
+
+            if (t.type === 0) {
+                // Árbol redondeado (roble)
+                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
+                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.45, '#6D4C41'); trunkGrad.addColorStop(1, '#3E2723');
+                window.ctx.fillStyle = isHitColor || trunkGrad;
+                window.ctx.beginPath();
+                window.ctx.roundRect(-hw*0.55, -th, hw*1.1, th, [hw*0.2, hw*0.2, 0, 0]);
+                window.ctx.fill();
+
+                // Follaje - capa oscura (sombra)
+                window.ctx.fillStyle = isHitColor || '#1B5E20';
+                window.ctx.beginPath();
+                window.ctx.arc(3, -th*0.78, t.width*1.38, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.78, -th*0.52, t.width*1.1, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.82, -th*0.52, t.width*1.1, 0, Math.PI*2);
+                window.ctx.fill();
+
+                // Capa media
+                window.ctx.fillStyle = isHitColor || '#388E3C';
+                window.ctx.beginPath();
+                window.ctx.arc(0, -th*0.82, t.width*1.25, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.65, -th*0.58, t.width*0.95, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.65, -th*0.58, t.width*0.95, 0, Math.PI*2);
+                window.ctx.fill();
+
+                // Capa clara (luz)
+                window.ctx.fillStyle = isHitColor || '#4CAF50';
+                window.ctx.beginPath();
+                window.ctx.arc(-t.width*0.2, -th*0.9, t.width*0.95, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.5, -th*0.65, t.width*0.75, 0, Math.PI*2);
+                window.ctx.fill();
+
+                // Brillo especular
+                if (!isHitColor) {
+                    window.ctx.fillStyle = 'rgba(160,230,120,0.18)';
+                    window.ctx.beginPath();
+                    window.ctx.arc(-t.width*0.25, -th*0.95, t.width*0.55, 0, Math.PI*2);
+                    window.ctx.fill();
+                }
+
+            } else if (t.type === 1) {
+                // Pino / conífera
+                let trunkGrad = window.ctx.createLinearGradient(-hw*0.5, 0, hw*0.5, 0);
+                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.5, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
+                window.ctx.fillStyle = isHitColor || trunkGrad;
+                window.ctx.fillRect(-hw*0.45, -th*0.72, hw*0.9, th*0.72);
+
+                let leafH = th * 0.82;
+                let stepY = leafH / 5;
+                for (let i = 0; i < 5; i++) {
+                    let layerW = t.width * 1.6 - i * 8;
+                    let baseY = -th - 12 + i * stepY;
+                    // Sombra de cada capa
+                    window.ctx.fillStyle = isHitColor || '#1B5E20';
+                    window.ctx.beginPath();
+                    window.ctx.moveTo(2, baseY);
+                    window.ctx.lineTo(-layerW + 2, baseY + stepY * 1.55);
+                    window.ctx.lineTo(layerW + 2, baseY + stepY * 1.55);
+                    window.ctx.fill();
+                    // Capa principal
+                    window.ctx.fillStyle = isHitColor || (i % 2 === 0 ? '#2E7D32' : '#388E3C');
+                    window.ctx.beginPath();
+                    window.ctx.moveTo(0, baseY);
+                    window.ctx.lineTo(-layerW, baseY + stepY * 1.55);
+                    window.ctx.lineTo(layerW, baseY + stepY * 1.55);
+                    window.ctx.fill();
+                    // Brillo izquierdo
+                    if (!isHitColor) {
+                        window.ctx.fillStyle = 'rgba(120,200,100,0.15)';
+                        window.ctx.beginPath();
+                        window.ctx.moveTo(-layerW * 0.05, baseY + 2);
+                        window.ctx.lineTo(-layerW * 0.65, baseY + stepY * 1.3);
+                        window.ctx.lineTo(-layerW * 0.05, baseY + stepY * 1.0);
+                        window.ctx.fill();
+                    }
+                }
+
+            } else if (t.type === 2) {
+                // Abedul / árbol blanco
+                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
+                trunkGrad.addColorStop(0, '#bdbdbd'); trunkGrad.addColorStop(0.4, '#eeeeee'); trunkGrad.addColorStop(1, '#9e9e9e');
+                window.ctx.fillStyle = isHitColor || trunkGrad;
+                window.ctx.beginPath();
+                window.ctx.roundRect(-hw*0.55, -th, hw*1.1, th, [hw*0.2, hw*0.2, 0, 0]);
+                window.ctx.fill();
+
+                // Marcas negras del abedul
+                if (!isHitColor) {
+                    window.ctx.fillStyle = '#3E2723';
+                    [[-hw*0.5, -th*0.65, t.width*0.45, 3], [hw*0.1, -th*0.4, t.width*0.35, 4], [-hw*0.3, -th*0.25, t.width*0.3, 2.5]].forEach(([bx,by,bw,bh]) => {
+                        window.ctx.fillRect(bx, by, bw, bh);
+                    });
+                }
+
+                // Follaje - verde claro característico
+                window.ctx.fillStyle = isHitColor || '#558B2F';
+                window.ctx.beginPath();
+                window.ctx.arc(0, -th*0.88, t.width*1.25, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.72, -th*0.62, t.width*1.05, 0, Math.PI*2);
+                window.ctx.arc(t.width*0.72, -th*0.62, t.width*1.05, 0, Math.PI*2);
+                window.ctx.fill();
+                window.ctx.fillStyle = isHitColor || '#8BC34A';
+                window.ctx.beginPath();
+                window.ctx.arc(-t.width*0.18, -th*0.92, t.width*0.88, 0, Math.PI*2);
+                window.ctx.arc(-t.width*0.5, -th*0.68, t.width*0.72, 0, Math.PI*2);
+                window.ctx.fill();
+                if (!isHitColor) {
+                    window.ctx.fillStyle = 'rgba(180,255,120,0.15)';
+                    window.ctx.beginPath(); window.ctx.arc(-t.width*0.22, -th*0.97, t.width*0.5, 0, Math.PI*2); window.ctx.fill();
+                }
             }
-            
-            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) { window.ctx.fillStyle = 'black'; window.ctx.fillRect(-hw-5, -th - 20, t.width + 10, 6); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 19, (t.hp / t.maxHp) * (t.width + 8), 4); }
+
+            // Barra de vida
+            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) {
+                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, -th - 22, t.width + 10, 7);
+                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 21, (t.hp / t.maxHp) * (t.width + 8), 5);
+            }
             window.ctx.restore();
         }
     });
 
     window.blocks.forEach(b => {
-        if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + window.canvas.width) {
+        if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + window._canvasLogicW) {
             if (b.type === 'block') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
                 window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
@@ -218,21 +514,21 @@ window.draw = function() {
     });
 
     window.droppedItems.forEach(item => {
-        if (item.x + 20 > window.camera.x && item.x < window.camera.x + window.canvas.width) {
+        if (item.x + 20 > window.camera.x && item.x < window.camera.x + window._canvasLogicW) {
             window.ctx.fillStyle = window.itemDefs[item.type] ? window.itemDefs[item.type].color : '#fff'; let s = window.itemDefs[item.type] ? window.itemDefs[item.type].size : 10; let floatOffset = Math.sin(item.life) * 3; window.ctx.fillRect(item.x, item.y + floatOffset, s, s);
         }
     });
 
     if (window.game.isMultiplayer) {
         Object.values(window.otherPlayers).forEach(p => { 
-            if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + window.canvas.width + 50) { window.drawCharacter(p, false); }
+            if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + window._canvasLogicW + 50) { window.drawCharacter(p, false); }
         });
     }
 
     if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
     window.entities.forEach(ent => {
-        if (ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window.canvas.width) {
+        if (ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window._canvasLogicW) {
             if (ent.type === 'chicken') {
                 window.ctx.fillStyle = ent.isHit ? '#ff4444' : '#fff'; window.ctx.fillRect(ent.x, ent.y, ent.width, ent.height);
                 if(!ent.isHit) { window.ctx.fillStyle = '#ff0000'; window.ctx.fillRect(ent.x + (ent.vx > 0 ? ent.width : -4), ent.y, 4, 6); }
@@ -293,7 +589,7 @@ window.draw = function() {
     }
 
     window.projectiles.forEach(pr => {
-        if (pr.x + 20 > window.camera.x && pr.x - 20 < window.camera.x + window.canvas.width) {
+        if (pr.x + 20 > window.camera.x && pr.x - 20 < window.camera.x + window._canvasLogicW) {
             window.ctx.save(); window.ctx.translate(pr.x, pr.y); window.ctx.rotate(pr.angle);
             if (pr.isEnemy) { window.ctx.fillStyle = '#ff4444'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#000'; window.ctx.fillRect(5, -2, 4, 4); } 
             else { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(5, -2, 4, 4); window.ctx.fillStyle = '#fff'; window.ctx.fillRect(-17, -2, 4, 4); }
@@ -307,17 +603,17 @@ window.draw = function() {
 
     if (window.game.isRaining) {
         window.ctx.save(); window.ctx.strokeStyle = 'rgba(150, 180, 220, 0.5)'; window.ctx.lineWidth = 1; window.ctx.beginPath();
-        for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window.canvas.width; let ry = (i * 93 + window.game.frameCount * 25) % window.canvas.height; window.ctx.moveTo(window.camera.x + rx, window.camera.y + ry); window.ctx.lineTo(window.camera.x + rx - 3, window.camera.y + ry + 25); }
+        for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window._canvasLogicW; let ry = (i * 93 + window.game.frameCount * 25) % window._canvasLogicH; window.ctx.moveTo(window.camera.x + rx, window.camera.y + ry); window.ctx.lineTo(window.camera.x + rx - 3, window.camera.y + ry + 25); }
         window.ctx.stroke(); window.ctx.restore();
-        if (Math.random() < 0.005) { window.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; window.ctx.fillRect(window.camera.x, window.camera.y, window.canvas.width, window.canvas.height); }
+        if (Math.random() < 0.005) { window.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; window.ctx.fillRect(window.camera.x, window.camera.y, window._canvasLogicW, window._canvasLogicH); }
     }
 
     window.ctx.restore(); 
 
     if (window.lightCtx) {
-        window.lightCtx.clearRect(0, 0, window.canvas.width, window.canvas.height);
+        window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         let ambientDarkness = 0.2 + (0.75 * darkness); 
-        window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window.canvas.width, window.canvas.height);
+        window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         
         window.lightCtx.globalCompositeOperation = 'destination-out';
         
@@ -348,7 +644,7 @@ window.draw = function() {
             }
         });
         window.lightCtx.globalCompositeOperation = 'source-over'; 
-        window.ctx.drawImage(window.lightCanvas, 0, 0);
+        window.ctx.drawImage(window.lightCanvas, 0, 0, window._canvasLogicW, window._canvasLogicH);
     }
 
     window.ctx.save(); window.ctx.translate(-window.camera.x, -window.camera.y);
