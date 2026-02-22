@@ -31,7 +31,7 @@ window.destroyBlockLocally = function(b) {
         window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if(dBox) dBox.classList.remove('open'); 
     }
     
-    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : 'wood')); 
+    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : 'wood'))); 
     let refundAmt = b.type === 'door' ? 2 : 1;
     if (b.type !== 'grave') { 
         let ni = { id: Math.random().toString(36).substring(2,9), x:b.x+15, y:b.y+15, vx:0, vy:-2, type:refundType, amount:refundAmt, life:1.0}; 
@@ -63,7 +63,7 @@ window.destroyBlockLocally = function(b) {
 
     let toBreak = [];
     for (let obj of window.blocks) {
-        if (['door', 'campfire', 'box', 'bed'].includes(obj.type)) {
+        if (['door', 'campfire', 'box', 'bed', 'barricade'].includes(obj.type)) {
             let objH = obj.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
             if (obj.x === b.x && obj.y + objH === b.y) {
                 toBreak.push(obj);
@@ -83,7 +83,6 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     let isItem = !isStructure;
     let isDoor = isStructure && h > window.game.blockSize;
 
-    // REGLA ESTRICTA DE SOPORTE PARA OBJETOS/PUERTAS
     if (isItem || isDoor) {
         let supported = false;
         if (Math.abs((y + h) - window.game.groundLevel) < 1) {
@@ -112,7 +111,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
             if ((Math.abs(x - (b.x - window.game.blockSize)) < 1 || Math.abs(x - (b.x + window.game.blockSize)) < 1) && (y < b.y + bh && y + h > b.y)) return false;
         }
 
-        if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave')) {
+        if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade')) {
             if (Math.abs(b.x - x) < window.game.blockSize && Math.abs(b.y - (y + h)) < 1) {
                 return false; 
             }
@@ -126,7 +125,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
 
 window.isOverlappingSolidBlock = function() {
     for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) return true;
     } return false;
@@ -141,7 +140,7 @@ window.isAdjacentToBlockOrGround = function(x, y, w, h) {
 window.checkBlockCollisions = function(axis) {
     if (window.player.inBackground) return;
     for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') { if (window.player.vx > 0) window.player.x = b.x - window.player.width - 0.05; else if (window.player.vx < 0) window.player.x = b.x + window.game.blockSize + 0.05; window.player.vx = 0; } 
@@ -154,7 +153,7 @@ window.checkEntityCollisions = function(ent, axis) {
     let hitWall = false;
     for (let i = window.blocks.length - 1; i >= 0; i--) {
         let b = window.blocks[i];
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') {
@@ -364,9 +363,6 @@ window.addEventListener('keydown', (e) => {
     }
 
     if (window.player.isDead) return; 
-    
-    // NOTA: No podemos hacer return aquí si tiene placementMode, o no podrá moverse.
-    // Simplemente evitamos usar inventario, y update() se encarga de frenarlo.
 
     if (!window.keys) window.keys = {};
     if (e.key === 'a' || e.key === 'A') window.keys.a = true; 
@@ -439,10 +435,10 @@ window.addEventListener('mousedown', (e) => {
             const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
             
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
-                let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : 'campfire');
+                let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : (window.player.placementMode === 'barricade_item' ? 'barricade' : 'campfire'));
                 
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
-                    let newB = { x: gridX, y: gridY, type: type, hp: 200, maxHp: 200, isHit: false };
+                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : 200, maxHp: type === 'barricade' ? 150 : 200, isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') {
@@ -488,11 +484,11 @@ window.addEventListener('mousedown', (e) => {
                     ent.hp -= entityDmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
                     let _dmgOx=(Math.random()-0.5)*16, _dmgOy=Math.random()*8;
                     window.spawnDamageText(ent.x+ent.width/2+_dmgOx, ent.y-5-_dmgOy, `-${entityDmg}`, 'melee');
-                    // Knockback mínimo: leve tropiezo, sin salto exagerado
+                    // Knockback mejorado con salto
                     let _kd = (ent.x+ent.width/2 > pCX) ? 1 : -1;
-                    ent.vx = _kd * 2.2;   // empujón lateral suave
-                    ent.vy = -1.2;         // salto mínimo (casi nada)
-                    ent.knockbackFrames = 8;
+                    ent.vx = _kd * 3.5;
+                    ent.vy = -5.0; // Salto más notable
+                    ent.knockbackFrames = 10;
                     window.player.meleeCooldown = 18;
                     
                     if (ent.hp <= 0) { 
@@ -631,7 +627,6 @@ function update() {
         if (!window.game || !window.game.isRunning) return;
         if (!window.canvas || !window.player) return;
 
-        // SE DEFINE AL PRINCIPIO PARA EVITAR ERRORES DE LECTURA (El bug que te congelaba)
         let pCX = window.player.x + window.player.width/2; 
         let pCY = window.player.y + window.player.height/2;
 
@@ -685,10 +680,10 @@ function update() {
         if (!window.player.isDead && !window.player.wantsBackground) { if (!window.isOverlappingSolidBlock()) window.player.inBackground = false; } 
         else if (!window.player.isDead) { window.player.inBackground = true; }
 
-        if (window.player.placementMode && !window.player.isDead) {
-            window.player.vx = 0; let pO = window.getEl('placement-overlay'); if(pO) pO.style.display = 'block';
-        } else if (!window.player.isDead) {
-            let pO = window.getEl('placement-overlay'); if(pO) pO.style.display = 'none';
+        if (!window.player.isDead) {
+            let pO = window.getEl('placement-overlay'); 
+            if (window.player.placementMode) { if(pO) pO.style.display = 'block'; } else { if(pO) pO.style.display = 'none'; }
+            
             const accel = window.player.isGrounded ? 0.6 : 0.4; const fric = window.player.isGrounded ? 0.8 : 0.95; 
             if (window.keys && window.keys.a) window.player.vx -= accel; 
             if (window.keys && window.keys.d) window.player.vx += accel;
@@ -760,6 +755,20 @@ function update() {
 
                 if (b.burnTime <= 0) { if (b.wood > 0) { b.wood--; b.burnTime = 1800; } else { b.isBurning = false; } if (window.currentCampfire === b && typeof window.renderCampfireUI==='function') window.renderCampfireUI(); }
             }
+            if (b.type === 'barricade') {
+                window.entities.forEach(ent => {
+                    if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, window.game.blockSize)) {
+                        if (window.game.frameCount % 30 === 0) {
+                            ent.hp -= 5; b.hp -= 10;
+                            window.setHit(ent); window.setHit(b);
+                            window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
+                            window.spawnParticles(b.x + 15, b.y + 15, '#bdc3c7', 3);
+                            if (b.hp <= 0) { window.destroyBlockLocally(b); }
+                            else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 10 }); }
+                        }
+                    }
+                });
+            }
         });
 
         let anyItemHovered = false;
@@ -787,7 +796,7 @@ function update() {
                 item.vy += window.game.gravity * 0.5; item.x += item.vx; item.y += item.vy; item.vx *= 0.95; 
                 if (item.y + s >= window.game.groundLevel) { item.y = window.game.groundLevel - s; item.vy *= -0.5; item.vx *= 0.8; }
                 for (let b of window.blocks) {
-                    if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed') continue; let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
+                    if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'barricade') continue; let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
                     if (window.checkRectIntersection(item.x, item.y, s, s, b.x, b.y, window.game.blockSize, itemHeight)) { if (item.vy > 0 && item.y + s - item.vy <= b.y) { item.y = b.y - s; item.vy *= -0.5; item.vx *= 0.8; } }
                 }
                 if (d < 60 && !window.player.isDead) { anyItemHovered = true; window.player.nearbyItem = item; }
@@ -819,7 +828,7 @@ function update() {
             let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
             if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { window.spawnParticles(pr.x, pr.y, '#557A27', 3); window.projectiles.splice(i, 1); continue; } 
             let hitBlock = false;
-            for(let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire') { hitBlock = true; break; } }
+            for(let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire' && b.type !== 'barricade') { hitBlock = true; break; } }
             if(hitBlock) { window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); window.projectiles.splice(i,1); continue; }
             
             if (pr.isEnemy) {
@@ -833,7 +842,10 @@ function update() {
                     let _aOx=(Math.random()-0.5)*16, _aOy=Math.random()*8;
                     window.spawnDamageText(ent.x+ent.width/2+_aOx, ent.y-_aOy, "-"+Math.floor(pr.damage), 'melee');
                     window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
-                    let _akd=pr.vx>0?1:-1; ent.vx=_akd*1.5; ent.vy=-0.8; ent.knockbackFrames=6;
+                    let _akd=pr.vx>0?1:-1; 
+                    ent.vx=_akd*2.0; 
+                    ent.vy=-4.5; // Salto
+                    ent.knockbackFrames=8;
                     if(ent.hp <= 0) {
                             window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
                             window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
@@ -897,7 +909,21 @@ function update() {
         let isHoldingTorch = window.player.activeTool === 'torch' && !window.player.inBackground && !window.player.isDead;
 
         window.entities.forEach((ent, i) => {
-            // Gestión de knockback y enraizamiento
+            // Manejo global de muertes por barricada u otros DoT
+            if (ent.hp <= 0) {
+                window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
+                window.spawnParticles(ent.x, ent.y, '#ff4444', 15); 
+                if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); }
+                else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); }
+                else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); }
+                else if (ent.type === 'archer') { 
+                    let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); 
+                    let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(40 * ent.level); 
+                }
+                window.entities.splice(i, 1); if(window.updateUI) window.updateUI();
+                return;
+            }
+
             if ((ent.knockbackFrames||0) > 0) {
                 ent.knockbackFrames--;
                 if (ent.knockbackFrames === 0) ent.enragedFrames = 160;
@@ -926,10 +952,6 @@ function update() {
             if (isDay && ent.type === 'zombie') {
                 if (window.game.frameCount % 30 === 0) {
                     ent.hp -= 5; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ffa500', 5); window.spawnDamageText(ent.x, ent.y, "-5", '#ffa500');
-                    if (ent.hp <= 0) { 
-                        window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
-                        window.spawnParticles(ent.x, ent.y, '#ff4444', 15); let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(40 * ent.level); window.entities.splice(i, 1); return; 
-                    }
                 }
             }
 
@@ -946,7 +968,6 @@ function update() {
                     ent.vx = (ent.x > targetCX) ? 1.5 : -1.5;
                     ent.ignorePlayer = 60; 
                 } else if ((ent.knockbackFrames||0) > 0) {
-                    // física controla durante KB, no sobreescribir vx
                 } else if (minDist < aggroRange && ent.ignorePlayer <= 0) {
                     let _bs = ent.type === 'zombie' ? 0.4 : 0.8;
                     _bs *= ((ent.enragedFrames||0) > 0 ? 1.6 : 1.0);
@@ -963,15 +984,27 @@ function update() {
                 let aggroRange = (isNight && !targetPlayer.isStealth) ? 1000 : 800; 
                 if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
                     let dirX = targetPlayer.x > ent.x ? 1 : -1;
-                    if (minDist > 600) ent.vx = dirX * 0.5; else if (minDist < 400) ent.vx = -dirX * 0.8; else ent.vx = 0;
-                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { ent.stuckFrames++; if (ent.stuckFrames > 60) { ent.ignorePlayer = 180; ent.vx = -dirX * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
-                    if (ent.attackCooldown <= 0 && minDist < 950) {
+                    
+                    if (minDist > 500) ent.vx = dirX * 0.9;
+                    else if (minDist < 250) ent.vx = -dirX * 1.1; 
+                    else ent.vx = 0; 
+                    
+                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { 
+                        ent.stuckFrames++; 
+                        if (ent.stuckFrames > 30) { 
+                             ent.vy = -6;
+                             ent.ignorePlayer = 60;
+                             ent.stuckFrames = 0; 
+                        } 
+                    } else ent.stuckFrames = 0;
+
+                    if (ent.attackCooldown <= 0 && minDist < 550) {
                         let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
-                        let arrowSpeed = 9; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
+                        let arrowSpeed = 11; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
                         let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
                         let angle = Math.atan2(vy, vx); let errorMargin = Math.max(0, 0.2 - (ent.level * 0.02)); angle += (Math.random() - 0.5) * errorMargin;
                         window.projectiles.push({ x: ent.x + ent.width/2, y: ent.y + ent.height/2, vx: Math.cos(angle)*arrowSpeed, vy: Math.sin(angle)*arrowSpeed, life: 250, damage: ent.damage, isEnemy: true });
-                        ent.attackCooldown = Math.max(180, 350 - (ent.level * 10)); 
+                        ent.attackCooldown = Math.max(120, 250 - (ent.level * 10)); 
                     }
                 } else { if(Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.6 : -0.6); }
                 if (ent.attackCooldown > 0) ent.attackCooldown--;
