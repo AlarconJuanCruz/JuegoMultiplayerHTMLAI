@@ -15,52 +15,13 @@
         .custom-tooltip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.9); color: #FFD700; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap; z-index: 100; pointer-events: none; border: 1px solid rgba(255, 255, 255, 0.2); }
         .inv-amount { position: absolute; bottom: 2px; right: 4px; font-size: 0.7rem; font-weight: bold; color: white; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
         
-        #ui-layer { position: absolute !important; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
-        #ui-layer > * { pointer-events: auto; } 
-
-        /* FIX: CINTURÓN - PEGADO ABAJO AL CENTRO */
-        #toolbar { 
-            position: absolute !important; 
-            top: auto !important; 
-            bottom: 2px !important; /* BIEN ABAJO */
-            left: 50% !important; 
-            transform: translateX(-50%) !important; 
-            display: flex !important; 
-            flex-direction: row !important; 
-            gap: 10px; 
-            z-index: 1000 !important; 
-        }
-
-        /* FIX: CHAT GLOBAL - MÁS ABAJO PARA NO TAPAR BARRAS */
-        #global-chat-log { 
-            position: absolute !important; 
-            top: 180px !important; /* DEBAJO DE LAS BARRAS */
-            right: 20px !important; 
-            left: auto !important; 
-            bottom: auto !important; 
-            width: 350px !important; 
-            display: flex; flex-direction: column; gap: 5px; 
-            pointer-events: none; z-index: 1500 !important; 
-            align-items: flex-end; text-align: right; 
-        }
         .log-msg { background: rgba(0,0,0,0.6); font-size: 0.85rem; font-weight: 500; padding: 6px 10px; border-radius: 6px; color: white; text-shadow: 1px 1px 0 #000; transition: opacity 0.5s ease-out; opacity: 1; border-right: 3px solid #fff;}
         .log-msg.fade-out { opacity: 0; pointer-events: none; }
         #global-chat-log.pinned { background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; pointer-events: auto; max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); }
         #global-chat-log.pinned .log-msg.fade-out { opacity: 0.9 !important; }
         #global-chat-log.pinned::-webkit-scrollbar { width: 5px; }
         #global-chat-log.pinned::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-
-        /* BARRAS ENEMIGOS - ARRIBA A LA IZQUIERDA */
-        #entity-hud { 
-            position: absolute !important; 
-            top: 140px !important; 
-            left: 20px !important; 
-            right: auto !important; 
-            bottom: auto !important; 
-            display: flex !important; 
-            flex-direction: column; 
-            gap: 8px; pointer-events: none; z-index: 1000 !important; 
-        }
+        
         .entity-bar-container { background: rgba(0,0,0,0.8); padding: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .entity-info { color: white; font-size: 12px; display: flex; justify-content: space-between; margin-bottom: 4px; font-weight: bold; text-shadow: 1px 1px 0 #000; }
         .entity-hp-bg { background: #222; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; border: 1px solid #000; }
@@ -104,15 +65,17 @@
             </div>
         </div>
 
-        <div id="ui-layer" style="display: none;">
+        <div id="ui-layer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
             
+            <div id="clock-display" class="glass-panel" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 200; font-size: 1.2rem; font-weight: bold; margin: 0;">Día 1 - 08:00</div>
+
             <div id="status-bars" style="position: absolute; top: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: auto; z-index: 200;">
                 <div class="bar-wrapper"><div class="bar-label"><span>Salud</span><span id="hp-text">100/100</span></div><div class="bar-container"><div id="hp-fill" class="bar-fill"></div></div></div>
                 <div class="bar-wrapper"><div class="bar-label"><span>Energía</span><span id="hunger-text">100/100</span></div><div class="bar-container"><div id="hunger-fill" class="bar-fill"></div></div></div>
                 <div class="bar-wrapper"><div class="bar-label"><span class="level-text-highlight">Nivel <span id="level-text">1</span></span><span id="xp-text">0/100</span></div><div class="bar-container"><div id="xp-fill" class="bar-fill"></div></div></div>
             </div>
 
-            <div id="entity-hud"></div>
+            <div id="entity-hud" style="position: absolute; top: 120px; left: 20px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; z-index: 200;"></div>
 
             <div style="position: absolute; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-end; pointer-events: auto; z-index: 200;">
                 <div id="server-info" class="glass-panel" style="margin: 0;">🟢 <span id="sv-ip" style="color:#fff; font-weight:bold;">Local</span> | 👥 <span id="sv-players" style="color:#fff;">1</span>/10</div>
@@ -125,23 +88,20 @@
                 </div>
             </div>
 
-            <div id="global-chat-log"></div>
+            <div id="global-chat-log" style="position: absolute; top: 120px; right: 20px; width: 350px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 150; align-items: flex-end; text-align: right;"></div>
 
-            <div style="position: absolute; bottom: 20px; left: 20px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; z-index: 100;">
-                <div id="clock-display" class="glass-panel" style="margin: 0;">Día 1 - 08:00</div>
-                <div id="distance-display" class="glass-panel" style="margin: 0;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
-            </div>
-
-            <div id="toolbar"></div>
+            <div id="toolbar" style="position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: row; gap: 10px; pointer-events: auto; z-index: 150;"></div>
 
             <div id="chat-container" style="display: none; position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); width: 400px; z-index: 200; pointer-events: auto;">
                 <input type="text" id="chat-input" placeholder="Escribe un mensaje y presiona Enter..." autocomplete="off" style="width: calc(100% - 24px); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.9); color: white; font-family: inherit; font-size: 0.9rem; outline: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
             </div>
+
+            <div id="distance-display" class="glass-panel" style="position: absolute; bottom: 20px; left: 20px; pointer-events: none; margin: 0; z-index: 100;">🗺️ Costa: <span id="dist-text" style="color: #4CAF50;">0m</span></div>
             
             <div id="interaction-prompt" class="glass-panel" style="position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%);"><span id="prompt-text"></span></div>
             <div id="placement-overlay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #FFD700; font-weight: bold; text-shadow: 1px 1px 2px #000;">MODO UBICACIÓN<br><span style="font-size: 0.7rem; color: #fff; font-weight: normal;">Clic Izq: Colocar | Clic Der: Cancelar</span></div>
             
-            <div id="game-tips" class="glass-panel" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
+            <div id="game-tips" class="glass-panel" style="position: absolute; top: 80px; left: 50%; transform: translateX(-50%); pointer-events: auto;">
                 <strong style="color: #fff;">Controles Básicos:</strong><br><br>
                 <span class="tip-highlight">ENTER</span>: Abrir/Enviar Chat<br>
                 <span class="tip-highlight">F</span>: Comer Rápido<br>
