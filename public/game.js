@@ -15,7 +15,7 @@ if (!isLocalEnv) {
     if (urlArea) urlArea.style.display = 'none'; if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
-// FIX: SISTEMA DE LOGS Y CHAT GLOBAL FIJABLE
+// SISTEMA DE LOGS Y CHAT GLOBAL FIJABLE
 window.isChatLogPinned = false;
 window.toggleChatLog = function() {
     window.isChatLogPinned = !window.isChatLogPinned;
