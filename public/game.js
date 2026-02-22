@@ -239,6 +239,7 @@ window.addEventListener('keydown', (e) => {
         }
     }
     const num = parseInt(e.key); 
+    // SELECCIÓN CON TECLAS 1-6 DEL CINTURÓN
     if (!isNaN(num) && num >= 1 && num <= 6) { 
         if(window.selectToolbarSlot) window.selectToolbarSlot(num - 1); 
         if(window.renderToolbar) window.renderToolbar(); 
@@ -293,7 +294,7 @@ window.addEventListener('mousedown', (e) => {
                     
                     if (window.player.inventory[window.player.placementMode] <= 0) {
                         window.player.toolbar[window.player.activeSlot] = null;
-                        window.selectToolbarSlot(0); // Vuelve a la mano
+                        window.selectToolbarSlot(0); // Volver a la mano automáticamente
                     }
                     if(window.updateUI) window.updateUI();
                     if(window.renderToolbar) window.renderToolbar();
@@ -427,6 +428,25 @@ window.addEventListener('mousedown', (e) => {
     if(actionDone && window.useTool) window.useTool();
 });
 
+window.addEventListener('mouseup', (e) => {
+    if (!window.game || !window.game.isRunning || window.player.isDead) return;
+    if (window.player.activeTool === 'bow') {
+        if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
+        if (e.button === 0 && window.player.isCharging) {
+            if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
+                window.player.inventory.arrows--;
+                let pCX = window.player.x + window.player.width/2; 
+                let pCY = window.player.y + 20; 
+                let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
+                let power = 4 + (window.player.chargeLevel / 100) * 6; 
+                let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
+                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+            }
+            window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
+        }
+    }
+});
+
 function update() {
     try {
         if (!window.game || !window.game.isRunning) return;
@@ -442,7 +462,7 @@ function update() {
                 if (window.renderToolbar) window.renderToolbar(); 
                 if (window.player.toolHealth['torch'] <= 0) {
                     window.player.toolbar[window.player.activeSlot] = null;
-                    window.selectToolbarSlot(0); // Volver a la mano
+                    window.selectToolbarSlot(0); 
                     window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "¡Antorcha Apagada!", '#ff4444');
                     if (window.renderToolbar) window.renderToolbar();
                 }
@@ -464,7 +484,6 @@ function update() {
             window.game.isRaining = isDay && (hourFloat >= rainStart && hourFloat <= (rainStart + rainDuration));
         }
 
-        // FIX ANTICRASH: SI VX o VY DAN ERROR MATEMÁTICO, SE PONEN EN 0 Y EVITAN CONGELAMIENTO
         if (isNaN(window.player.vx) || !isFinite(window.player.vx)) window.player.vx = 0;
         if (isNaN(window.player.vy) || !isFinite(window.player.vy)) window.player.vy = 0;
 
@@ -574,8 +593,10 @@ function update() {
                         window.player.inventory[item.type] = (window.player.inventory[item.type]||0) + item.amount; 
                         window.droppedItems.splice(i, 1); window.sendWorldUpdate('pickup_item', { id: item.id }); 
                         
-                        // AUTO-EQUIPAR OBJETOS CONSTRUIBLES EN EL CINTURÓN AL RECOGERLOS
-                        if (['boxes', 'campfire_item', 'bed_item'].includes(item.type)) { if(typeof window.autoEquip==='function') window.autoEquip(item.type); }
+                        // AUTO-EQUIPAR OBJETOS RECOLECTADOS
+                        if (['boxes', 'campfire_item', 'bed_item'].includes(item.type) || window.toolDefs[item.type]) { 
+                            if(typeof window.autoEquip==='function') window.autoEquip(item.type); 
+                        }
                         
                         window.spawnParticles(pCX, pCY, window.itemDefs[item.type].color, 5); if(typeof window.updateUI==='function') window.updateUI(); continue; 
                     } else { if (window.game.frameCount % 60 === 0) window.spawnDamageText(pCX, pCY - 30, "Inv. Lleno", '#fff'); }
@@ -762,8 +783,8 @@ function update() {
         
         if (typeof window.updateEntityHUD === 'function') window.updateEntityHUD();
 
-    } catch (e) {
-        console.error("Motor protegido. Error ignorado:", e);
+    } catch (err) {
+        console.error("Motor de juego protegido contra crashes:", err);
     }
 }
 

@@ -5,11 +5,14 @@ window.useTool = function() {
     window.player.toolHealth[window.player.activeTool]--;
     if (window.player.toolHealth[window.player.activeTool] <= 0) {
         window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[window.player.activeTool].name} Rota!`, '#ff4444');
-        window.player.availableTools = window.player.availableTools.filter(t => t !== window.player.activeTool);
-        window.player.activeTool = 'hand'; window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; 
+        
+        // El ítem se borra del cinturón y volvemos a la mano
+        window.player.toolbar[window.player.activeSlot] = null;
+        window.selectToolbarSlot(0); 
+        
         if(window.updateUI) window.updateUI();
+        if(window.renderToolbar) window.renderToolbar();
     }
-    if(window.renderToolbar) window.renderToolbar();
 };
 
 window.gainXP = function(amount) {
@@ -40,7 +43,6 @@ window.recalculateStats = function() {
 window.getMeleeDamage = function() { return window.player.baseDamage[window.player.activeTool] * (1 + window.player.stats.str * 0.1); };
 window.getBowDamage = function() { return (8 + (window.player.chargeLevel/100)*25) * (1 + window.player.stats.int * 0.15); };
 
-// NUEVO: SISTEMA DE MUERTE CON SEGUIMIENTO DE EVENTOS
 window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
     if (window.player.isDead) return;
 
@@ -55,7 +57,6 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         window.player.hp = 0;
         window.player.isDead = true;
         
-        // AVISAR A TODOS QUE HAS MUERTO
         if(window.addGlobalMessage) window.addGlobalMessage(`☠️ Has muerto por ${source}`, '#e74c3c');
         if(window.sendWorldUpdate) window.sendWorldUpdate('player_death', { name: window.player.name, source: source });
 
@@ -69,6 +70,8 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
         window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }; 
+        window.player.toolbar = ['hand', null, null, null, null, null]; // Se vacía el cinturón
+        window.selectToolbarSlot(0);
         window.player.xp = 0; 
         
         let deathScreen = window.getEl('death-screen');
@@ -77,6 +80,7 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if (bedBtn) { if (window.player.bedPos) bedBtn.style.display = 'inline-block'; else bedBtn.style.display = 'none'; }
     }
     if(window.updateUI) window.updateUI();
+    if(window.renderToolbar) window.renderToolbar();
 };
 
 window.respawn = function(locationType) {

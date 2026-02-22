@@ -88,8 +88,7 @@ window.invItemClick = function(type) {
     if (type === 'meat') window.eatFood(15, 30); 
     else if (type === 'cooked_meat') window.eatFood(30, 60);
     else if (['boxes', 'campfire_item', 'bed_item'].includes(type) || window.toolDefs[type]) { 
-        window.autoEquip(type);
-        window.toggleMenu('inventory'); 
+        window.autoEquip(type); window.toggleMenu('inventory'); 
     }
 };
 
@@ -133,8 +132,9 @@ window.renderCampfireUI = function() {
     if (window.currentCampfire.isBurning) { btn.innerText = "APAGAR"; btn.style.background = "#555"; } else { btn.innerText = "🔥 ENCENDER"; btn.style.background = "#e67e22"; }
 };
 
-// CINTURÓN INTELIGENTE: Drag and Drop, Selección y Slots Fijos
+// CINTURÓN: LÓGICA DE AUTO-EQUIPADO
 window.autoEquip = function(id) {
+    if (!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
     if (!window.player.toolbar.includes(id)) {
         let idx = window.player.toolbar.indexOf(null);
         if (idx !== -1) { 
@@ -162,9 +162,11 @@ window.handleToolbarDrop = function(e, slotIndex) {
 };
 
 window.selectToolbarSlot = function(index) {
+    if (!window.player.toolbar) return;
     window.player.activeSlot = index;
     let item = window.player.toolbar[index];
     window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0;
+    
     if (item && window.toolDefs[item]) {
         window.player.activeTool = item;
         window.player.placementMode = null;
@@ -181,6 +183,9 @@ window.renderToolbar = function() {
     let tb = window.getEl('toolbar');
     if(!tb) return;
     tb.innerHTML = '';
+    
+    if(!window.player.toolbar) window.player.toolbar = ['hand', null, null, null, null, null];
+    
     for(let i=0; i<6; i++) {
         let itemId = window.player.toolbar[i];
         let div = document.createElement('div');
@@ -197,7 +202,7 @@ window.renderToolbar = function() {
                 if (itemId !== 'hand' && window.player.toolHealth[itemId] !== undefined) {
                     let pct = (window.player.toolHealth[itemId] / window.toolMaxDurability[itemId]) * 100;
                     let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
-                    durHTML = `<div class="tool-durability-bg"><div class="tool-durability-fill" style="width: ${pct}%; background: ${color};"></div></div>`;
+                    durHTML = `<div class="tool-durability-bg" style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#222;"><div class="tool-durability-fill" style="height:100%; width: ${pct}%; background: ${color};"></div></div>`;
                 }
                 content += `<div style="margin-top:10px;">${tool.name}</div>${durHTML}`;
             } else if (window.itemDefs[itemId]) {
@@ -207,7 +212,7 @@ window.renderToolbar = function() {
                     window.player.toolbar[i] = null;
                     if (window.player.activeSlot === i) { window.selectToolbarSlot(0); }
                 } else {
-                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto;"></div><div class="inv-amount" style="bottom:2px; right:4px;">${count}</div>`;
+                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto; border-radius:3px;"></div><div class="inv-amount" style="position:absolute; bottom:2px; right:4px;">${count}</div>`;
                 }
             }
         }
@@ -255,7 +260,8 @@ window.updateUI = function() {
 
     const checkBtn = (idReq, idBtn, w, s, web, intR, t) => {
         let reqDOM = window.getEl(idReq), btnDOM = window.getEl(idBtn);
-        if(reqDOM) reqDOM.innerHTML = (t && window.player.toolbar.includes(t)) ? '<span style="color:#4CAF50">Fabricado</span>' : window.getReqText(w, s, web, intR);
+        if (!window.player.toolbar) window.player.toolbar = [];
+        if(reqDOM) reqDOM.innerHTML = (t && window.player.toolbar.includes(t)) ? '<span style="color:#4CAF50">En Cinturón</span>' : window.getReqText(w, s, web, intR);
         if(btnDOM) btnDOM.disabled = window.player.inventory.wood<w || (window.player.inventory.stone||0)<s || (window.player.inventory.web||0)<web || window.player.stats.int<intR || (t && window.player.toolbar.includes(t));
     };
 

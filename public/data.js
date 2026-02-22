@@ -1,4 +1,5 @@
-// === data.js - VARIABLES GLOBALES ===
+// === data.js - VARIABLES GLOBALES Y DEFINICIONES ===
+
 window.getEl = function(id) { return document.getElementById(id); };
 
 window.canvas = document.getElementById('gameCanvas');
@@ -15,7 +16,6 @@ window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; 
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 
 window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
-// FIX ANTICRASH: Declaración correcta de la memoria de árboles
 window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = [];
 window.currentOpenBox = null; window.currentCampfire = null;
 
@@ -40,7 +40,13 @@ window.player = {
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
     inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }, 
-    availableTools: ['hand'], activeTool: 'hand', toolHealth: {}, buildMode: 'block', inBackground: false, wantsBackground: false,
+    
+    // SISTEMA DE CINTURÓN - 6 SLOTS CLAROS Y SEGUROS
+    toolbar: ['hand', null, null, null, null, null],
+    activeSlot: 0,
+    activeTool: 'hand', 
+    availableTools: ['hand'], 
+    toolHealth: {}, buildMode: 'block', inBackground: false, wantsBackground: false,
     miningRange: 150, isHit: false, attackFrame: 0, facingRight: true, isAiming: false, isCharging: false, chargeLevel: 0, isStealth: false, nearbyItem: null, placementMode: null, chatText: '', chatExpires: 0
 };
 
