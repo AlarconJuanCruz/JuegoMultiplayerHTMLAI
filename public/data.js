@@ -5,6 +5,31 @@ window.getEl = function(id) { return document.getElementById(id); };
 window.canvas = document.getElementById('gameCanvas');
 window.ctx = window.canvas.getContext('2d');
 
+// --- CARGA DE SPRITES ---
+window.sprites = {
+    tree_oak: new Image(),
+    tree_pine: new Image(),
+    tree_birch: new Image(),
+    tree_stump: new Image(),
+    rock_full: new Image(),
+    rock_damaged: new Image(),
+    tile_grass_top: new Image(),
+    tile_dirt: new Image(),
+    tile_sand_top: new Image(),
+    tile_sand_base: new Image()
+};
+window.sprites.tree_oak.src = 'assets/tree_oak.png';
+window.sprites.tree_pine.src = 'assets/tree_pine.png';
+window.sprites.tree_birch.src = 'assets/tree_birch.png';
+window.sprites.tree_stump.src = 'assets/tree_stump.png';
+window.sprites.rock_full.src = 'assets/rock_full.png';
+window.sprites.rock_damaged.src = 'assets/rock_damaged.png';
+window.sprites.tile_grass_top.src = 'assets/tile_grass_top.png';
+window.sprites.tile_dirt.src = 'assets/tile_dirt.png';
+window.sprites.tile_sand_top.src = 'assets/tile_sand_top.png';
+window.sprites.tile_sand_base.src = 'assets/tile_sand_base.png';
+// ------------------------
+
 // Alta resolución (2x) para canvas nítido
 (function setupHiDPI() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -33,7 +58,7 @@ window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPr
 
 window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
 window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = [];
-window.stuckArrows = []; // <-- NUEVO: Almacena las flechas clavadas
+window.stuckArrows = []; 
 window.currentOpenBox = null; window.currentCampfire = null;
 
 window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'torch': { id: 'torch', name: 'Antorcha' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Martillo' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };

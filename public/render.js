@@ -1,64 +1,6 @@
 // === render.js - LÓGICA DE DIBUJADO Y RIGGING ===
 
-window.initRenderCaches = function() {
-    window.renderCache = { trees: {} };
-    
-    window.cacheTreeCanvas = function(type, width, height) {
-        const c = document.createElement('canvas');
-        const dpr = window._dpr || 1;
-        
-        // MÁRGENES AMPLIADOS PARA EVITAR QUE SE RECORTEN LAS HOJAS
-        const padX = width * 2.5; 
-        const padYTop = width * 2.5;
-        const padYBot = 20;
-        
-        const totalW = width + padX * 2;
-        const totalH = height + padYTop + padYBot;
-
-        c.width = totalW * dpr;
-        c.height = totalH * dpr;
-        
-        const ctx = c.getContext('2d');
-        ctx.scale(dpr, dpr);
-        // Trasladamos el origen a la base central del tronco considerando los nuevos márgenes
-        ctx.translate(padX + width / 2, padYTop + height);
-
-        let hw = width / 2; let th = height;
-
-        let trunkGrad = ctx.createLinearGradient(-hw*0.5, 0, hw*0.5, 0);
-        if(type === 2) { trunkGrad.addColorStop(0, '#bdbdbd'); trunkGrad.addColorStop(0.5, '#eeeeee'); trunkGrad.addColorStop(1, '#9e9e9e'); }
-        else { trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.5, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723'); }
-        
-        ctx.fillStyle = trunkGrad; ctx.beginPath();
-        ctx.moveTo(-hw*0.4, 0); ctx.lineTo(-hw*0.2, -th*0.8);
-        ctx.lineTo(hw*0.2, -th*0.8); ctx.lineTo(hw*0.4, 0); ctx.fill();
-
-        if(type === 2) {
-            ctx.fillStyle = '#3E2723'; ctx.fillRect(-hw*0.2, -th*0.6, hw*0.3, 2); ctx.fillRect(-hw*0.1, -th*0.3, hw*0.4, 3);
-        }
-
-        if (type === 0 || type === 2) {
-            ctx.lineWidth = 4; ctx.strokeStyle = trunkGrad;
-            ctx.beginPath(); ctx.moveTo(0, -th*0.4); ctx.lineTo(-width, -th*0.6); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0, -th*0.5); ctx.lineTo(width, -th*0.7); ctx.stroke();
-        }
-
-        if (type === 0 || type === 2) {
-            let baseColor = type === 0 ? '#1B5E20' : '#33691E'; let midColor = type === 0 ? '#2E7D32' : '#558B2F'; let lightColor = type === 0 ? '#4CAF50' : '#8BC34A';
-            let cy = -th * 0.75; let cw = width; 
-            const drawCanopy = (color, scale) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, cy, cw * 1.1 * scale, 0, Math.PI*2); ctx.arc(-cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); ctx.arc(cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); ctx.arc(-cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); ctx.arc(cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); ctx.fill(); };
-            drawCanopy(baseColor, 1.0); drawCanopy(midColor, 0.8);
-            ctx.fillStyle = lightColor; ctx.beginPath(); ctx.arc(-cw * 0.3, cy - cw * 0.25, cw * 0.45, 0, Math.PI*2); ctx.arc(cw * 0.15, cy - cw * 0.4, cw * 0.35, 0, Math.PI*2); ctx.fill();
-        } else if (type === 1) {  
-            for (let i = 0; i < 4; i++) {
-                let layerW = width * 1.5 - (i * (width * 0.35)); let yPos = -th * 0.3 - (i * (th * 0.7 / 3)); 
-                ctx.fillStyle = '#1B5E20'; ctx.beginPath(); ctx.moveTo(0, yPos - th*0.25); ctx.lineTo(-layerW, yPos + th*0.15); ctx.lineTo(layerW, yPos + th*0.15); ctx.fill();
-                ctx.fillStyle = '#2E7D32'; ctx.beginPath(); ctx.moveTo(0, yPos - th*0.25); ctx.lineTo(-layerW*0.85, yPos + th*0.15); ctx.lineTo(0, yPos + th*0.12); ctx.fill();
-            }
-        }
-        return { canvas: c, padX: padX, padYTop: padYTop, totalW: totalW, totalH: totalH };
-    };
-};
+window.initRenderCaches = function() {}; // Desactivado ya que usamos sprites
 
 window.roundRect = function(ctx, x, y, width, height, radius) {
     ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius); ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius); ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath(); ctx.fill();
@@ -314,38 +256,62 @@ window.draw = function() {
     const startX = Math.max(window.camera.x, window.game.shoreX);
     const endX = window.camera.x + W + 100;
 
-    let grassGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 16);
-    grassGrad.addColorStop(0, window.game.isRaining ? '#3d6b24' : '#528c2a');
-    grassGrad.addColorStop(1, window.game.isRaining ? '#2d5019' : '#3a6b1e');
-    window.ctx.fillStyle = grassGrad;
-    window.ctx.fillRect(startX, gL, endX - startX, 16);
+    // --- NUEVO SISTEMA DE TILING PARA BIOMAS ---
+    const tileSize = 64;
+    let startTileX = startX - (startX % tileSize);
+    let startTileY = gL;
 
-    let dirtGrad = window.ctx.createLinearGradient(0, gL + 16, 0, gL + 80);
-    dirtGrad.addColorStop(0, '#6b4226');
-    dirtGrad.addColorStop(0.4, '#5a3620');
-    dirtGrad.addColorStop(1, '#3d2412');
-    window.ctx.fillStyle = dirtGrad;
-    window.ctx.fillRect(startX, gL + 16, endX - startX, H - gL - 16);
+    for (let px = startTileX; px < endX; px += tileSize) {
+        // Cálculo de transparencia para la transición Bosque -> Desierto
+        let desertAlpha = 0;
+        if (px > 3400) desertAlpha = 1;
+        else if (px > 2600) desertAlpha = (px - 2600) / 800; // Transición de 800px
 
-    window.ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-    window.ctx.lineWidth = 1;
-    [30, 50, 75].forEach(dy => {
-        window.ctx.beginPath();
-        window.ctx.moveTo(startX, gL + dy);
-        window.ctx.lineTo(endX, gL + dy);
-        window.ctx.stroke();
-    });
+        for (let py = startTileY; py < H; py += tileSize) {
+            let isTop = (py === startTileY);
+            
+            // Dibujar capa Bosque (Pasto/Tierra)
+            if (desertAlpha < 1) {
+                window.ctx.globalAlpha = 1;
+                let fImg = isTop ? window.sprites.tile_grass_top : window.sprites.tile_dirt;
+                if (fImg && fImg.complete && fImg.naturalWidth > 0) {
+                    window.ctx.drawImage(fImg, px, py, tileSize, tileSize);
+                } else {
+                    // Fallback visual si no hay PNG
+                    window.ctx.fillStyle = isTop ? '#528c2a' : '#3d2412';
+                    window.ctx.fillRect(px, py, tileSize, tileSize);
+                }
+            }
 
-    if (darkness < 0.8) {
-        window.ctx.fillStyle = 'rgba(80,120,40,0.6)';
-        for (let px = startX - ((startX) % 80); px < endX; px += 80) {
+            // Dibujar capa Desierto (Arena) encima con opacidad variable
+            if (desertAlpha > 0) {
+                window.ctx.globalAlpha = desertAlpha;
+                let dImg = isTop ? window.sprites.tile_sand_top : window.sprites.tile_sand_base;
+                if (dImg && dImg.complete && dImg.naturalWidth > 0) {
+                    window.ctx.drawImage(dImg, px, py, tileSize, tileSize);
+                } else {
+                    // Fallback visual si no hay PNG
+                    window.ctx.fillStyle = isTop ? '#e6c280' : '#d4a853';
+                    window.ctx.fillRect(px, py, tileSize, tileSize);
+                }
+            }
+            window.ctx.globalAlpha = 1;
+        }
+
+        // Detalles de pasto solo donde hay bosque
+        if (desertAlpha < 1 && darkness < 0.8) {
+            window.ctx.globalAlpha = 1 - desertAlpha;
+            window.ctx.fillStyle = 'rgba(80,120,40,0.6)';
             let seed = Math.sin(px * 0.017) * 0.5 + 0.5;
             let grassH = 4 + seed * 6;
             window.ctx.fillRect(px + seed * 30, gL - grassH, 2, grassH);
             window.ctx.fillRect(px + seed * 55, gL - grassH * 0.7, 2, grassH * 0.7);
+            window.ctx.globalAlpha = 1;
         }
     }
-    
+    // -------------------------------------------
+
+    // Agua
     if (window.camera.x < window.game.shoreX) {
         window.ctx.fillStyle = '#C8B878';
         window.ctx.fillRect(window.game.shoreX - 70, gL, 70, H - gL);
@@ -361,125 +327,91 @@ window.draw = function() {
         window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
     }
 
-    window.rocks.forEach(r => {
-        if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
-            window.ctx.save();
-            if (r.isHit) {
-                window.ctx.fillStyle = '#ff4444';
-                window.ctx.beginPath();
-                window.ctx.moveTo(r.x, r.y + r.height);
-                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
-                window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5);
-                window.ctx.lineTo(r.x + r.width, r.y + r.height);
-                window.ctx.fill();
-            } else {
-                let darkGrad = window.ctx.createLinearGradient(r.x, r.y, r.x + r.width, r.y + r.height);
-                darkGrad.addColorStop(0, '#5a5a5a');
-                darkGrad.addColorStop(1, '#2e2e2e');
-                window.ctx.fillStyle = darkGrad;
-                window.ctx.beginPath();
-                window.ctx.moveTo(r.x, r.y + r.height);
-                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
-                window.ctx.lineTo(r.x + r.width * 0.8, r.y + 5);
-                window.ctx.lineTo(r.x + r.width, r.y + r.height);
-                window.ctx.fill();
+    // --- LIENZO OFF-SCREEN GLOBAL (PARA DAÑO) ---
+    if (!window.hitCanvas) {
+        window.hitCanvas = document.createElement('canvas');
+        window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true });
+    }
 
-                let lightGrad = window.ctx.createLinearGradient(r.x, r.y, r.x + r.width * 0.6, r.y + r.height * 0.6);
-                lightGrad.addColorStop(0, '#9e9e9e');
-                lightGrad.addColorStop(0.5, '#757575');
-                lightGrad.addColorStop(1, '#616161');
-                window.ctx.fillStyle = lightGrad;
-                window.ctx.beginPath();
-                window.ctx.moveTo(r.x, r.y + r.height);
-                window.ctx.lineTo(r.x + r.width * 0.2, r.y);
-                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.35);
-                window.ctx.lineTo(r.x + r.width * 0.15, r.y + r.height);
-                window.ctx.fill();
-
-                window.ctx.fillStyle = 'rgba(200,200,210,0.55)';
-                window.ctx.beginPath();
-                window.ctx.moveTo(r.x + r.width * 0.18, r.y + 2);
-                window.ctx.lineTo(r.x + r.width * 0.82, r.y + 6);
-                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.38);
-                window.ctx.lineTo(r.x + r.width * 0.2, r.y + r.height * 0.22);
-                window.ctx.fill();
-
-                window.ctx.strokeStyle = 'rgba(20,20,20,0.25)';
-                window.ctx.lineWidth = 1;
-                window.ctx.beginPath();
-                window.ctx.moveTo(r.x + r.width * 0.2, r.y);
-                window.ctx.lineTo(r.x + r.width * 0.55, r.y + r.height * 0.35);
-                window.ctx.stroke();
-
-                window.ctx.fillStyle = 'rgba(80,110,50,0.3)';
-                window.ctx.beginPath();
-                window.ctx.ellipse(r.x + r.width * 0.35, r.y + r.height - 2, r.width * 0.22, 4, -0.3, 0, Math.PI*2);
-                window.ctx.fill();
-            }
-
-            if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) {
-                window.ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                window.ctx.fillRect(r.x, r.y - 12, r.width, 6);
-                window.ctx.fillStyle = '#4CAF50';
-                window.ctx.fillRect(r.x + 1, r.y - 11, (r.hp / r.maxHp) * (r.width - 2), 4);
-            }
-            window.ctx.restore();
-        }
-    });
-
+    // --- RENDERIZADO DE ÁRBOLES PRIMERO (Para quedar detrás de las rocas) ---
     window.trees.forEach(t => {
         if (t.x + t.width > window.camera.x && t.x < window.camera.x + window._canvasLogicW) {
-            let isHitColor = t.isHit ? '#ff4444' : null;
             window.ctx.save();
+            
             window.ctx.translate(t.x + t.width/2, t.y + t.height);
-            let hw = t.width / 2; let th = t.height;
+            
+            let hw = t.width / 2; 
+            let img = null;
+            
+            if (t.isStump) img = window.sprites.tree_stump;
+            else if (t.type === 0) img = window.sprites.tree_oak;
+            else if (t.type === 1) img = window.sprites.tree_pine;
+            else if (t.type === 2) img = window.sprites.tree_birch;
 
-            if (t.isStump) {
-                let stumpH = 15 + t.width * 0.22;
-                let trunkGrad = window.ctx.createLinearGradient(-hw*0.6, 0, hw*0.6, 0);
-                trunkGrad.addColorStop(0, '#2d1a0e'); trunkGrad.addColorStop(0.4, '#5D4037'); trunkGrad.addColorStop(1, '#3E2723');
-                window.ctx.fillStyle = isHitColor || trunkGrad;
-                window.ctx.fillRect(-hw*0.6, -stumpH, hw*1.2, stumpH);
-                window.ctx.fillStyle = isHitColor || '#c8a882';
-                window.ctx.beginPath(); window.ctx.ellipse(0, -stumpH, hw*0.62, 4, 0, 0, Math.PI*2); window.ctx.fill();
+            let drawH = 256; 
+            let drawW = 128;    
+            let drawX = -drawW / 2;
+            let offsetVisualY = 0; // Eleva el árbol para que no parezca hundido
+            let drawY = -drawH + offsetVisualY;
+
+            if (img && img.complete && img.naturalWidth > 0) {
+                if (t.isHit) {
+                    window.hitCanvas.width = drawW; window.hitCanvas.height = drawH;
+                    window.hitCtx.clearRect(0, 0, drawW, drawH); window.hitCtx.drawImage(img, 0, 0, drawW, drawH);
+                    window.hitCtx.globalCompositeOperation = 'source-atop'; window.hitCtx.fillStyle = 'rgba(255, 68, 68, 0.65)';
+                    window.hitCtx.fillRect(0, 0, drawW, drawH); window.hitCtx.globalCompositeOperation = 'source-over'; 
+                    window.ctx.drawImage(window.hitCanvas, drawX, drawY);
+                } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
             } else {
-                let cacheKey = `${t.type}_${Math.round(t.width)}_${Math.round(t.height)}`;
-                
-                if (!t.isHit) {
-                    if (!window.renderCache.trees[cacheKey]) {
-                        window.renderCache.trees[cacheKey] = window.cacheTreeCanvas(t.type, t.width, t.height);
-                    }
-                    const cache = window.renderCache.trees[cacheKey];
-                    // USAR LOS MISMOS PADDINGS PARA CENTRAR LA IMAGEN CORRECTAMENTE
-                    window.ctx.drawImage(cache.canvas, -t.width/2 - cache.padX, -t.height - cache.padYTop, cache.totalW, cache.totalH);
-                } else {
-                    window.ctx.fillStyle = '#ff4444';
-                    window.ctx.beginPath();
-                    window.ctx.moveTo(-hw*0.4, 0); window.ctx.lineTo(-hw*0.2, -th*0.8);
-                    window.ctx.lineTo(hw*0.2, -th*0.8); window.ctx.lineTo(hw*0.4, 0); window.ctx.fill();
-                    
-                    window.ctx.lineWidth = 4; window.ctx.strokeStyle = '#ff4444';
-                    if (t.type === 0 || t.type === 2) { window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.4); window.ctx.lineTo(-t.width, -th*0.6); window.ctx.stroke(); window.ctx.beginPath(); window.ctx.moveTo(0, -th*0.5); window.ctx.lineTo(t.width, -th*0.7); window.ctx.stroke(); }
-                    
-                    if (t.type === 0 || t.type === 2) {
-                        let cy = -th * 0.75; let cw = t.width; 
-                        const drawCanopy = (scale) => { window.ctx.beginPath(); window.ctx.arc(0, cy, cw * 1.1 * scale, 0, Math.PI*2); window.ctx.arc(-cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); window.ctx.arc(cw * 0.7 * scale, cy + cw * 0.2 * scale, cw * 0.8 * scale, 0, Math.PI*2); window.ctx.arc(-cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); window.ctx.arc(cw * 0.45 * scale, cy - cw * 0.4 * scale, cw * 0.7 * scale, 0, Math.PI*2); window.ctx.fill(); };
-                        drawCanopy(1.0); drawCanopy(0.8);
-                        window.ctx.beginPath(); window.ctx.arc(-cw * 0.3, cy - cw * 0.25, cw * 0.45, 0, Math.PI*2); window.ctx.arc(cw * 0.15, cy - cw * 0.4, cw * 0.35, 0, Math.PI*2); window.ctx.fill();
-                    } else if (t.type === 1) {  
-                        for (let i = 0; i < 4; i++) { let layerW = t.width * 1.5 - (i * (t.width * 0.35)); let yPos = -th * 0.3 - (i * (th * 0.7 / 3)); window.ctx.beginPath(); window.ctx.moveTo(0, yPos - th*0.25); window.ctx.lineTo(-layerW, yPos + th*0.15); window.ctx.lineTo(layerW, yPos + th*0.15); window.ctx.fill(); }
-                    }
-                }
+                window.ctx.fillStyle = t.isHit ? '#ff4444' : (t.isStump ? '#5D4037' : '#2E7D32');
+                window.ctx.fillRect(-hw, -t.height, t.width, t.isStump ? 15 : t.height);
             }
 
             if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) {
-                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, -th - 30, t.width + 10, 7);
-                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, -th - 29, (t.hp / t.maxHp) * (t.width + 8), 5);
+                let barY = t.isStump ? -25 : drawY - 12;
+                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, barY, t.width + 10, 7);
+                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, barY + 1, (t.hp / t.maxHp) * (t.width + 8), 5);
             }
             window.ctx.restore();
         }
     });
 
+    // --- RENDERIZADO DE ROCAS SEGUNDO (Por delante de los árboles) ---
+    window.rocks.forEach(r => {
+        if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
+            window.ctx.save();
+            window.ctx.translate(r.x + r.width/2, r.y + r.height);
+            let hw = r.width / 2;
+            
+            // Lógica de sprites para Roca Entera o Dañada (<= 50% HP)
+            let img = (r.hp <= r.maxHp / 2) ? window.sprites.rock_damaged : window.sprites.rock_full;
+            
+            let drawW = 80; let drawH = 80; let drawX = -drawW / 2; let drawY = -drawH;
+
+            if (img && img.complete && img.naturalWidth > 0) {
+                if (r.isHit) {
+                    window.hitCanvas.width = drawW; window.hitCanvas.height = drawH;
+                    window.hitCtx.clearRect(0, 0, drawW, drawH); window.hitCtx.drawImage(img, 0, 0, drawW, drawH);
+                    window.hitCtx.globalCompositeOperation = 'source-atop'; window.hitCtx.fillStyle = 'rgba(255, 68, 68, 0.65)';
+                    window.hitCtx.fillRect(0, 0, drawW, drawH); window.hitCtx.globalCompositeOperation = 'source-over'; 
+                    window.ctx.drawImage(window.hitCanvas, drawX, drawY);
+                } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
+            } else {
+                window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath();
+                window.ctx.moveTo(-hw, 0); window.ctx.lineTo(-hw + r.width * 0.2, -r.height);
+                window.ctx.lineTo(-hw + r.width * 0.8, -r.height + 5); window.ctx.lineTo(hw, 0); window.ctx.fill();
+            }
+
+            if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) {
+                let barY = drawY - 12;
+                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw, barY, r.width, 6);
+                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw + 1, barY + 1, (r.hp / r.maxHp) * (r.width - 2), 4);
+            }
+            window.ctx.restore();
+        }
+    });
+
+    // RENDERIZADO DE BLOQUES (Construcciones del jugador)
     window.blocks.forEach(b => {
         if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + window._canvasLogicW) {
             if (b.type === 'block') {
@@ -505,8 +437,7 @@ window.draw = function() {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); 
                 window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
             } else if (b.type === 'barricade') {
-                window.ctx.fillStyle = '#5D4037';
-                window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); 
+                window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); 
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#bdc3c7'; 
                 window.ctx.beginPath();
                 window.ctx.moveTo(b.x + 5, b.y + 24); window.ctx.lineTo(b.x + 2, b.y + 5); window.ctx.lineTo(b.x + 10, b.y + 24);
