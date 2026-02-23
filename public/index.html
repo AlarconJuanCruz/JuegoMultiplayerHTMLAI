@@ -266,9 +266,7 @@
                         <div style="font-size:10px; color:#5a6475; margin-bottom:8px; text-align:center; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">
                             Mochila — arrastra al cinturón
                         </div>
-                        <div id="inventory-scroll-wrapper">
-                            <div id="inventory-grid"></div>
-                        </div>
+                        <div id="inventory-grid"></div>
                     </div>
                     <div class="inv-right">
                         <div class="stat-header">Atributos &nbsp;<span style="color:#5a6475; font-size:0.7rem;">(Puntos: <span id="stat-points">0</span>)</span></div>
@@ -314,7 +312,7 @@
             <!-- Caja / Cofre -->
             <div id="menu-box" class="window-menu" style="pointer-events:auto;">
                 <div class="window-header">
-                    <h3>📦 Cofre</h3>
+                    <h3 id="box-dynamic-header">📦 Cofre</h3>
                     <button class="close-btn" onclick="window.toggleMenu('box')">✕</button>
                 </div>
                 <div class="inv-split">
@@ -323,9 +321,15 @@
                         <div class="inv-grid" id="box-player-grid"></div>
                     </div>
                     <div class="inv-right">
-                        <div style="font-size:10px; color:#5a6475; margin-bottom:8px; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Contenido</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <div style="font-size:10px; color:#5a6475; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Contenido</div>
+                            <button id="btn-take-all-box" class="action-btn mini" style="font-size:10px; padding:3px 8px;" onclick="window.takeAllFromBox()">Agarrar todo</button>
+                        </div>
                         <div class="inv-grid" id="box-storage-grid"></div>
                     </div>
+                </div>
+                <div style="font-size:10px; color:#5a6475; text-align:center; margin-top:8px; font-family:var(--font-ui);">
+                    🖱️ Clic = mover 1 &nbsp;·&nbsp; Clic derecho = mover 10
                 </div>
             </div>
 
@@ -497,6 +501,264 @@
 <script src="ui.js"></script>
 <script src="render.js"></script>
 <script src="game.js"></script>
+
+<script>
+// ============================================================
+//  SISTEMA DE SONIDO — Web Audio API, sin archivos externos
+//  El AudioContext se precalienta en el primer gesto para
+//  eliminar el delay que causa la política de autoplay.
+// ============================================================
+(function() {
+    // Crear el contexto de audio inmediatamente (puede quedar suspendido)
+    let _ctx;
+    try { _ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) { window.playSound = () => {}; return; }
+
+    let _ready = false;
+    const _last = {};
+    const THROTTLE = {
+        hit_tree:130, hit_rock:110, hit_block:120, hit_entity:90,
+        player_hit:180, arrow_shoot:80, arrow_stick:120, arrow_break:100,
+        arrow_hit_flesh:100, door:350, pickup:70, craft:400,
+        level_up:600, menu_open:200, build:180, eat:500,
+        jump:250, land:200, enemy_die:200, tree_fall:300
+    };
+
+    // Precalentamiento: en el primer click/tecla, resumir el contexto
+    // y reproducir un buffer silencioso para "desbloquear" el sistema
+    function warmUp() {
+        if (_ready) return;
+        _ctx.resume().then(() => {
+            // Buffer silencioso de 1 frame para inicializar el pipeline de audio
+            const buf = _ctx.createBuffer(1, 1, _ctx.sampleRate);
+            const src = _ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(_ctx.destination);
+            src.start(0);
+            _ready = true;
+        });
+    }
+    // Enganchar en los primeros gestos posibles
+    ['mousedown','keydown','touchstart','click'].forEach(ev =>
+        document.addEventListener(ev, warmUp, { once: false, passive: true })
+    );
+
+    // --- Helpers ------------------------------------------------
+    function noise(dur) {
+        const n = Math.ceil(_ctx.sampleRate * dur);
+        const b = _ctx.createBuffer(1, n, _ctx.sampleRate);
+        const d = b.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+        return b;
+    }
+    function gain(vol, dur) {
+        const g = _ctx.createGain();
+        g.gain.setValueAtTime(vol, _ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, _ctx.currentTime + dur);
+        g.connect(_ctx.destination);
+        return g;
+    }
+    function throttled(type) {
+        const now = Date.now();
+        if (_last[type] && now - _last[type] < (THROTTLE[type] || 80)) return false;
+        _last[type] = now;
+        return true;
+    }
+
+    // --- Motor de sonido ----------------------------------------
+    function play(type) {
+        if (!_ready || !throttled(type)) return;
+        const t = _ctx.currentTime;
+
+        if (type === 'hit_tree') {
+            const buf = noise(0.20); const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) { const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*26)*0.65+Math.sin(2*Math.PI*110*s)*Math.exp(-s*18)*0.4+Math.sin(2*Math.PI*62*s)*Math.exp(-s*14)*0.28; }
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=820;
+            src.connect(lpf); lpf.connect(gain(0.55,0.22)); src.start();
+
+        } else if (type === 'hit_rock') {
+            const buf = noise(0.20); const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) { const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*50)*0.25+Math.sin(2*Math.PI*700*s)*Math.exp(-s*38)*0.58+Math.sin(2*Math.PI*1280*s)*Math.exp(-s*54)*0.28; }
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const hpf=_ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=360;
+            src.connect(hpf); hpf.connect(gain(0.48,0.22)); src.start();
+
+        } else if (type === 'hit_block') {
+            const buf = noise(0.15); const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) { const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*38)*0.62+Math.sin(2*Math.PI*185*s)*Math.exp(-s*22)*0.38; }
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=700;
+            src.connect(lpf); lpf.connect(gain(0.40,0.16)); src.start();
+
+        } else if (type === 'hit_entity') {
+            const buf = noise(0.12); const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) { const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*56)*0.78+Math.sin(2*Math.PI*225*s)*Math.exp(-s*40)*0.28; }
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const bpf=_ctx.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=520; bpf.Q.value=1.4;
+            src.connect(bpf); bpf.connect(gain(0.52,0.13)); src.start();
+
+        } else if (type === 'player_hit') {
+            const buf = noise(0.24); const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) { const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*17)*0.88+Math.sin(2*Math.PI*80*s)*Math.exp(-s*13)*0.48; }
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=760;
+            src.connect(lpf); lpf.connect(gain(0.65,0.26)); src.start();
+
+        } else if (type === 'enemy_die') {
+            const osc=_ctx.createOscillator(); osc.type='sawtooth';
+            osc.frequency.setValueAtTime(250,t); osc.frequency.exponentialRampToValueAtTime(55,t+0.30);
+            osc.connect(gain(0.22,0.33)); osc.start(t); osc.stop(t+0.33);
+
+        } else if (type === 'arrow_shoot') {
+            const osc=_ctx.createOscillator(); osc.type='sawtooth';
+            osc.frequency.setValueAtTime(700,t); osc.frequency.exponentialRampToValueAtTime(2500,t+0.09);
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=3200;
+            osc.connect(lpf); lpf.connect(gain(0.16,0.10)); osc.start(t); osc.stop(t+0.10);
+
+        } else if (type === 'arrow_stick') {
+            const buf=noise(0.10); const d=buf.getChannelData(0);
+            for (let i=0;i<d.length;i++){const s=i/_ctx.sampleRate;d[i]=d[i]*Math.exp(-s*76)*0.52+Math.sin(2*Math.PI*315*s)*Math.exp(-s*50)*0.48;}
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const bpf=_ctx.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=860; bpf.Q.value=2.8;
+            src.connect(bpf); bpf.connect(gain(0.38,0.11)); src.start();
+
+        } else if (type === 'arrow_break') {
+            const buf=noise(0.07); const d=buf.getChannelData(0);
+            for (let i=0;i<d.length;i++) d[i]*=Math.exp(-(i/_ctx.sampleRate)*95)*0.7;
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const hpf=_ctx.createBiquadFilter(); hpf.type='highpass'; hpf.frequency.value=1900;
+            src.connect(hpf); hpf.connect(gain(0.26,0.07)); src.start();
+
+        } else if (type === 'arrow_hit_flesh') {
+            const buf=noise(0.11); const d=buf.getChannelData(0);
+            for (let i=0;i<d.length;i++){const s=i/_ctx.sampleRate;d[i]=d[i]*Math.exp(-s*60)*0.82+Math.sin(2*Math.PI*165*s)*Math.exp(-s*46)*0.20;}
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1280;
+            src.connect(lpf); lpf.connect(gain(0.50,0.11)); src.start();
+
+        } else if (type === 'door') {
+            const osc=_ctx.createOscillator(); osc.type='sawtooth';
+            osc.frequency.setValueAtTime(340,t); osc.frequency.exponentialRampToValueAtTime(72,t+0.27);
+            const buf2=noise(0.27); const d2=buf2.getChannelData(0);
+            for(let i=0;i<d2.length;i++) d2[i]*=Math.exp(-(i/_ctx.sampleRate)*14)*0.28;
+            const src2=_ctx.createBufferSource(); src2.buffer=buf2;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=600;
+            const g=gain(0.28,0.30);
+            osc.connect(lpf); lpf.connect(g); src2.connect(g);
+            osc.start(t); osc.stop(t+0.30); src2.start(t);
+
+        } else if (type === 'build') {
+            [0,0.07].forEach((delay,i)=>{
+                const buf=noise(0.10); const d=buf.getChannelData(0);
+                for(let j=0;j<d.length;j++){const s=j/_ctx.sampleRate;d[j]=d[j]*Math.exp(-s*44)*0.58+Math.sin(2*Math.PI*(158+i*38)*s)*Math.exp(-s*28)*0.38;}
+                const src=_ctx.createBufferSource(); src.buffer=buf;
+                const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=880;
+                const g=_ctx.createGain(); g.gain.setValueAtTime(0.34,t+delay); g.gain.exponentialRampToValueAtTime(0.0001,t+delay+0.11);
+                g.connect(_ctx.destination); src.connect(lpf); lpf.connect(g); src.start(t+delay);
+            });
+
+        } else if (type === 'pickup') {
+            const osc=_ctx.createOscillator(); osc.type='sine';
+            osc.frequency.setValueAtTime(900,t); osc.frequency.setValueAtTime(1350,t+0.04);
+            osc.connect(gain(0.18,0.14)); osc.start(t); osc.stop(t+0.14);
+
+        } else if (type === 'craft') {
+            [[660,0],[990,0.10]].forEach(([freq,delay])=>{
+                const osc=_ctx.createOscillator(); osc.type='triangle'; osc.frequency.value=freq;
+                const g=_ctx.createGain(); g.gain.setValueAtTime(0.17,t+delay); g.gain.exponentialRampToValueAtTime(0.0001,t+delay+0.13);
+                osc.connect(g); g.connect(_ctx.destination); osc.start(t+delay); osc.stop(t+delay+0.13);
+            });
+
+        } else if (type === 'level_up') {
+            [[523,0],[659,0.13],[784,0.26],[1047,0.40]].forEach(([freq,delay])=>{
+                const osc=_ctx.createOscillator(); osc.type='square'; osc.frequency.value=freq;
+                const g=_ctx.createGain(); g.gain.setValueAtTime(0.14,t+delay); g.gain.exponentialRampToValueAtTime(0.0001,t+delay+0.20);
+                osc.connect(g); g.connect(_ctx.destination); osc.start(t+delay); osc.stop(t+delay+0.20);
+            });
+
+        } else if (type === 'menu_open') {
+            const osc=_ctx.createOscillator(); osc.type='sine';
+            osc.frequency.setValueAtTime(420,t); osc.frequency.exponentialRampToValueAtTime(660,t+0.09);
+            osc.connect(gain(0.11,0.13)); osc.start(t); osc.stop(t+0.13);
+
+        } else if (type === 'eat') {
+            [0,0.08,0.16].forEach(delay=>{
+                const buf=noise(0.06); const d=buf.getChannelData(0);
+                for(let i=0;i<d.length;i++) d[i]*=Math.exp(-(i/_ctx.sampleRate)*78)*0.5;
+                const src=_ctx.createBufferSource(); src.buffer=buf;
+                const bpf=_ctx.createBiquadFilter(); bpf.type='bandpass'; bpf.frequency.value=580; bpf.Q.value=2;
+                const g=_ctx.createGain(); g.gain.setValueAtTime(0.24,t+delay); g.gain.exponentialRampToValueAtTime(0.0001,t+delay+0.06);
+                g.connect(_ctx.destination); src.connect(bpf); bpf.connect(g); src.start(t+delay);
+            });
+
+        } else if (type === 'jump') {
+            const osc=_ctx.createOscillator(); osc.type='sine';
+            osc.frequency.setValueAtTime(200,t); osc.frequency.exponentialRampToValueAtTime(420,t+0.12);
+            osc.connect(gain(0.09,0.14)); osc.start(t); osc.stop(t+0.14);
+
+        } else if (type === 'land') {
+            const buf=noise(0.14); const d=buf.getChannelData(0);
+            for(let i=0;i<d.length;i++){const s=i/_ctx.sampleRate;d[i]=d[i]*Math.exp(-s*30)*0.62+Math.sin(2*Math.PI*88*s)*Math.exp(-s*24)*0.32;}
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=660;
+            src.connect(lpf); lpf.connect(gain(0.38,0.15)); src.start();
+
+        } else if (type === 'tree_fall') {
+            const buf=noise(0.45); const d=buf.getChannelData(0);
+            for(let i=0;i<d.length;i++){const s=i/_ctx.sampleRate;const env=s<0.3?Math.exp(-s*5):Math.exp(-(s-0.3)*18)*0.75;d[i]=d[i]*env*0.68+Math.sin(2*Math.PI*52*s)*env*0.48;}
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=580;
+            src.connect(lpf); lpf.connect(gain(0.55,0.46)); src.start();
+        }
+    }
+
+    window.playSound = play;
+
+    // --- Hooks automáticos en funciones del juego ---------------
+    // Esperamos a que los scripts del juego hayan cargado
+    window.addEventListener('load', () => {
+        // damagePlayer → player_hit
+        const _dmg = window.damagePlayer;
+        if (_dmg) window.damagePlayer = function(a,s){ play('player_hit'); return _dmg(a,s); };
+
+        // gainXP → level_up si subió de nivel
+        const _xp = window.gainXP;
+        if (_xp) window.gainXP = function(a){ const prev=window.player?window.player.level:0; _xp(a); if(window.player&&window.player.level>prev) play('level_up'); };
+
+        // craftItem → craft
+        const _cr = window.craftItem;
+        if (_cr) window.craftItem = function(...a){ _cr(...a); play('craft'); };
+
+        // eatFood → eat
+        const _eat = window.eatFood;
+        if (_eat) window.eatFood = function(...a){ _eat(...a); play('eat'); };
+
+        // sendWorldUpdate → tree_fall / enemy_die
+        const _sw = window.sendWorldUpdate;
+        if (_sw) window.sendWorldUpdate = function(action, payload){
+            if (action==='destroy_tree') play('tree_fall');
+            if (action==='kill_entity') play('enemy_die');
+            return _sw(action, payload);
+        };
+
+        // Salto y aterrizaje via update loop
+        const _upd = window.update;
+        if (_upd) window.update = function(){
+            const wasG = window.player ? window.player.isGrounded : false;
+            _upd();
+            if (!window.player) return;
+            if (!wasG && window.player.isGrounded && (window.player._prevVy||0) > 4) play('land');
+            window.player._prevVy = window.player.vy || 0;
+        };
+
+        // Tecla de salto
+        document.addEventListener('keydown', (e) => {
+            if ((e.key===' '||e.key==='w'||e.key==='W') && window.player && window.player.isGrounded && !window.player.isDead)
+                play('jump');
+        });
+    });
+})();
+</script>
 
 </body>
 </html>

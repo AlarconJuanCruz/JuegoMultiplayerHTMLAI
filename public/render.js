@@ -33,11 +33,11 @@ window.drawCharacter = function(charData, isLocal) {
         let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
         if (Math.abs(dy) > 0.5) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
         isJumping = charData.isJumpingFrames > 0; isRunning = charData.isMovingFrames > 0 && !isJumping;
-        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.05; 
+        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
         else charData.renderAnimTime = 0;
     }
 
-    let time = (charData.renderAnimTime || 0) * 1.5; 
+    let time = (charData.renderAnimTime || 0) * 1.0; 
     let legR = 0, legL = 0, kneeR = 0, kneeL = 0, armR = 0, armL = 0, elbowR = 0, elbowL = 0, torsoR = 0, headR = 0, bob = 0;
 
     if (isJumping) {
@@ -47,7 +47,7 @@ window.drawCharacter = function(charData, isLocal) {
         armR = Math.cos(time) * 1.0; elbowR = -0.2 + Math.sin(time)*0.4; armL = Math.cos(time + Math.PI) * 1.0; elbowL = -0.2 + Math.sin(time + Math.PI)*0.4;
         torsoR = 0.15; headR = -0.05; bob = Math.abs(Math.sin(time * 2)) * 3;
     } else {
-        let idleTime = window.game.frameCount * 0.05; torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
+        let idleTime = window.game.frameCount * 0.03; torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
     }
 
     let aimAngle = 0;
@@ -57,7 +57,7 @@ window.drawCharacter = function(charData, isLocal) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
-        let progress = charData.attackFrame / 12; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
+        let progress = charData.attackFrame / 22; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
 
     let skin = charData.isHit ? '#ff4444' : '#f1c27d'; let shirt = charData.isHit ? '#ff4444' : (isLocal ? '#3498db' : '#686868'); let shirtDark = charData.isHit ? '#cc0000' : (isLocal ? '#2980b9' : '#4a4a4a');

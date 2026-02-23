@@ -153,17 +153,36 @@ window.checkEntityCollisions = function(ent, axis) {
     let hitWall = false;
     for (let i = window.blocks.length - 1; i >= 0; i--) {
         let b = window.blocks[i];
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
+        // Barricada ya NO se salta — entidades colisionan con ella
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') {
                 if (ent.vx > 0) { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; } else if (ent.vx < 0) { ent.x = b.x + window.game.blockSize; ent.vx *= -1; hitWall = true; }
-                if (ent.type === 'zombie' && b.type === 'door') {
+                // Zombies y arañas atacan puertas
+                if ((ent.type === 'zombie' || ent.type === 'spider') && b.type === 'door') {
                     if (window.game.frameCount % 40 === 0) { 
                         b.hp -= 20; window.setHit(b); window.spawnParticles(b.x + 10, b.y + 10, '#ff4444', 5); 
                         if (b.hp <= 0) { window.destroyBlockLocally(b); }
                         else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 20 }); }
                     }
+                }
+                // Arañas y zombies atacan barricadas Y reciben daño de las púas
+                if ((ent.type === 'spider' || ent.type === 'zombie') && b.type === 'barricade') {
+                    if (window.game.frameCount % 40 === 0) {
+                        // Daño de la entidad a la barricada
+                        const dmgToBarricade = ent.type === 'spider' ? 8 : 15;
+                        b.hp -= dmgToBarricade; window.setHit(b);
+                        window.spawnParticles(b.x + 15, b.y + 15, '#ff4444', 4);
+                        if (b.hp <= 0) { window.destroyBlockLocally(b); }
+                        else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: dmgToBarricade }); }
+                        // Las púas dañan a la entidad también
+                        const dmgToEnt = ent.type === 'spider' ? 6 : 4;
+                        ent.hp -= dmgToEnt; window.setHit(ent);
+                        window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ffa500', 3);
+                        window.spawnDamageText(ent.x + ent.width/2, ent.y - 4, `-${dmgToEnt}`, 'melee');
+                    }
+                    hitWall = true;
                 }
             } else if (axis === 'y') { if (ent.vy > 0) { ent.y = b.y - ent.height; ent.vy = 0; } else if (ent.vy < 0) { ent.y = b.y + itemHeight; ent.vy = 0; } }
         }
@@ -388,8 +407,8 @@ window.addEventListener('keydown', (e) => {
             if (interactables.length > 0) {
                 let b = interactables[0];
                 if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y }); if (window.playSound) window.playSound('door');
-                } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box'); if (window.playSound) window.playSound('menu_open');
-                } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); if (window.playSound) window.playSound('menu_open'); }
+                } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
+                } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
             }
         }
         
@@ -606,9 +625,7 @@ window.addEventListener('mousedown', (e) => {
             if (window.player.inventory.wood >= cost) {
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                     let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
-                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5);
-                    if (window.playSound) window.playSound('build');
-                    if(window.updateUI) window.updateUI();
+                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if (window.playSound) window.playSound('build'); if(window.updateUI) window.updateUI();
                 } else {
                     window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00');
                 }
@@ -739,7 +756,7 @@ function update() {
         let distMeters = Math.max(0, Math.floor((window.player.x - window.game.shoreX) / 10));
         let dTxt = window.getEl('dist-text'); if(dTxt) dTxt.innerText = `${distMeters}m`;
 
-        if (Math.abs(window.player.vx) > 0.5 && window.player.isGrounded) window.player.animTime += Math.abs(window.player.vx) * 0.04; else window.player.animTime = 0; 
+        if (Math.abs(window.player.vx) > 0.5 && window.player.isGrounded) window.player.animTime += Math.abs(window.player.vx) * 0.025; else window.player.animTime = 0; 
 
         window.player.x += window.player.vx; 
         if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
@@ -1006,7 +1023,14 @@ function update() {
                     let _bs = ent.type === 'zombie' ? 0.4 : 0.8;
                     _bs *= ((ent.enragedFrames||0) > 0 ? 1.6 : 1.0);
                     let targetVx = (targetPlayer.x > ent.x) ? _bs : -_bs; ent.vx = targetVx;
-                    if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; if (ent.stuckFrames > 60 && ent.type !== 'zombie') { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
+                    if (hitWall || Math.abs(ent.x - lastX) < 0.1) { 
+                        ent.stuckFrames++; 
+                        // Solo huir si NO hay barricada en el camino (si hay barricada, se queda atacándola)
+                        const hasBarricadeAhead = window.blocks.some(b => b.type === 'barricade' && 
+                            Math.abs((ent.x + ent.width/2) - (b.x + window.game.blockSize/2)) < ent.width + 5 &&
+                            Math.abs((ent.y + ent.height/2) - (b.y + window.game.blockSize/2)) < ent.height + 5);
+                        if (ent.stuckFrames > 60 && ent.type !== 'zombie' && !hasBarricadeAhead) { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } 
+                    } else ent.stuckFrames = 0;
                     if (minDist < 40 && ent.attackCooldown <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) { 
                         if (targetPlayer === window.player) window.damagePlayer(ent.damage, ent.name); 
                         ent.attackCooldown = 150; 

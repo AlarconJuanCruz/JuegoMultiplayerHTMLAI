@@ -146,13 +146,58 @@ window.cfAction = function(action) {
     window.renderCampfireUI(); window.updateUI();
 };
 
+window.takeAllFromBox = function() {
+    if (!window.currentOpenBox) return;
+    let taken = 0;
+    for (const [type, amt] of Object.entries(window.currentOpenBox.inventory)) {
+        if (amt <= 0) continue;
+        let canTake = Math.min(amt, 999);
+        // Intentar agregar de a poco hasta llenar
+        for (let a = canTake; a >= 1; a--) {
+            if (window.canAddItem(type, a)) {
+                window.player.inventory[type] = (window.player.inventory[type] || 0) + a;
+                window.currentOpenBox.inventory[type] -= a;
+                taken++;
+                break;
+            }
+        }
+    }
+    if (taken === 0) window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario lleno", '#fff');
+    else if (window.playSound) window.playSound('pickup');
+    if (window.sendWorldUpdate) window.sendWorldUpdate('update_box', { x: window.currentOpenBox.x, y: window.currentOpenBox.y, inventory: window.currentOpenBox.inventory });
+    window.renderBoxUI(); window.updateUI();
+};
+
 window.renderBoxUI = function() {
-    if(!window.currentOpenBox || !window.getEl('box-player-grid')) return;
+    if (!window.currentOpenBox || !window.getEl('box-player-grid')) return;
+
+    // Actualizar header dinámico: cofre vs tumba
+    const headerEl = window.getEl('box-dynamic-header');
+    const isGrave = window.currentOpenBox.type === 'grave';
+    if (headerEl) headerEl.innerHTML = isGrave ? '✝️ Objetos perdidos' : '📦 Cofre';
+
+    // Mostrar/ocultar botón "Agarrar todo" (solo aplica al lado de la caja/tumba)
+    const takeAllBtn = window.getEl('btn-take-all-box');
+    if (takeAllBtn) takeAllBtn.style.display = 'inline-block';
+
     const renderGrid = (inv, domId, toBox) => {
-        const grid = window.getEl(domId); grid.innerHTML = '';
-        for (const [type, amt] of Object.entries(inv)) { if (amt > 0) { const s = document.createElement('div'); s.className = 'inv-slot'; s.onclick = () => window.transferItem(type, toBox, 1); s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); }; s.innerHTML = `<div class="inv-icon" style="background-color: ${window.itemDefs[type]?window.itemDefs[type].color:'#fff'}"></div><div class="inv-amount">${amt}</div>`; grid.appendChild(s); } }
+        const grid = window.getEl(domId);
+        grid.innerHTML = '';
+        for (const [type, amt] of Object.entries(inv)) {
+            if (amt <= 0) continue;
+            const s = document.createElement('div');
+            s.className = 'inv-slot';
+            s.onclick = () => { window.transferItem(type, toBox, 1); if (window.playSound) window.playSound('pickup'); };
+            s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); if (window.playSound) window.playSound('pickup'); };
+            const def = window.itemDefs[type] || {};
+            const color = def.color || '#fff';
+            const name = def.name || type;
+            s.innerHTML = `<div class="inv-icon" style="background-color:${color}"></div><div class="inv-amount">${amt}</div><div class="custom-tooltip">${name}</div>`;
+            grid.appendChild(s);
+        }
     };
-    renderGrid(window.player.inventory, 'box-player-grid', true); renderGrid(window.currentOpenBox.inventory, 'box-storage-grid', false);
+    renderGrid(window.player.inventory, 'box-player-grid', true);
+    renderGrid(window.currentOpenBox.inventory, 'box-storage-grid', false);
 };
 
 window.renderCampfireUI = function() {
