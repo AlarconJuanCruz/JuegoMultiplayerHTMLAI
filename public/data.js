@@ -33,9 +33,10 @@ window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPr
 
 window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
 window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = [];
+window.stuckArrows = []; // <-- NUEVO: Almacena las flechas clavadas
 window.currentOpenBox = null; window.currentCampfire = null;
 
-window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'torch': { id: 'torch', name: 'Antorcha' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Mart.' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };
+window.toolDefs = { 'hand': { id: 'hand', name: 'Mano' }, 'torch': { id: 'torch', name: 'Antorcha' }, 'axe': { id: 'axe', name: 'Hacha' }, 'hammer': { id: 'hammer', name: 'Martillo' }, 'bow': { id: 'bow', name: 'Arco' }, 'pickaxe': { id: 'pickaxe', name: 'Pico'}, 'sword': {id: 'sword', name: 'Espada'} };
 
 window.itemDefs = { 
     'wood': { name: 'Madera', color: '#c19a6b', size: 12, maxStack: 500 }, 
@@ -57,8 +58,6 @@ window.player = {
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
     inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0 }, 
-    
-    // SISTEMA CINTURÓN 100% GARANTIZADO
     toolbar: ['hand', null, null, null, null, null],
     activeSlot: 0,
     activeTool: 'hand', 

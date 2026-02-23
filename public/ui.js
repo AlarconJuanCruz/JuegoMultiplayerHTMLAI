@@ -25,11 +25,10 @@ if (!isLocalEnv) {
     if (statusBadge) statusBadge.style.display = 'none'; 
 }
 
-// INICIALIZAR CHAT: Límites y detección de escritura (Typing...)
 window.addEventListener('DOMContentLoaded', () => {
     const chatInp = window.getEl('chat-input');
     if (chatInp) {
-        chatInp.maxLength = 70; // Límite de caracteres
+        chatInp.maxLength = 70; 
         chatInp.addEventListener('focus', () => { if(window.player) window.player.isTyping = true; });
         chatInp.addEventListener('blur', () => { if(window.player) window.player.isTyping = false; });
     }
@@ -106,7 +105,22 @@ window.loadServers = function() {
 window.loadServers();
 
 window.toggleMenu = function(mName) {
-    ['inventory', 'crafting', 'box', 'campfire'].forEach(m => { let d = window.getEl(`menu-${m}`); if(!d) return; if(m === mName) { d.classList.toggle('open'); if (m==='box') window.renderBoxUI(); if (m==='campfire') window.renderCampfireUI(); } else d.classList.remove('open'); }); window.updateUI();
+    ['inventory', 'crafting', 'box', 'campfire'].forEach(m => { 
+        let d = window.getEl(`menu-${m}`); 
+        if(!d) return; 
+        if(m === mName) { 
+            d.classList.toggle('open'); 
+            if (m==='box') window.renderBoxUI(); 
+            if (m==='campfire') window.renderCampfireUI(); 
+        } else {
+            d.classList.remove('open');
+        }
+    }); 
+    window.updateUI();
+    
+    // FIX: Esconder el tooltip fantasma siempre que cambie la UI
+    let gt = document.getElementById('global-tooltip');
+    if (gt) gt.style.display = 'none';
 };
 
 window.eatFood = function(hpG, hunG) {
@@ -152,7 +166,6 @@ window.takeAllFromBox = function() {
     for (const [type, amt] of Object.entries(window.currentOpenBox.inventory)) {
         if (amt <= 0) continue;
         let canTake = Math.min(amt, 999);
-        // Intentar agregar de a poco hasta llenar
         for (let a = canTake; a >= 1; a--) {
             if (window.canAddItem(type, a)) {
                 window.player.inventory[type] = (window.player.inventory[type] || 0) + a;
@@ -171,12 +184,10 @@ window.takeAllFromBox = function() {
 window.renderBoxUI = function() {
     if (!window.currentOpenBox || !window.getEl('box-player-grid')) return;
 
-    // Actualizar header dinámico: cofre vs tumba
     const headerEl = window.getEl('box-dynamic-header');
     const isGrave = window.currentOpenBox.type === 'grave';
     if (headerEl) headerEl.innerHTML = isGrave ? '✝️ Objetos perdidos' : '📦 Cofre';
 
-    // Mostrar/ocultar botón "Agarrar todo" (solo aplica al lado de la caja/tumba)
     const takeAllBtn = window.getEl('btn-take-all-box');
     if (takeAllBtn) takeAllBtn.style.display = 'inline-block';
 
@@ -192,7 +203,9 @@ window.renderBoxUI = function() {
             const def = window.itemDefs[type] || {};
             const color = def.color || '#fff';
             const name = def.name || type;
-            s.innerHTML = `<div class="inv-icon" style="background-color:${color}"></div><div class="inv-amount">${amt}</div><div class="custom-tooltip">${name}</div>`;
+            
+            s.dataset.tooltip = name;
+            s.innerHTML = `<div class="inv-icon" style="background-color:${color}"></div><div class="inv-amount">${amt}</div>`;
             grid.appendChild(s);
         }
     };
@@ -311,6 +324,8 @@ window.renderToolbar = function() {
                     let color = pct > 50 ? '#4CAF50' : (pct > 20 ? '#f39c12' : '#e74c3c');
                     durHTML = `<div style="position:absolute; bottom:0; left:0; width:100%; height:4px; background:#111;"><div style="height:100%; width:${pct.toFixed(1)}%; background:${color}; transition: width 0.2s;"></div></div>`;
                 }
+                
+                div.dataset.tooltip = tool.name;
                 content += `<div style="margin-top:10px; font-size:11px;">${tool.name}</div>${durHTML}`;
             } else {
                 let def = getInvDef(itemId, false);
@@ -319,6 +334,7 @@ window.renderToolbar = function() {
                     window.player.toolbar[i] = null;
                     if (window.player.activeSlot === i) { window.selectToolbarSlot(0); }
                 } else {
+                    div.dataset.tooltip = def.name;
                     content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto; border-radius:3px;"></div><div class="inv-amount" style="position:absolute; bottom:2px; right:4px;">${count}</div>`;
                 }
             }
@@ -420,10 +436,12 @@ window.updateUI = function() {
                 let iconStyle = `background-color: ${def.color};`;
                 if (isLarge) iconStyle += ' height: 80%; width: 80%; border-radius: 8px;';
                 
-                slot.innerHTML = `<div class="inv-icon" style="${iconStyle}"></div><div class="custom-tooltip">${def.name}</div>${durHTML}`;
+                slot.dataset.tooltip = def.name;
+                slot.innerHTML = `<div class="inv-icon" style="${iconStyle}"></div>${durHTML}`;
             } else {
                 slot.onclick = () => window.invItemClick(slotData.type);
-                slot.innerHTML = `<div class="inv-icon" style="background-color: ${def.color}"></div><div class="inv-amount">${slotData.amount}</div><div class="custom-tooltip">${def.name}</div>`;
+                slot.dataset.tooltip = def.name;
+                slot.innerHTML = `<div class="inv-icon" style="background-color: ${def.color}"></div><div class="inv-amount">${slotData.amount}</div>`;
             }
             grid.appendChild(slot);
             cellsUsed += cellsTaken;
@@ -510,3 +528,49 @@ window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, '
 window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
 window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
 window.bindCraft('btn-craft-barricade', () => window.craftItem(8, 4, 0, 0, null, 'barricade_item', 1));
+
+// === SISTEMA GLOBAL DE TOOLTIPS (CON ESTILOS INYECTADOS) ===
+document.addEventListener('DOMContentLoaded', () => {
+    let gt = document.createElement('div');
+    gt.id = 'global-tooltip';
+    
+    // INYECTAMOS TODOS LOS ESTILOS POR DEFECTO PARA ASEGURARNOS QUE SE VEAN BIEN
+    gt.style.position = 'fixed'; 
+    gt.style.pointerEvents = 'none';
+    gt.style.display = 'none';
+    gt.style.zIndex = '999999';
+    gt.style.background = 'rgba(12, 18, 28, 0.95)';
+    gt.style.color = '#ffffff';
+    gt.style.border = '1px solid rgba(255, 255, 255, 0.2)';
+    gt.style.padding = '6px 12px';
+    gt.style.borderRadius = '4px';
+    gt.style.fontFamily = 'sans-serif';
+    gt.style.fontSize = '14px';
+    gt.style.fontWeight = 'bold';
+    gt.style.boxShadow = '0px 4px 8px rgba(0,0,0,0.6)';
+    gt.style.whiteSpace = 'nowrap';
+    gt.style.textTransform = 'capitalize';
+
+    document.body.appendChild(gt);
+
+    document.addEventListener('mouseover', (e) => {
+        let target = e.target.closest('.inv-slot, .tool-slot');
+        if (target && target.dataset.tooltip) {
+            gt.innerHTML = target.dataset.tooltip;
+            gt.style.display = 'block';
+        }
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (gt.style.display === 'block') {
+            gt.style.left = e.clientX + 'px';
+            gt.style.top = (e.clientY + 20) + 'px'; 
+            gt.style.transform = 'translateX(-50%)'; // Esto lo centra horizontalmente
+        }
+    });
+    
+    document.addEventListener('mouseout', (e) => {
+        let target = e.target.closest('.inv-slot, .tool-slot');
+        if (target) gt.style.display = 'none';
+    });
+});

@@ -3,323 +3,353 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personaje Animado 2D - Rigging Perfecto</title>
+    <title>Animación Araña 2D - Profesional V3</title>
     <style>
+        :root {
+            /* Paleta de colores mejorada para contraste */
+            --color-abdomen: #111111;   /* Negro casi puro */
+            --color-thorax: #3a3a3a;    /* Gris carbón para la cabeza */
+            --color-legs: #222222;      /* Gris muy oscuro para patas */
+            --color-eye: #ff0000;       /* Rojo brillante */
+            /* Borde sutil para definir las patas contra el cuerpo */
+            --leg-definition: 1px solid rgba(0,0,0,0.8);
+        }
+
         body {
             margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             overflow: hidden;
-            background-color: #34495e;
-            font-family: sans-serif;
-            color: white;
+            cursor: pointer;
         }
 
-        #instrucciones {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            background: rgba(0,0,0,0.5);
-            padding: 15px;
-            border-radius: 8px;
-        }
-
-        /* Escenario */
-        #world {
+        #scene {
             position: relative;
             width: 100vw;
             height: 100vh;
-            box-sizing: border-box;
+            /* Fondo dividido estilo "flat design" */
+            background: linear-gradient(to top, #d0d0d0 45%, #e8e8e8 45%);
         }
 
-        #floor {
+        .spider-rig {
             position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 20vh;
-            background-color: #2c3e50;
-            border-top: 10px solid #27ae60;
+            top: 45%; /* Posicionado en la línea del suelo */
+            left: 50%;
+            z-index: 2;
+            /* El punto de transformación es el centro inferior (entre las patas) */
+            transform: translate(-50%, -100%);
         }
 
-        /* --- ESTRUCTURA DEL RIG --- */
+        /* --- ESTRUCTURA DEL CUERPO --- */
+        .body-container {
+             position: relative;
+             /* Z-index medio: Las patas traseras van detrás, las delanteras delante */
+             z-index: 10; 
+        }
+
+        /* Tórax (Cabeza/Pecho) */
+        .thorax {
+            position: absolute;
+            width: 48px;
+            height: 40px;
+            background-color: var(--color-thorax);
+            /* Forma más redondeada en el frente */
+            border-radius: 45% 50% 50% 45%;
+            top: 15px;
+            left: -22px;
+            z-index: 12; /* Delante del abdomen */
+            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.5); /* Sombra interna sutil para volumen */
+        }
+
+        /* Abdomen (Parte trasera) */
+        .abdomen {
+            position: absolute;
+            width: 90px;
+            height: 80px;
+            background-color: var(--color-abdomen);
+            border-radius: 50% 55% 50% 50%;
+            top: 0px;
+            left: 5px;
+            z-index: 11;
+            box-shadow: inset 0 -5px 10px rgba(0,0,0,1); /* Volumen extra oscuro */
+        }
         
-        #player-wrapper {
+        /* Ojo */
+        .eye-profile {
             position: absolute;
-            bottom: 20vh;
-            left: 50vw;
-            width: 0; height: 0;
+            width: 7px;
+            height: 7px;
+            background: var(--color-eye);
+            border-radius: 50%;
+            top: 12px;
+            left: 6px;
+            box-shadow: 0 0 8px var(--color-eye); /* Resplandor rojo */
         }
 
-        #player-rig {
-            position: relative;
-            transform-origin: bottom center;
-            transform: scale(1.6);
-        }
-
-        /* Envoltorio principal de las caderas (Raíz) */
-        .hips-wrapper {
+        /* Colmillos (Corregidos: posición y tamaño) */
+        .fangs {
             position: absolute;
-            bottom: 65px; left: -12px;
-            width: 24px; height: 24px;
+            /* Ajustados para estar pegados debajo del frente del tórax */
+            top: 28px; 
+            left: -4px;
+            z-index: 10; /* Detrás del tórax pero delante de las patas de fondo */
         }
-
-        /* Envoltorio invisible del torso (Para girar cuerpo y brazos a la vez) */
-        .upper-body {
+        .fang {
             position: absolute;
-            bottom: 15px; left: -4px; 
-            width: 32px; height: 55px;
-            transform-origin: bottom center;
-            z-index: 3; /* El torso va por encima de la pierna trasera y detrás de la delantera */
-            transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
-        }
-
-        /* Estilos visuales comunes (Las "piezas" de color) */
-        .part {
-            position: absolute;
-            background-color: #ecf0f1;
+            width: 0;
+            height: 0;
+            border-left: 3px solid transparent;
+            border-right: 3px solid transparent;
+            /* Colmillos más cortos y afilados */
+            border-top: 12px solid var(--color-abdomen);
             transform-origin: top center;
-            box-shadow: inset -3px -3px 8px rgba(0,0,0,0.15);
-            transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1);
         }
+        .fang1 { left: 0px; transform: rotate(10deg); }
+        .fang2 { left: 7px; transform: rotate(0deg); }
 
-        /* Extremidades traseras (Más oscuras) */
-        .back-limb { 
-            background-color: #95a5a6; 
-            box-shadow: inset -2px -2px 5px rgba(0,0,0,0.3); 
+
+        /* --- PATAS (Con definición mejorada) --- */
+        /* Contenedores para profundidad 3D */
+        .legs-back {
+            position: absolute;
+            top: 38px; /* Punto de nacimiento central */
+            left: 18px;
+            z-index: 5; /* Lo más atrás */
+            /* Oscurecer patas traseras para profundidad */
+            filter: brightness(0.7) contrast(1.2); 
         }
-
-        /* --- MEDIDAS Y Z-INDEX (El secreto de las capas) --- */
         
-        /* Gráfico de la cadera */
-        .hips-graphic { width: 100%; height: 100%; border-radius: 50%; z-index: 2; }
-        
-        /* Gráfico del torso */
-        .torso-graphic { width: 100%; height: 100%; border-radius: 25px 25px 15px 15px; z-index: 2; }
-        
-        /* Cabeza */
-        .head { bottom: 50px; left: -9px; width: 50px; height: 52px; border-radius: 45% 55% 50% 50% / 50% 50% 45% 55%; transform-origin: bottom center; z-index: 3; }
-
-        /* Brazos y Piernas */
-        .arm { top: 5px; left: 8px; width: 14px; height: 38px; border-radius: 14px; }
-        .forearm { top: 32px; left: 1px; width: 12px; height: 38px; border-radius: 12px; }
-        .thigh { top: 15px; left: 3px; width: 18px; height: 44px; border-radius: 18px; }
-        .leg { top: 38px; left: 1px; width: 16px; height: 42px; border-radius: 16px; }
-
-        /* ORDENAMIENTO DE CAPAS (Z-INDEX) */
-        .thigh.back-limb { z-index: 1; } /* Al fondo del todo */
-        .thigh:not(.back-limb) { z-index: 4; } /* Al frente del todo */
-        
-        .arm.back-limb { z-index: 1; } /* Detrás del torso */
-        .arm:not(.back-limb) { z-index: 4; } /* Delante del torso */
-
-
-        /* ----- ANIMACIONES (Optimizadas) ----- */
-        
-        /* IDLE (Quieto) */
-        .idle .upper-body { animation: idle-torso 2.5s infinite ease-in-out; }
-        .idle .head { animation: idle-head 2.5s infinite ease-in-out -1s; }
-        .idle .arm { animation: idle-arm 2.5s infinite ease-in-out; }
-        .idle .arm.back-limb { animation-delay: -1.25s; } /* Fase invertida para el brazo trasero */
-        .idle .forearm { transform: rotate(-15deg); }
-        .idle .thigh { transform: rotate(0deg); }
-        
-        @keyframes idle-torso {
-            0%, 100% { transform: scaleY(1) rotate(1deg) translateY(0); }
-            50% { transform: scaleY(0.97) rotate(-1deg) translateY(2px); }
-        }
-        @keyframes idle-head {
-            0%, 100% { transform: rotate(-2deg); }
-            50% { transform: rotate(2deg); }
-        }
-        @keyframes idle-arm {
-            0%, 100% { transform: rotate(8deg); }
-            50% { transform: rotate(-4deg); }
+        .legs-front {
+            position: absolute;
+            top: 38px;
+            left: 18px;
+            z-index: 15; /* Lo más adelante */
         }
 
-        /* RUN (Correr) */
-        .running .upper-body { transform: rotate(18deg) translateY(4px); }
-        .running .head { transform: rotate(-12deg); }
-        
-        .running .thigh { animation: run-thigh 0.5s infinite linear; }
-        .running .leg { animation: run-leg 0.5s infinite linear; }
-        .running .arm { animation: run-arm 0.5s infinite linear; }
-        .running .forearm { animation: run-forearm 0.5s infinite linear; }
-
-        /* Las extremidades traseras usan la misma animación, pero retrasadas medio ciclo */
-        .running .thigh.back-limb,
-        .running .leg.back-limb,
-        .running .arm.back-limb,
-        .running .forearm.back-limb {
-            animation-delay: -0.25s;
+        .leg {
+            position: absolute;
+            top: 0;
+            transform-origin: 0 0;
         }
 
-        @keyframes run-thigh {
-            0% { transform: rotate(-50deg); }
-            50% { transform: rotate(60deg); }
-            100% { transform: rotate(-50deg); }
-        }
-        @keyframes run-leg {
-            0% { transform: rotate(0deg); }
-            30% { transform: rotate(80deg); } 
-            50% { transform: rotate(10deg); } 
-            80% { transform: rotate(0deg); } 
-            100% { transform: rotate(0deg); }
-        }
-        @keyframes run-arm {
-            0% { transform: rotate(60deg); }
-            50% { transform: rotate(-50deg); }
-            100% { transform: rotate(60deg); }
-        }
-        @keyframes run-forearm {
-            0% { transform: rotate(-90deg); }
-            50% { transform: rotate(-40deg); }
-            100% { transform: rotate(-90deg); }
+        /* Segmentos de pata con BORDES para definición */
+        .femur {
+            position: absolute;
+            width: 45px;
+            height: 8px;
+            background-color: var(--color-legs);
+            border-radius: 4px;
+            border: var(--leg-definition); /* Borde clave */
+            transform-origin: 4px 50%;
+            left: 0;
+            top: 0;
         }
 
-        /* JUMP (Saltar) */
-        .jumping .upper-body { transform: rotate(5deg) translateY(-5px); }
-        .jumping .head { transform: rotate(-15deg); }
-        
-        .jumping .thigh:not(.back-limb) { transform: rotate(-70deg); }
-        .jumping .leg:not(.back-limb) { transform: rotate(100deg); }
-        .jumping .thigh.back-limb { transform: rotate(20deg); }
-        .jumping .leg.back-limb { transform: rotate(40deg); }
-        
-        .jumping .arm:not(.back-limb) { transform: rotate(-130deg); }
-        .jumping .forearm:not(.back-limb) { transform: rotate(-30deg); }
-        .jumping .arm.back-limb { transform: rotate(45deg); }
-        .jumping .forearm.back-limb { transform: rotate(-90deg); }
+        .tibia {
+            position: absolute;
+            width: 65px;
+            height: 6px;
+            background-color: var(--color-legs);
+            border-radius: 3px 100% 100% 3px; /* Punta afilada */
+            border: var(--leg-definition); /* Borde clave */
+            transform-origin: 4px 50%;
+            left: 40px;
+            top: 1px;
+        }
 
+        /* Distribución de las 6 patas */
+        /* Patas traseras (fondo) */
+        .B1 { left: -8px; }
+        .B2 { left: 12px; }
+        .B3 { left: 32px; }
+        /* Patas delanteras (frente) */
+        .F1 { left: -2px; }
+        .F2 { left: 18px; }
+        .F3 { left: 38px; }
+
+        .instructions {
+            position: absolute;
+            bottom: 50px;
+            color: #777;
+            font-family: 'Arial', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-size: 0.75rem;
+            width: 100%;
+            text-align: center;
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
 
-    <div id="instrucciones">
-        <h3>Controles V3 (Render Corregido)</h3>
-        <p>⬅️ ➡️ : Correr</p>
-        <p>Espacio : Saltar</p>
-    </div>
+    <div id="scene">
+        <div class="spider-rig" id="spiderRig">
+            
+            <div class="legs-back">
+                <div class="leg B1"><div class="femur"><div class="tibia"></div></div></div>
+                <div class="leg B2"><div class="femur"><div class="tibia"></div></div></div>
+                <div class="leg B3"><div class="femur"><div class="tibia"></div></div></div>
+            </div>
 
-    <div id="world">
-        <div id="floor"></div>
-        
-        <div id="player-wrapper">
-            <div id="player-rig" class="idle">
-                
-                <div class="hips-wrapper">
-                    
-                    <div class="thigh back-limb part">
-                        <div class="leg back-limb part"></div>
+            <div class="body-container">
+                <div class="thorax">
+                    <div class="eye-profile"></div>
+                     <div class="fangs">
+                        <div class="fang fang1" id="fang1"></div>
+                        <div class="fang fang2" id="fang2"></div>
                     </div>
-
-                    <div class="hips-graphic part"></div>
-
-                    <div class="upper-body">
-                        <div class="arm back-limb part">
-                            <div class="forearm back-limb part"></div>
-                        </div>
-                        
-                        <div class="torso-graphic part"></div>
-                        
-                        <div class="head part"></div>
-                        
-                        <div class="arm part">
-                            <div class="forearm part"></div>
-                        </div>
-                    </div>
-
-                    <div class="thigh part">
-                        <div class="leg part"></div>
-                    </div>
-
                 </div>
+                <div class="abdomen"></div>
+            </div>
 
+            <div class="legs-front">
+                <div class="leg F1"><div class="femur"><div class="tibia"></div></div></div>
+                <div class="leg F2"><div class="femur"><div class="tibia"></div></div></div>
+                <div class="leg F3"><div class="femur"><div class="tibia"></div></div></div>
             </div>
         </div>
     </div>
+    
+    <div class="instructions">Click para atacar</div>
 
     <script>
-        const wrapper = document.getElementById('player-wrapper');
-        const rig = document.getElementById('player-rig');
+        // Referencias DOM
+        const spiderRig = document.getElementById('spiderRig');
+        const femurs = document.querySelectorAll('.femur');
+        const tibias = document.querySelectorAll('.tibia');
+        const fang1 = document.getElementById('fang1');
+        const fang2 = document.getElementById('fang2');
 
-        const keys = { ArrowRight: false, ArrowLeft: false, Space: false };
+        // Variables de estado
+        let time = 0;
+        const speed = 0.08;
+        let isAttacking = false;
+        let attackPhase = 0;
 
-        let posX = window.innerWidth / 2;
-        let posY = 0;
-        let velocityY = 0;
-        let gravity = 0.7; 
-        let jumpForce = 13; 
-        let isJumping = false;
-        let speedX = 7; 
-        let facing = 1;
-        let justLanded = false;
+        // Desfases para 6 patas. Patrón alterno trípode para estabilidad visual.
+        // Grupo A: B1, B3, F2 | Grupo B: B2, F1, F3
+        const legOffsets = [
+            0, Math.PI, 0,           // B1, B2, B3
+            Math.PI, 0, Math.PI      // F1, F2, F3
+        ];
 
-        window.addEventListener('keydown', (e) => {
-            if (keys.hasOwnProperty(e.code)) {
-                keys[e.code] = true;
-                if(e.code === 'Space') e.preventDefault();
-            }
-        });
+        // Ángulos base del fémur para abanicar las patas
+        const baseFemurAngles = [-35, -65, -95, -25, -55, -85];
 
-        window.addEventListener('keyup', (e) => {
-            if (keys.hasOwnProperty(e.code)) {
-                keys[e.code] = false;
-            }
-        });
-
-        function gameLoop() {
-            let isRunning = false;
-
-            if (keys.ArrowRight) {
-                posX += speedX;
-                facing = 1;
-                isRunning = true;
-            } else if (keys.ArrowLeft) {
-                posX -= speedX;
-                facing = -1;
-                isRunning = true;
+        // --- Bucle Principal ---
+        function animate() {
+            if (!isAttacking) {
+                time += speed;
             }
 
-            if (keys.Space && !isJumping) {
-                velocityY = jumpForce;
-                isJumping = true;
-                justLanded = false;
+            // "Bobbing" (rebote) del cuerpo más pesado
+            const bodyBob = isAttacking ? 0 : Math.sin(time * 4) * 2.5;
+            const attackTransform = getAttackTransform();
+            
+            // Aplicamos movimiento al rig completo
+            spiderRig.style.transform = `translate(calc(-50% + ${attackTransform.x}px), calc(-100% + ${bodyBob + attackTransform.y}px)) rotate(${-attackTransform.rot}deg)`;
+
+            // --- Cinemática de Patas ---
+            for (let i = 0; i < 6; i++) {
+                const currentPhase = time + legOffsets[i];
+
+                // Ciclos de movimiento (swing = péndulo, lift = levantar)
+                let swing = Math.cos(currentPhase); 
+                let lift = Math.max(0, Math.sin(currentPhase));
+
+                let targetFemurAngle = baseFemurAngles[i];  
+                let targetTibiaAngle = 135; // Ángulo base de rodilla
+
+                // Modificadores durante el ataque
+                if (isAttacking) {
+                    if (i === 0 || i === 3) { 
+                        // Patas delanteras (B1 y F1) se levantan como guadañas
+                        targetFemurAngle = -110 - (35 * attackPhase); 
+                        targetTibiaAngle = 130 - (90 * attackPhase); 
+                        swing = 0; lift = 0;
+                    } else { 
+                        // Las demás se agachan para estabilizar
+                        targetFemurAngle += (25 * attackPhase); 
+                        targetTibiaAngle += (25 * attackPhase);
+                        swing = 0; lift = 0;
+                    }
+                }
+                
+                // Cálculo final aplicando los ciclos
+                // Lift afecta más a la rodilla para que el pie suba recto
+                const finalFemurAngle = targetFemurAngle + (swing * 22) - (lift * 20);
+                const finalTibiaAngle = targetTibiaAngle - (lift * 35);
+
+                femurs[i].style.transform = `rotate(${finalFemurAngle}deg)`;
+                tibias[i].style.transform = `rotate(${finalTibiaAngle}deg)`;
             }
 
-            posY += velocityY;
-
-            if (posY > 0) {
-                velocityY -= gravity;
-                justLanded = false;
-            } else {
-                if(isJumping) justLanded = true; 
-                posY = 0;
-                velocityY = 0;
-                isJumping = false;
-            }
-
-            let currentState = 'idle';
-
-            if (isJumping || justLanded) { 
-                currentState = 'jumping';
-                if(justLanded && posY === 0) justLanded = false; 
-            } else if (isRunning) {
-                currentState = 'running';
-            }
-
-            if (!rig.classList.contains(currentState)) {
-                rig.classList.remove('idle', 'running', 'jumping');
-                rig.classList.add(currentState);
-            }
-
-            posX = Math.max(30, Math.min(window.innerWidth - 30, posX));
-
-            wrapper.style.transform = `translate3d(${posX}px, ${-posY}px, 0)`;
-            rig.style.transform = `scaleX(${facing}) scale(1.6)`;
-
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(animate);
         }
 
-        gameLoop();
+        // --- Lógica de Ataque ---
+        function getAttackTransform() {
+            // Estado normal de los colmillos
+            if (!isAttacking) {
+                fang1.style.transform = 'rotate(10deg)';
+                fang2.style.transform = 'rotate(0deg)';
+                return { x: 0, y: 0, rot: 0 };
+            }
+            
+            // Movimiento del cuerpo durante el ataque
+            const lungeX = 90 * attackPhase; // Estocada larga
+            const lungeY = 15 * attackPhase; // Se agacha un poco
+            const rotation = 12 * attackPhase; // Se inclina hacia arriba
+
+            // Animación de los colmillos (se abren agresivamente)
+            fang1.style.transform = `rotate(${10 - 50 * attackPhase}deg)`;
+            fang2.style.transform = `rotate(${0 - 40 * attackPhase}deg)`;
+
+            return { x: lungeX, y: lungeY, rot: rotation };
+        }
+
+        function triggerAttack() {
+            if (isAttacking) return;
+            isAttacking = true;
+            attackPhase = 0;
+
+            const attackDuration = 250; 
+            const startTime = performance.now();
+
+            // Función de easing para un ataque rápido y elástico
+            function performAttackStep(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / attackDuration, 1);
+
+                 if (progress < 0.5) {
+                     // Fase de ida rápida (seno)
+                     attackPhase = Math.sin(progress * Math.PI); 
+                 } else {
+                     // Fase de retorno con rebote suave
+                      attackPhase = (1 - Math.sin((progress - 0.5) * Math.PI)) * 1.1; 
+                 }
+
+                if (progress < 1) {
+                    requestAnimationFrame(performAttackStep);
+                } else {
+                    isAttacking = false;
+                    attackPhase = 0;
+                }
+            }
+            requestAnimationFrame(performAttackStep);
+        }
+
+        document.body.addEventListener('mousedown', triggerAttack);
+        document.body.addEventListener('touchstart', triggerAttack, {passive: true});
+
+        // Iniciar
+        animate();
+
     </script>
 </body>
 </html>

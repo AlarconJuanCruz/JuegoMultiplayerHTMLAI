@@ -4,9 +4,8 @@ window.useTool = function() {
     if (window.player.activeTool === 'hand') return;
     const tool = window.player.activeTool;
     const maxDur = window.toolMaxDurability[tool];
-    if (!maxDur) return; // no tiene durabilidad (mano, ítems de mueble)
+    if (!maxDur) return; 
     
-    // Si por alguna razón no está inicializada, inicializarla ahora
     if (typeof window.player.toolHealth[tool] !== 'number' || isNaN(window.player.toolHealth[tool])) {
         window.player.toolHealth[tool] = maxDur;
     }
@@ -81,7 +80,8 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         window.blocks.push(grave);
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
-        window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0 }; 
+        // Al morir se pierden los objetos y materiales
+        window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0 }; 
         window.player.toolbar = ['hand', null, null, null, null, null];
         if(window.selectToolbarSlot) window.selectToolbarSlot(0);
         window.player.xp = 0; 
