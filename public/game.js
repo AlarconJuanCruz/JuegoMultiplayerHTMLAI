@@ -33,12 +33,7 @@ window.destroyBlockLocally = function(b) {
     
     let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : 'wood'))); 
     let refundAmt = b.type === 'door' ? 2 : 1;
-    // Las barricadas destruidas por enemigos NO sueltan item (se rompen en combate)
-    // Solo devuelven item si las destruye el propio jugador con herramienta
-    if (b.type !== 'grave' && b.type !== 'barricade') { 
-        let ni = { id: Math.random().toString(36).substring(2,9), x:b.x+15, y:b.y+15, vx:0, vy:-2, type:refundType, amount:refundAmt, life:1.0}; 
-        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); 
-    } else if (b.type === 'barricade' && b._destroyedByPlayer) {
+    if (b.type !== 'grave') { 
         let ni = { id: Math.random().toString(36).substring(2,9), x:b.x+15, y:b.y+15, vx:0, vy:-2, type:refundType, amount:refundAmt, life:1.0}; 
         window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); 
     }
@@ -158,20 +153,16 @@ window.checkEntityCollisions = function(ent, axis) {
     let hitWall = false;
     for (let i = window.blocks.length - 1; i >= 0; i--) {
         let b = window.blocks[i];
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') {
                 if (ent.vx > 0) { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; } else if (ent.vx < 0) { ent.x = b.x + window.game.blockSize; ent.vx *= -1; hitWall = true; }
-                // Zombies y cazadores atacan puertas Y barricadas
-                if ((ent.type === 'zombie' || ent.type === 'archer') && (b.type === 'door' || b.type === 'barricade')) {
-                    let attackRate = b.type === 'barricade' ? 20 : 40;
-                    let dmg = b.type === 'barricade' ? (10 + ent.level * 3) : 20;
-                    if (window.game.frameCount % attackRate === 0) { 
-                        b.hp -= dmg; window.setHit(b); window.spawnParticles(b.x + 15, b.y + 15, '#ff4444', 6); 
-                        window.spawnDamageText(b.x + 15, b.y - 5, `-${dmg}`, '#ff4444');
+                if (ent.type === 'zombie' && b.type === 'door') {
+                    if (window.game.frameCount % 40 === 0) { 
+                        b.hp -= 20; window.setHit(b); window.spawnParticles(b.x + 10, b.y + 10, '#ff4444', 5); 
                         if (b.hp <= 0) { window.destroyBlockLocally(b); }
-                        else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: dmg }); }
+                        else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 20 }); }
                     }
                 }
             } else if (axis === 'y') { if (ent.vy > 0) { ent.y = b.y - ent.height; ent.vy = 0; } else if (ent.vy < 0) { ent.y = b.y + itemHeight; ent.vy = 0; } }
@@ -393,12 +384,32 @@ window.addEventListener('keydown', (e) => {
 
         if (e.key === 'e' || e.key === 'E') {
             const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2;
-            let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
-            if (interactables.length > 0) {
-                let b = interactables[0];
-                if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y });
-                } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
-                } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
+            
+            // Recoger flechas clavadas cercanas
+            let pickedArrow = false;
+            for (let i = window.projectiles.length - 1; i >= 0; i--) {
+                let pr = window.projectiles[i];
+                if (!pr.stuck || pr.isEnemy) continue;
+                let dist = Math.hypot(pCX - pr.x, pCY - pr.y);
+                if (dist < 55) {
+                    window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 1;
+                    window.projectiles.splice(i, 1);
+                    window.spawnParticles(pr.x, pr.y, '#eee', 4, 0.5);
+                    if (window.playSound) window.playSound('pickup');
+                    if (window.updateUI) window.updateUI();
+                    pickedArrow = true;
+                    break;
+                }
+            }
+
+            if (!pickedArrow) {
+                let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
+                if (interactables.length > 0) {
+                    let b = interactables[0];
+                    if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y }); if (window.playSound) window.playSound('door');
+                    } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
+                    } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
+                }
             }
         }
         
@@ -447,7 +458,7 @@ window.addEventListener('mousedown', (e) => {
                 let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : (window.player.placementMode === 'barricade_item' ? 'barricade' : 'campfire'));
                 
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
-                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 500 : 200, maxHp: type === 'barricade' ? 500 : 200, isHit: false };
+                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : 200, maxHp: type === 'barricade' ? 150 : 200, isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') {
@@ -532,7 +543,6 @@ window.addEventListener('mousedown', (e) => {
             if (Math.hypot(pCX - (b.x + window.game.blockSize/2), pCY - (b.y + h/2)) <= window.player.miningRange) {
                 b.hp -= blockDmg; window.setHit(b); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 5);
                 if (b.hp <= 0) { 
-                    if (b.type === 'barricade') b._destroyedByPlayer = true;
                     window.destroyBlockLocally(b);
                 } else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: blockDmg }); }
                 actionDone = true;
@@ -632,7 +642,9 @@ window.addEventListener('mouseup', (e) => {
                 let dx = window.mouseWorldX - pCX, dy = window.mouseWorldY - pCY; let angle = Math.atan2(dy, dx);
                 let power = 4 + (window.player.chargeLevel / 100) * 6; 
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false };
-                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if(window.useTool) window.useTool();
+                window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow);
+                if (window.playSound) window.playSound('arrow_shoot');
+                if(window.useTool) window.useTool();
             }
             window.player.isCharging = false; window.player.chargeLevel = 0; if(window.updateUI) window.updateUI();
         }
@@ -788,14 +800,15 @@ function update() {
                 if (b.burnTime <= 0) { if (b.wood > 0) { b.wood--; b.burnTime = 1800; } else { b.isBurning = false; } if (window.currentCampfire === b && typeof window.renderCampfireUI==='function') window.renderCampfireUI(); }
             }
             if (b.type === 'barricade') {
-                // El daño a entidades por contacto se maneja en checkEntityCollisions
-                // Aquí solo dañamos a la entidad por las púas si está colisionando
                 window.entities.forEach(ent => {
                     if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, window.game.blockSize)) {
                         if (window.game.frameCount % 30 === 0) {
-                            ent.hp -= 8;
-                            window.setHit(ent);
-                            window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#cc3300', 3);
+                            ent.hp -= 5; b.hp -= 10;
+                            window.setHit(ent); window.setHit(b);
+                            window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
+                            window.spawnParticles(b.x + 15, b.y + 15, '#bdc3c7', 3);
+                            if (b.hp <= 0) { window.destroyBlockLocally(b); }
+                            else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 10 }); }
                         }
                     }
                 });
@@ -836,7 +849,13 @@ function update() {
         }
 
         if (promptEl && textEl) {
-            if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
+            // Verificar flechas clavadas cercanas primero
+            let nearStuckArrow = window.projectiles.find(pr => pr.stuck && !pr.isEnemy && pr._nearPlayer);
+            
+            if (nearStuckArrow && !window.player.isDead) {
+                promptEl.style.display = 'block';
+                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para recuperar <strong style="color:#eee;">Flecha</strong>`;
+            } else if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
                 let hoveringInteractable = interactables[0];
                 if (hoveringInteractable.type !== 'bed') {
                     promptEl.style.display = 'block'; 
@@ -856,15 +875,65 @@ function update() {
         }
 
         for (let i = window.projectiles.length - 1; i >= 0; i--) {
-            let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
-            if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { window.spawnParticles(pr.x, pr.y, '#557A27', 3); window.projectiles.splice(i, 1); continue; } 
+            let pr = window.projectiles[i];
+            
+            // Las flechas clavadas no se mueven, sólo esperan a ser recogidas
+            if (pr.stuck) {
+                pr.stuckTimer = (pr.stuckTimer || 0) + 1;
+                // Desaparecen tras 20 segundos (1200 frames)
+                if (pr.stuckTimer > 1200) { window.projectiles.splice(i, 1); }
+                continue;
+            }
+
+            pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
+            if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { 
+                // Flecha del jugador que llega al suelo: 50% se clava, 50% se rompe
+                if (!pr.isEnemy && pr.y >= window.game.groundLevel) {
+                    if (Math.random() < 0.5) {
+                        pr.stuck = true; pr.stuckTimer = 0; pr.y = window.game.groundLevel - 4;
+                        if (window.playSound) window.playSound('arrow_stick');
+                    } else {
+                        window.projectiles.splice(i, 1);
+                    }
+                } else {
+                    window.projectiles.splice(i, 1);
+                }
+                continue; 
+            }
+
+            // Colisión con bloques
             let hitBlock = false;
-            for(let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire' && b.type !== 'barricade') { hitBlock = true; break; } }
-            if(hitBlock) { window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); window.projectiles.splice(i,1); continue; }
+            for(let b of window.blocks) { 
+                let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
+                if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire') { 
+                    hitBlock = true; break; 
+                } 
+            }
+            if(hitBlock) { 
+                window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); 
+                if (!pr.isEnemy) {
+                    // Flechas del jugador: 50% se clavan en la pared, 50% se rompen
+                    if (Math.random() < 0.5) {
+                        pr.stuck = true; pr.stuckTimer = 0; pr.vx = 0; pr.vy = 0;
+                        if (window.playSound) window.playSound('arrow_stick');
+                    } else {
+                        window.projectiles.splice(i, 1);
+                        if (window.playSound) window.playSound('arrow_break');
+                    }
+                } else {
+                    window.projectiles.splice(i, 1);
+                }
+                continue; 
+            }
             
             if (pr.isEnemy) {
-                if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { window.damagePlayer(pr.damage, 'Flecha de Cazador'); window.spawnParticles(pr.x, pr.y, '#ff4444', 5); window.projectiles.splice(i, 1); continue; }
-                // Flechas enemigas dañan estructuras si están apuntando a ellas
+                if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { 
+                    window.damagePlayer(pr.damage, 'Flecha de Cazador'); 
+                    window.spawnParticles(pr.x, pr.y, '#ff4444', 5); 
+                    if (window.playSound) window.playSound('arrow_hit_flesh');
+                    window.projectiles.splice(i, 1); continue; 
+                }
+                // Flechas enemigas dañan estructuras
                 let hitStructure = false;
                 for (let bi = window.blocks.length - 1; bi >= 0; bi--) {
                     let b = window.blocks[bi];
@@ -888,9 +957,10 @@ function update() {
                     let _aOx=(Math.random()-0.5)*16, _aOy=Math.random()*8;
                     window.spawnDamageText(ent.x+ent.width/2+_aOx, ent.y-_aOy, "-"+Math.floor(pr.damage), 'melee');
                     window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
+                    if (window.playSound) window.playSound('arrow_hit_flesh');
                     let _akd=pr.vx>0?1:-1; 
                     ent.vx=_akd*2.0; 
-                    ent.vy=-4.5; // Salto
+                    ent.vy=-4.5;
                     ent.knockbackFrames=8;
                     if(ent.hp <= 0) {
                             window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
@@ -907,11 +977,27 @@ function update() {
                         window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage });
                         if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
                     }
+                    // Flecha se rompe siempre al golpear enemigo
                     hitEnt = true; break;
                 }
                 } if(hitEnt) { window.projectiles.splice(i,1); continue; }
             }
             if(pr.life <= 0) window.projectiles.splice(i, 1);
+        }
+
+        // Recoger flechas clavadas con E
+        let pCX_arrow = window.player.x + window.player.width/2;
+        let pCY_arrow = window.player.y + window.player.height/2;
+        for (let i = window.projectiles.length - 1; i >= 0; i--) {
+            let pr = window.projectiles[i];
+            if (!pr.stuck || pr.isEnemy) continue;
+            let dist = Math.hypot(pCX_arrow - pr.x, pCY_arrow - pr.y);
+            if (dist < 40 && !window.player.isDead) {
+                // Mostrar prompt de recoger (se maneja en el prompt general)
+                pr._nearPlayer = true;
+            } else {
+                pr._nearPlayer = false;
+            }
         }
 
         let isMasterClient = true;
@@ -1030,84 +1116,27 @@ function update() {
                 if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
                     let dirX = targetPlayer.x > ent.x ? 1 : -1;
                     
-                    // --- Detectar si hay una estructura bloqueando el camino al jugador ---
-                    let pathBlocked = false;
-                    let blockingStructure = null;
-                    for (let b of window.blocks) {
-                        if (b.type !== 'block' && b.type !== 'door' && b.type !== 'barricade') continue;
-                        // ¿Está entre el cazador y el jugador, en la misma altura?
-                        let bMidX = b.x + window.game.blockSize / 2;
-                        let bMidY = b.y + window.game.blockSize / 2;
-                        let isBetween = (dirX > 0) ? (bMidX > ent.x + ent.width && bMidX < targetPlayer.x) : (bMidX < ent.x && bMidX > targetPlayer.x);
-                        let isInHeight = bMidY > ent.y - 30 && bMidY < ent.y + ent.height + 30;
-                        let distToBlock = Math.abs(bMidX - (ent.x + ent.width/2));
-                        if (isBetween && isInHeight && distToBlock < 400) {
-                            pathBlocked = true;
-                            // Priorizar el más cercano
-                            if (!blockingStructure || distToBlock < Math.abs(blockingStructure.x + 15 - (ent.x + ent.width/2))) {
-                                blockingStructure = b;
-                            }
-                        }
-                    }
-
-                    // --- Comportamiento según si hay bloqueo ---
-                    if (pathBlocked && blockingStructure) {
-                        let distToStructure = Math.abs((blockingStructure.x + 15) - (ent.x + ent.width/2));
-                        
-                        // Rango de disparo a estructura: 350px
-                        if (distToStructure < 350 && ent.attackCooldown <= 0) {
-                            // Disparar a la estructura
-                            let bCX = blockingStructure.x + window.game.blockSize / 2;
-                            let bCY = blockingStructure.y + window.game.blockSize / 2;
-                            let vx_base = bCX - (ent.x + ent.width/2);
-                            let vy_base = bCY - (ent.y + ent.height/2);
-                            let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
-                            let arrowSpeed = 10;
-                            let arrowVx = (vx_base / currentSpeed) * arrowSpeed;
-                            let arrowVy = (vy_base / currentSpeed) * arrowSpeed;
-                            window.projectiles.push({ 
-                                x: ent.x + ent.width/2, y: ent.y + ent.height/2, 
-                                vx: arrowVx, vy: arrowVy, life: 200, 
-                                damage: 5 + ent.level * 2, isEnemy: true, targetsStructure: true,
-                                structureTarget: { x: blockingStructure.x, y: blockingStructure.y }
-                            });
-                            ent.attackCooldown = Math.max(80, 180 - (ent.level * 8));
-                            ent.vx = 0; // Se detiene para apuntar
-                        } else if (distToStructure >= 350) {
-                            // Acercarse a la estructura para poder dispararle
-                            ent.vx = dirX * 1.1;
-                        } else {
-                            // Esperar a que se recargue
-                            ent.vx = 0;
-                        }
-                    } else {
-                        // Sin bloqueo: comportamiento normal de combate vs jugador
-                        if (minDist > 500) ent.vx = dirX * 0.9;
-                        else if (minDist < 250) ent.vx = -dirX * 1.1; 
-                        else ent.vx = 0; 
-                        
-                        if (ent.attackCooldown <= 0 && minDist < 550) {
-                            let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
-                            let arrowSpeed = 11; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
-                            let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
-                            let angle = Math.atan2(vy, vx); let errorMargin = Math.max(0, 0.2 - (ent.level * 0.02)); angle += (Math.random() - 0.5) * errorMargin;
-                            window.projectiles.push({ x: ent.x + ent.width/2, y: ent.y + ent.height/2, vx: Math.cos(angle)*arrowSpeed, vy: Math.sin(angle)*arrowSpeed, life: 250, damage: ent.damage, isEnemy: true });
-                            ent.attackCooldown = Math.max(120, 250 - (ent.level * 10)); 
-                        }
-                    }
-
-                    // Gestión de stuckFrames: si está atascado sin bloqueo conocido, salta
-                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0 && !pathBlocked)) { 
+                    if (minDist > 500) ent.vx = dirX * 0.9;
+                    else if (minDist < 250) ent.vx = -dirX * 1.1; 
+                    else ent.vx = 0; 
+                    
+                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { 
                         ent.stuckFrames++; 
                         if (ent.stuckFrames > 30) { 
                              ent.vy = -6;
+                             ent.ignorePlayer = 60;
                              ent.stuckFrames = 0; 
                         } 
-                    } else if (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0 && pathBlocked && ent.stuckFrames > 60) {
-                        // Atascado contra estructura, ya debería disparar - resetear
-                        ent.stuckFrames = 0;
-                    } else { ent.stuckFrames = 0; }
+                    } else ent.stuckFrames = 0;
 
+                    if (ent.attackCooldown <= 0 && minDist < 550) {
+                        let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
+                        let arrowSpeed = 11; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
+                        let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
+                        let angle = Math.atan2(vy, vx); let errorMargin = Math.max(0, 0.2 - (ent.level * 0.02)); angle += (Math.random() - 0.5) * errorMargin;
+                        window.projectiles.push({ x: ent.x + ent.width/2, y: ent.y + ent.height/2, vx: Math.cos(angle)*arrowSpeed, vy: Math.sin(angle)*arrowSpeed, life: 250, damage: ent.damage, isEnemy: true });
+                        ent.attackCooldown = Math.max(120, 250 - (ent.level * 10)); 
+                    }
                 } else { if(Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.6 : -0.6); }
                 if (ent.attackCooldown > 0) ent.attackCooldown--;
             }

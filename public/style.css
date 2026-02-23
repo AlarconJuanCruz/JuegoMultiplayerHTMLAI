@@ -393,23 +393,22 @@ canvas { display: block; width: 100%; height: 100%; }
    ============================================ */
 #interaction-prompt {
     position: absolute;
-    bottom: 80px; left: 50%;
-    transform: translateX(-50%);
+    top: 65%; left: 50%;
+    transform: translate(-50%, -50%);
     background: rgba(4,8,14,0.94);
     backdrop-filter: var(--blur);
-    padding: 8px 18px;
+    padding: 10px 20px;
     border-radius: var(--radius-md);
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.1);
     font-family: var(--font-ui);
     font-weight: 600;
-    font-size: 13px;
+    font-size: 14px;
     letter-spacing: 0.05em;
     text-shadow: 0 1px 3px rgba(0,0,0,0.9);
     color: #fff;
     z-index: 200;
     display: none;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
-    white-space: nowrap;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.7);
 }
 .key-btn {
     background: rgba(255,255,255,0.92);
@@ -659,17 +658,28 @@ canvas { display: block; width: 100%; height: 100%; }
     transform: translateX(-50%);
     background: rgba(4,8,14,0.98);
     color: var(--gold);
-    padding: 4px 8px;
+    padding: 5px 10px;
     border-radius: 5px;
     font-family: var(--font-ui);
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
-    z-index: 999;
+    z-index: 9999;
     pointer-events: none;
-    border: 1px solid rgba(245,200,66,0.18);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.8);
+    border: 1px solid rgba(245,200,66,0.22);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.9);
+    letter-spacing: 0.04em;
 }
+.custom-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: rgba(245,200,66,0.22);
+}
+/* Evitar que se corte en el borde del grid */
+.inv-slot { overflow: visible !important; }
 
 /* ============================================
    STATS

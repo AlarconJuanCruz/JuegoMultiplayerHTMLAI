@@ -33,21 +33,22 @@ window.drawCharacter = function(charData, isLocal) {
         let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
         if (Math.abs(dy) > 0.5) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
         isJumping = charData.isJumpingFrames > 0; isRunning = charData.isMovingFrames > 0 && !isJumping;
-        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.05; 
+        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
         else charData.renderAnimTime = 0;
     }
 
-    let time = (charData.renderAnimTime || 0) * 1.5; 
+    let time = (charData.renderAnimTime || 0) * 1.0;  // era 1.5 - más lento
     let legR = 0, legL = 0, kneeR = 0, kneeL = 0, armR = 0, armL = 0, elbowR = 0, elbowL = 0, torsoR = 0, headR = 0, bob = 0;
 
     if (isJumping) {
         legR = -0.5; kneeR = 0.8; legL = 0.3; kneeL = 0.1; armR = -2.5; elbowR = -0.2; armL = -1.5; elbowL = -0.5; torsoR = 0.1; headR = -0.2; bob = -4;
     } else if (isRunning) {
-        legR = Math.sin(time) * 1.0; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 1.5); legL = Math.sin(time + Math.PI) * 1.0; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 1.5);
-        armR = Math.cos(time) * 1.0; elbowR = -0.2 + Math.sin(time)*0.4; armL = Math.cos(time + Math.PI) * 1.0; elbowL = -0.2 + Math.sin(time + Math.PI)*0.4;
-        torsoR = 0.15; headR = -0.05; bob = Math.abs(Math.sin(time * 2)) * 3;
+        legR = Math.sin(time) * 0.85; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 1.2); legL = Math.sin(time + Math.PI) * 0.85; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 1.2);
+        armR = Math.cos(time) * 0.85; elbowR = -0.2 + Math.sin(time)*0.35; armL = Math.cos(time + Math.PI) * 0.85; elbowL = -0.2 + Math.sin(time + Math.PI)*0.35;
+        torsoR = 0.12; headR = -0.04; bob = Math.abs(Math.sin(time * 2)) * 2.5;
     } else {
-        let idleTime = window.game.frameCount * 0.05; torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
+        let idleTime = window.game.frameCount * 0.03; // era 0.05 - respira más despacio
+        torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
     }
 
     let aimAngle = 0;
@@ -57,7 +58,8 @@ window.drawCharacter = function(charData, isLocal) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
-        let progress = charData.attackFrame / 12; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
+        // attackFrame = 22, animación más lenta y pesada
+        let progress = charData.attackFrame / 22; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
 
     let skin = charData.isHit ? '#ff4444' : '#f1c27d'; let shirt = charData.isHit ? '#ff4444' : (isLocal ? '#3498db' : '#686868'); let shirtDark = charData.isHit ? '#cc0000' : (isLocal ? '#2980b9' : '#4a4a4a');
@@ -970,17 +972,6 @@ window.draw = function() {
     }
 
     window.ctx.save(); window.ctx.translate(-window.camera.x, -window.camera.y);
-
-    // Paleta de colores para jugadores remotos (por índice de id)
-    const PLAYER_COLORS = ['#5dade2','#58d68d','#f4d03f','#e59866','#c39bd3','#f1948a','#52be80','#85c1e9'];
-    function getPlayerColor(name) {
-        let hash = 0; for (let c of (name||'')) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
-        return PLAYER_COLORS[hash % PLAYER_COLORS.length];
-    }
-
-    // Recolectar posiciones de chat activos para evitar solapamiento
-    let activeChatBoxes = [];
-
     const drawNameAndChat = (charData, isLocal) => {
         if (charData.isDead) return;
         if (!isLocal) { let dist = Math.hypot(window.player.x - charData.x, window.player.y - charData.y); if (dist > 500) return; }
@@ -988,69 +979,16 @@ window.draw = function() {
         const pCX = charData.x + (charData.width || 24) / 2; const pCY = charData.y + (charData.height || 48); 
         const bob = Math.abs(Math.sin((charData.renderAnimTime || 0) * 3)) * 3; 
 
-        const nameY = pCY - 80 - bob;
-        let chatBaseY = pCY - 110 - bob;
-
-        // Evitar solapamiento: empujar hacia arriba si hay otro chat cerca
-        if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
-            window.ctx.font = 'bold 13px Inter, sans-serif';
-            let tW = window.ctx.measureText(charData.chatText).width;
-            let boxW = tW + 16, boxH = 24;
-            let boxX = pCX - boxW / 2, boxY = chatBaseY - 15;
-
-            // Ajustar posición vertical para no pisarse con otros globos
-            let maxAttempts = 6;
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                let overlaps = false;
-                for (let other of activeChatBoxes) {
-                    if (Math.abs((boxX + boxW/2) - (other.cx + other.w/2)) < (boxW/2 + other.w/2 + 8) &&
-                        Math.abs((boxY + boxH/2) - (other.y + other.h/2)) < (boxH/2 + other.h/2 + 4)) {
-                        overlaps = true; break;
-                    }
-                }
-                if (!overlaps) break;
-                boxY -= (boxH + 6);
-            }
-            chatBaseY = boxY + 15;
-            activeChatBoxes.push({ cx: pCX, w: boxW, y: boxY, h: boxH });
-
-            window.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-            window.ctx.strokeStyle = isLocal ? 'rgba(52,152,219,0.7)' : `${getPlayerColor(charData.name)}99`;
-            window.ctx.lineWidth = 1.5;
-            // Bubble con triangle pointer
-            let rx = pCX - tW/2 - 8, ry = boxY;
-            window.ctx.beginPath();
-            window.ctx.moveTo(rx + 6, ry);
-            window.ctx.lineTo(rx + boxW - 6, ry);
-            window.ctx.quadraticCurveTo(rx + boxW, ry, rx + boxW, ry + 6);
-            window.ctx.lineTo(rx + boxW, ry + boxH - 6);
-            window.ctx.quadraticCurveTo(rx + boxW, ry + boxH, rx + boxW - 6, ry + boxH);
-            window.ctx.lineTo(pCX + 5, ry + boxH);
-            window.ctx.lineTo(pCX, ry + boxH + 6);
-            window.ctx.lineTo(pCX - 5, ry + boxH);
-            window.ctx.lineTo(rx + 6, ry + boxH);
-            window.ctx.quadraticCurveTo(rx, ry + boxH, rx, ry + boxH - 6);
-            window.ctx.lineTo(rx, ry + 6);
-            window.ctx.quadraticCurveTo(rx, ry, rx + 6, ry);
-            window.ctx.closePath();
-            window.ctx.fill();
-            window.ctx.stroke();
-
-            let textColor = isLocal ? '#a8d8f0' : getPlayerColor(charData.name);
-            window.ctx.fillStyle = textColor;
-            window.ctx.textAlign = 'center'; 
-            window.ctx.fillText(charData.chatText, pCX, boxY + 16);
-        }
+        const nameY = pCY - 80 - bob; const chatY = pCY - 110 - bob;
 
         if (!isLocal) {
-            let nameColor = getPlayerColor(charData.name);
-            window.ctx.fillStyle = nameColor;
-            window.ctx.font = 'bold 12px Inter, sans-serif'; 
-            window.ctx.textAlign = 'center'; 
-            // Sombra para legibilidad
-            window.ctx.shadowColor = 'rgba(0,0,0,0.9)'; window.ctx.shadowBlur = 4;
+            window.ctx.fillStyle = 'rgba(255,255,255,0.9)'; window.ctx.font = 'bold 12px Inter, sans-serif'; window.ctx.textAlign = 'center'; 
             window.ctx.fillText(`${charData.name} (Nv. ${charData.level || 1})`, pCX, nameY);
-            window.ctx.shadowBlur = 0;
+        }
+
+        if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
+            window.ctx.font = 'bold 13px Inter, sans-serif'; let tW = window.ctx.measureText(charData.chatText).width;
+            window.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; window.ctx.fillRect(pCX - tW/2 - 8, chatY - 15, tW + 16, 24); window.ctx.fillStyle = '#fff'; window.ctx.textAlign = 'center'; window.ctx.fillText(charData.chatText, pCX, chatY + 2);
         }
     };
     
