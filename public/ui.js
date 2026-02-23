@@ -146,86 +146,13 @@ window.cfAction = function(action) {
     window.renderCampfireUI(); window.updateUI();
 };
 
-window.takeAllFromBox = function() {
-    if (!window.currentOpenBox) return;
-    let inv = window.currentOpenBox.inventory;
-    let anyTaken = false;
-    for (const [type, amt] of Object.entries(inv)) {
-        if (amt <= 0) continue;
-        if (!window.canAddItem(type, amt)) {
-            // Agarra lo que pueda
-            let max = window.itemDefs[type] ? window.itemDefs[type].maxStack : 100;
-            let canTake = 0;
-            for (let tryAmt = amt; tryAmt > 0; tryAmt--) {
-                if (window.canAddItem(type, tryAmt)) { canTake = tryAmt; break; }
-            }
-            if (canTake > 0) {
-                inv[type] -= canTake;
-                window.player.inventory[type] = (window.player.inventory[type] || 0) + canTake;
-                anyTaken = true;
-            }
-        } else {
-            window.player.inventory[type] = (window.player.inventory[type] || 0) + amt;
-            inv[type] = 0;
-            anyTaken = true;
-        }
-    }
-    if (anyTaken && window.playSound) window.playSound('pickup');
-    if (window.sendWorldUpdate) window.sendWorldUpdate('update_box', { x: window.currentOpenBox.x, y: window.currentOpenBox.y, inventory: window.currentOpenBox.inventory });
-    window.renderBoxUI(); window.updateUI();
-};
-
 window.renderBoxUI = function() {
     if(!window.currentOpenBox || !window.getEl('box-player-grid')) return;
-
-    // Actualizar header dinámicamente (caja vs tumba)
-    let header = document.querySelector('#menu-box .window-header h3');
-    if (header) {
-        let isGrave = window.currentOpenBox.type === 'grave';
-        header.textContent = isGrave ? '✝️ Objetos perdidos' : '📦 Cofre';
-    }
-
-    // Actualizar/crear hint y botón agarrar todo en el menu-box
-    let menuBox = window.getEl('menu-box');
-    if (menuBox) {
-        let existingControls = menuBox.querySelector('.box-controls-bar');
-        if (!existingControls) {
-            let bar = document.createElement('div');
-            bar.className = 'box-controls-bar';
-            bar.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:6px 2px 8px; gap:8px; flex-wrap:wrap;';
-            bar.innerHTML = `
-                <span style="font-size:10px; color:#6a7585; font-family:var(--font-ui); flex:1;">
-                    🖱️ <b style="color:#aaa;">Clic</b> = mover 1 &nbsp;·&nbsp; <b style="color:#aaa;">Clic derecho</b> = mover 10
-                </span>
-                <button class="action-btn mini" id="btn-take-all" onclick="window.takeAllFromBox()" style="background:rgba(52,152,219,0.15); border-color:rgba(52,152,219,0.4); color:#7ec8e3; white-space:nowrap;">
-                    ⬇ Agarrar todo
-                </button>`;
-            // Insertar antes del inv-split
-            let split = menuBox.querySelector('.inv-split');
-            if (split) menuBox.insertBefore(bar, split);
-        }
-    }
-
     const renderGrid = (inv, domId, toBox) => {
-        const grid = window.getEl(domId); 
-        grid.innerHTML = '';
-        for (const [type, amt] of Object.entries(inv)) {
-            if (amt <= 0) continue;
-            const itemDef = window.itemDefs[type];
-            if (!itemDef) continue;
-            const s = document.createElement('div');
-            s.className = 'inv-slot';
-            s.onclick = () => { window.transferItem(type, toBox, 1); if(window.playSound) window.playSound('pickup'); };
-            s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); if(window.playSound) window.playSound('pickup'); };
-            s.innerHTML = `
-                <div class="inv-icon" style="background-color:${itemDef.color || '#fff'}"></div>
-                <div class="inv-amount">${amt}</div>
-                <div class="custom-tooltip">${itemDef.name}</div>`;
-            grid.appendChild(s);
-        }
+        const grid = window.getEl(domId); grid.innerHTML = '';
+        for (const [type, amt] of Object.entries(inv)) { if (amt > 0) { const s = document.createElement('div'); s.className = 'inv-slot'; s.onclick = () => window.transferItem(type, toBox, 1); s.oncontextmenu = (e) => { e.preventDefault(); window.transferItem(type, toBox, 10); }; s.innerHTML = `<div class="inv-icon" style="background-color: ${window.itemDefs[type]?window.itemDefs[type].color:'#fff'}"></div><div class="inv-amount">${amt}</div>`; grid.appendChild(s); } }
     };
-    renderGrid(window.player.inventory, 'box-player-grid', true);
-    renderGrid(window.currentOpenBox.inventory, 'box-storage-grid', false);
+    renderGrid(window.player.inventory, 'box-player-grid', true); renderGrid(window.currentOpenBox.inventory, 'box-storage-grid', false);
 };
 
 window.renderCampfireUI = function() {
@@ -347,7 +274,7 @@ window.renderToolbar = function() {
                     window.player.toolbar[i] = null;
                     if (window.player.activeSlot === i) { window.selectToolbarSlot(0); }
                 } else {
-                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto; border-radius:3px;"></div><div class="inv-amount" style="position:absolute; bottom:2px; right:4px;">${count}</div><div class="custom-tooltip">${def.name}</div>`;
+                    content += `<div class="inv-icon" style="background-color: ${def.color}; width:24px; height:24px; margin: auto; border-radius:3px;"></div><div class="inv-amount" style="position:absolute; bottom:2px; right:4px;">${count}</div>`;
                 }
             }
         }
@@ -412,7 +339,7 @@ window.updateUI = function() {
             }
         }
 
-        let totalCells = 25; 
+        let totalCells = 20; 
         let cellsUsed = 0;
 
         itemsToRender.forEach((slotData) => {

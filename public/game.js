@@ -384,32 +384,12 @@ window.addEventListener('keydown', (e) => {
 
         if (e.key === 'e' || e.key === 'E') {
             const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2;
-            
-            // Recoger flechas clavadas cercanas
-            let pickedArrow = false;
-            for (let i = window.projectiles.length - 1; i >= 0; i--) {
-                let pr = window.projectiles[i];
-                if (!pr.stuck || pr.isEnemy) continue;
-                let dist = Math.hypot(pCX - pr.x, pCY - pr.y);
-                if (dist < 55) {
-                    window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 1;
-                    window.projectiles.splice(i, 1);
-                    window.spawnParticles(pr.x, pr.y, '#eee', 4, 0.5);
-                    if (window.playSound) window.playSound('pickup');
-                    if (window.updateUI) window.updateUI();
-                    pickedArrow = true;
-                    break;
-                }
-            }
-
-            if (!pickedArrow) {
-                let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
-                if (interactables.length > 0) {
-                    let b = interactables[0];
-                    if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y }); if (window.playSound) window.playSound('door');
-                    } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box');
-                    } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
-                }
+            let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
+            if (interactables.length > 0) {
+                let b = interactables[0];
+                if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y }); if (window.playSound) window.playSound('door');
+                } else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box'); if (window.playSound) window.playSound('menu_open');
+                } else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); if (window.playSound) window.playSound('menu_open'); }
             }
         }
         
@@ -469,6 +449,7 @@ window.addEventListener('mousedown', (e) => {
                     }
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); 
                     window.player.inventory[window.player.placementMode]--; window.spawnParticles(gridX+15, gridY+15, '#fff', 10);
+                    if (window.playSound) window.playSound('build');
                     
                     if (window.player.inventory[window.player.placementMode] <= 0) {
                         window.player.toolbar[window.player.activeSlot] = null;
@@ -502,6 +483,7 @@ window.addEventListener('mousedown', (e) => {
             if (window.mouseWorldX >= ent.x - 10 && window.mouseWorldX <= ent.x + ent.width + 10 && window.mouseWorldY >= ent.y - 10 && window.mouseWorldY <= ent.y + ent.height + 10) {
                 if (Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2)) <= window.player.miningRange) {
                     ent.hp -= entityDmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
+                    if (window.playSound) window.playSound('hit_entity');
                     let _dmgOx=(Math.random()-0.5)*16, _dmgOy=Math.random()*8;
                     window.spawnDamageText(ent.x+ent.width/2+_dmgOx, ent.y-5-_dmgOy, `-${entityDmg}`, 'melee');
                     
@@ -542,9 +524,11 @@ window.addEventListener('mousedown', (e) => {
             let b = window.blocks[clickedBlockIndex], h = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
             if (Math.hypot(pCX - (b.x + window.game.blockSize/2), pCY - (b.y + h/2)) <= window.player.miningRange) {
                 b.hp -= blockDmg; window.setHit(b); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 5);
+                if (window.playSound) window.playSound('hit_block');
                 if (b.hp <= 0) { 
                     window.destroyBlockLocally(b);
                 } else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: blockDmg }); }
+                window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
                 actionDone = true;
             }
         }
@@ -556,6 +540,7 @@ window.addEventListener('mousedown', (e) => {
             if (window.mouseWorldX >= r.x && window.mouseWorldX <= r.x + r.width && window.mouseWorldY >= r.y && window.mouseWorldY <= r.y + r.height) { 
                 if (Math.hypot(pCX - (r.x + r.width/2), pCY - (r.y + r.height/2)) <= window.player.miningRange) {
                     r.hp -= rockDmg; window.setHit(r); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#fff', 8); 
+                    if (window.playSound) window.playSound('hit_rock');
                     // TEXTO DE DAÑO MODIFICADO PARA ROCAS
                     let _rOx=(Math.random()-0.5)*16, _rOy=Math.random()*8;
                     window.spawnDamageText(r.x+r.width/2+_rOx, r.y+r.height/2-_rOy, `-${rockDmg}`, 'melee');
@@ -567,6 +552,7 @@ window.addEventListener('mousedown', (e) => {
                         window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni});
                         window.rocks.splice(i, 1); window.gainXP(25); 
                     } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: rockDmg }); }
+                    window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
                     actionDone = true; break;
                 }
             }
@@ -584,6 +570,7 @@ window.addEventListener('mousedown', (e) => {
             if (window.mouseWorldX >= t.x - 20 && window.mouseWorldX <= t.x + t.width + 20 && window.mouseWorldY >= ty && window.mouseWorldY <= t.y + t.height) { 
                 if (Math.hypot(pCX - (t.x + t.width/2), pCY - hitY) <= window.player.miningRange) {
                     t.hp -= treeDmg; window.setHit(t); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 8); 
+                    if (window.playSound) window.playSound('hit_tree');
                     // TEXTO DE DAÑO MODIFICADO PARA ÁRBOLES
                     let _tOx=(Math.random()-0.5)*16, _tOy=Math.random()*8;
                     window.spawnDamageText(t.x+t.width/2+_tOx, t.y+t.height/2-_tOy, `-${treeDmg}`, 'melee');
@@ -601,6 +588,7 @@ window.addEventListener('mousedown', (e) => {
                             t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
                         }
                     } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: treeDmg }); }
+                    window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
                     actionDone = true; break;
                 }
             }
@@ -618,7 +606,9 @@ window.addEventListener('mousedown', (e) => {
             if (window.player.inventory.wood >= cost) {
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
                     let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
-                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if(window.updateUI) window.updateUI();
+                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5);
+                    if (window.playSound) window.playSound('build');
+                    if(window.updateUI) window.updateUI();
                 } else {
                     window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00');
                 }
@@ -828,6 +818,7 @@ function update() {
                     if (window.canAddItem(item.type, item.amount)) {
                         window.player.inventory[item.type] = (window.player.inventory[item.type]||0) + item.amount; 
                         window.droppedItems.splice(i, 1); window.sendWorldUpdate('pickup_item', { id: item.id }); 
+                        if (window.playSound) window.playSound('pickup');
                         
                         if (window.toolDefs[item.type]) { 
                             if(typeof window.autoEquip==='function') window.autoEquip(item.type); 
@@ -849,13 +840,7 @@ function update() {
         }
 
         if (promptEl && textEl) {
-            // Verificar flechas clavadas cercanas primero
-            let nearStuckArrow = window.projectiles.find(pr => pr.stuck && !pr.isEnemy && pr._nearPlayer);
-            
-            if (nearStuckArrow && !window.player.isDead) {
-                promptEl.style.display = 'block';
-                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para recuperar <strong style="color:#eee;">Flecha</strong>`;
-            } else if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
+            if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
                 let hoveringInteractable = interactables[0];
                 if (hoveringInteractable.type !== 'bed') {
                     promptEl.style.display = 'block'; 
@@ -875,79 +860,14 @@ function update() {
         }
 
         for (let i = window.projectiles.length - 1; i >= 0; i--) {
-            let pr = window.projectiles[i];
-            
-            // Las flechas clavadas no se mueven, sólo esperan a ser recogidas
-            if (pr.stuck) {
-                pr.stuckTimer = (pr.stuckTimer || 0) + 1;
-                // Desaparecen tras 20 segundos (1200 frames)
-                if (pr.stuckTimer > 1200) { window.projectiles.splice(i, 1); }
-                continue;
-            }
-
-            pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
-            if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { 
-                // Flecha del jugador que llega al suelo: 50% se clava, 50% se rompe
-                if (!pr.isEnemy && pr.y >= window.game.groundLevel) {
-                    if (Math.random() < 0.5) {
-                        pr.stuck = true; pr.stuckTimer = 0; pr.y = window.game.groundLevel - 4;
-                        if (window.playSound) window.playSound('arrow_stick');
-                    } else {
-                        window.projectiles.splice(i, 1);
-                    }
-                } else {
-                    window.projectiles.splice(i, 1);
-                }
-                continue; 
-            }
-
-            // Colisión con bloques
+            let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
+            if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { window.spawnParticles(pr.x, pr.y, '#557A27', 3); window.projectiles.splice(i, 1); continue; } 
             let hitBlock = false;
-            for(let b of window.blocks) { 
-                let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
-                if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire') { 
-                    hitBlock = true; break; 
-                } 
-            }
-            if(hitBlock) { 
-                window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); 
-                if (!pr.isEnemy) {
-                    // Flechas del jugador: 50% se clavan en la pared, 50% se rompen
-                    if (Math.random() < 0.5) {
-                        pr.stuck = true; pr.stuckTimer = 0; pr.vx = 0; pr.vy = 0;
-                        if (window.playSound) window.playSound('arrow_stick');
-                    } else {
-                        window.projectiles.splice(i, 1);
-                        if (window.playSound) window.playSound('arrow_break');
-                    }
-                } else {
-                    window.projectiles.splice(i, 1);
-                }
-                continue; 
-            }
+            for(let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && b.type !== 'box' && b.type !== 'campfire' && b.type !== 'barricade') { hitBlock = true; break; } }
+            if(hitBlock) { window.spawnParticles(pr.x, pr.y, '#C19A6B', 5); window.projectiles.splice(i,1); continue; }
             
             if (pr.isEnemy) {
-                if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { 
-                    window.damagePlayer(pr.damage, 'Flecha de Cazador'); 
-                    window.spawnParticles(pr.x, pr.y, '#ff4444', 5); 
-                    if (window.playSound) window.playSound('arrow_hit_flesh');
-                    window.projectiles.splice(i, 1); continue; 
-                }
-                // Flechas enemigas dañan estructuras
-                let hitStructure = false;
-                for (let bi = window.blocks.length - 1; bi >= 0; bi--) {
-                    let b = window.blocks[bi];
-                    let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-                    if (!b.open && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh) && (b.type === 'block' || b.type === 'door' || b.type === 'barricade')) {
-                        let structDmg = 6 + (pr.damage * 0.3);
-                        b.hp -= structDmg; window.setHit(b);
-                        window.spawnParticles(pr.x, pr.y, '#C19A6B', 4);
-                        if (b.hp <= 0) { window.destroyBlockLocally(b); }
-                        else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: structDmg }); }
-                        hitStructure = true; break;
-                    }
-                }
-                if (hitStructure) { window.projectiles.splice(i, 1); continue; }
+                if (!window.player.inBackground && !window.player.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, window.player.x, window.player.y, window.player.width, window.player.height)) { window.damagePlayer(pr.damage, 'Flecha de Cazador'); window.spawnParticles(pr.x, pr.y, '#ff4444', 5); window.projectiles.splice(i, 1); continue; }
             } else {
                 let hitEnt = false;
                 for(let e = window.entities.length - 1; e >= 0; e--) {
@@ -957,10 +877,9 @@ function update() {
                     let _aOx=(Math.random()-0.5)*16, _aOy=Math.random()*8;
                     window.spawnDamageText(ent.x+ent.width/2+_aOx, ent.y-_aOy, "-"+Math.floor(pr.damage), 'melee');
                     window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
-                    if (window.playSound) window.playSound('arrow_hit_flesh');
                     let _akd=pr.vx>0?1:-1; 
                     ent.vx=_akd*2.0; 
-                    ent.vy=-4.5;
+                    ent.vy=-4.5; // Salto
                     ent.knockbackFrames=8;
                     if(ent.hp <= 0) {
                             window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id });
@@ -977,27 +896,11 @@ function update() {
                         window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage });
                         if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); }
                     }
-                    // Flecha se rompe siempre al golpear enemigo
                     hitEnt = true; break;
                 }
                 } if(hitEnt) { window.projectiles.splice(i,1); continue; }
             }
             if(pr.life <= 0) window.projectiles.splice(i, 1);
-        }
-
-        // Recoger flechas clavadas con E
-        let pCX_arrow = window.player.x + window.player.width/2;
-        let pCY_arrow = window.player.y + window.player.height/2;
-        for (let i = window.projectiles.length - 1; i >= 0; i--) {
-            let pr = window.projectiles[i];
-            if (!pr.stuck || pr.isEnemy) continue;
-            let dist = Math.hypot(pCX_arrow - pr.x, pCY_arrow - pr.y);
-            if (dist < 40 && !window.player.isDead) {
-                // Mostrar prompt de recoger (se maneja en el prompt general)
-                pr._nearPlayer = true;
-            } else {
-                pr._nearPlayer = false;
-            }
         }
 
         let isMasterClient = true;

@@ -33,22 +33,21 @@ window.drawCharacter = function(charData, isLocal) {
         let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
         if (Math.abs(dy) > 0.5) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
         isJumping = charData.isJumpingFrames > 0; isRunning = charData.isMovingFrames > 0 && !isJumping;
-        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
+        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.05; 
         else charData.renderAnimTime = 0;
     }
 
-    let time = (charData.renderAnimTime || 0) * 1.0;  // era 1.5 - más lento
+    let time = (charData.renderAnimTime || 0) * 1.5; 
     let legR = 0, legL = 0, kneeR = 0, kneeL = 0, armR = 0, armL = 0, elbowR = 0, elbowL = 0, torsoR = 0, headR = 0, bob = 0;
 
     if (isJumping) {
         legR = -0.5; kneeR = 0.8; legL = 0.3; kneeL = 0.1; armR = -2.5; elbowR = -0.2; armL = -1.5; elbowL = -0.5; torsoR = 0.1; headR = -0.2; bob = -4;
     } else if (isRunning) {
-        legR = Math.sin(time) * 0.85; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 1.2); legL = Math.sin(time + Math.PI) * 0.85; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 1.2);
-        armR = Math.cos(time) * 0.85; elbowR = -0.2 + Math.sin(time)*0.35; armL = Math.cos(time + Math.PI) * 0.85; elbowL = -0.2 + Math.sin(time + Math.PI)*0.35;
-        torsoR = 0.12; headR = -0.04; bob = Math.abs(Math.sin(time * 2)) * 2.5;
+        legR = Math.sin(time) * 1.0; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 1.5); legL = Math.sin(time + Math.PI) * 1.0; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 1.5);
+        armR = Math.cos(time) * 1.0; elbowR = -0.2 + Math.sin(time)*0.4; armL = Math.cos(time + Math.PI) * 1.0; elbowL = -0.2 + Math.sin(time + Math.PI)*0.4;
+        torsoR = 0.15; headR = -0.05; bob = Math.abs(Math.sin(time * 2)) * 3;
     } else {
-        let idleTime = window.game.frameCount * 0.03; // era 0.05 - respira más despacio
-        torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
+        let idleTime = window.game.frameCount * 0.05; torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
     }
 
     let aimAngle = 0;
@@ -58,8 +57,7 @@ window.drawCharacter = function(charData, isLocal) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
-        // attackFrame = 22, animación más lenta y pesada
-        let progress = charData.attackFrame / 22; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
+        let progress = charData.attackFrame / 12; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
 
     let skin = charData.isHit ? '#ff4444' : '#f1c27d'; let shirt = charData.isHit ? '#ff4444' : (isLocal ? '#3498db' : '#686868'); let shirtDark = charData.isHit ? '#cc0000' : (isLocal ? '#2980b9' : '#4a4a4a');
@@ -972,24 +970,135 @@ window.draw = function() {
     }
 
     window.ctx.save(); window.ctx.translate(-window.camera.x, -window.camera.y);
+
+    // Paleta de colores por jugador (hash del nombre)
+    const PLAYER_COLORS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#fff176','#ff8a65'];
+    function playerColor(name) {
+        let h = 0; for (let c of (name||'')) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+        return PLAYER_COLORS[h % PLAYER_COLORS.length];
+    }
+
+    // Recopilar todos los chat activos para anti-solapamiento
+    const activeChatBoxes = [];
+
     const drawNameAndChat = (charData, isLocal) => {
         if (charData.isDead) return;
         if (!isLocal) { let dist = Math.hypot(window.player.x - charData.x, window.player.y - charData.y); if (dist > 500) return; }
 
-        const pCX = charData.x + (charData.width || 24) / 2; const pCY = charData.y + (charData.height || 48); 
+        const pCX = charData.x + (charData.width || 24) / 2;
+        const pCY = charData.y + (charData.height || 48); 
         const bob = Math.abs(Math.sin((charData.renderAnimTime || 0) * 3)) * 3; 
+        const nameY = pCY - 80 - bob;
 
-        const nameY = pCY - 80 - bob; const chatY = pCY - 110 - bob;
-
+        // Nombre del jugador remoto
         if (!isLocal) {
-            window.ctx.fillStyle = 'rgba(255,255,255,0.9)'; window.ctx.font = 'bold 12px Inter, sans-serif'; window.ctx.textAlign = 'center'; 
+            const col = playerColor(charData.name);
+            window.ctx.fillStyle = col;
+            window.ctx.font = 'bold 12px Inter, sans-serif';
+            window.ctx.textAlign = 'center';
+            // Pequeña sombra para legibilidad
+            window.ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            window.ctx.shadowBlur = 4;
             window.ctx.fillText(`${charData.name} (Nv. ${charData.level || 1})`, pCX, nameY);
+            window.ctx.shadowBlur = 0;
         }
 
+        // Chat bubble
         if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
-            window.ctx.font = 'bold 13px Inter, sans-serif'; let tW = window.ctx.measureText(charData.chatText).width;
-            window.ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; window.ctx.fillRect(pCX - tW/2 - 8, chatY - 15, tW + 16, 24); window.ctx.fillStyle = '#fff'; window.ctx.textAlign = 'center'; window.ctx.fillText(charData.chatText, pCX, chatY + 2);
+            window.ctx.font = 'bold 13px Inter, sans-serif';
+            const tW = window.ctx.measureText(charData.chatText).width;
+            const boxW = tW + 20;
+            const boxH = 26;
+            const col = playerColor(charData.name);
+
+            // Posición base: arriba del nombre
+            let baseY = pCY - 115 - bob;
+
+            // Anti-solapamiento: empujar hacia arriba si hay overlap
+            let finalY = baseY;
+            for (let attempt = 0; attempt < 8; attempt++) {
+                let overlaps = false;
+                for (const other of activeChatBoxes) {
+                    const dx = Math.abs(pCX - other.cx);
+                    const dy = Math.abs(finalY - other.cy);
+                    if (dx < (boxW/2 + other.w/2 + 8) && dy < (boxH/2 + other.h/2 + 4)) {
+                        overlaps = true;
+                        break;
+                    }
+                }
+                if (!overlaps) break;
+                finalY -= boxH + 6;
+            }
+
+            activeChatBoxes.push({ cx: pCX, cy: finalY, w: boxW, h: boxH });
+
+            const bx = pCX - boxW / 2;
+            const by = finalY - boxH / 2;
+
+            // Fondo del globo con borde de color del jugador
+            window.ctx.fillStyle = 'rgba(8,14,24,0.92)';
+            window._roundRect(window.ctx, bx, by, boxW, boxH, 7);
+            window.ctx.fill();
+
+            // Borde coloreado
+            window.ctx.strokeStyle = col;
+            window.ctx.lineWidth = 1.5;
+            window._roundRect(window.ctx, bx, by, boxW, boxH, 7);
+            window.ctx.stroke();
+
+            // Triangulito apuntando al jugador
+            const tx = pCX;
+            const ty = by + boxH;
+            window.ctx.fillStyle = 'rgba(8,14,24,0.92)';
+            window.ctx.beginPath();
+            window.ctx.moveTo(tx - 5, ty);
+            window.ctx.lineTo(tx + 5, ty);
+            window.ctx.lineTo(tx, ty + 7);
+            window.ctx.fill();
+            // Borde del triángulo
+            window.ctx.strokeStyle = col;
+            window.ctx.lineWidth = 1.5;
+            window.ctx.beginPath();
+            window.ctx.moveTo(tx - 5, ty - 1);
+            window.ctx.lineTo(tx, ty + 7);
+            window.ctx.lineTo(tx + 5, ty - 1);
+            window.ctx.stroke();
+
+            // Texto con nombre en color + mensaje en blanco
+            const nameLabel = (charData.name || '?').split(' ')[0]; // solo primer palabra
+            window.ctx.textAlign = 'center';
+            window.ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            window.ctx.shadowBlur = 3;
+            // Si es local, solo texto blanco; si remoto, pequeño label de color
+            if (!isLocal) {
+                window.ctx.font = 'bold 10px Inter, sans-serif';
+                window.ctx.fillStyle = col;
+                window.ctx.fillText(nameLabel + ':', bx + 6 + window.ctx.measureText(nameLabel + ':').width/2, by + 10);
+                window.ctx.font = 'bold 13px Inter, sans-serif';
+                window.ctx.fillStyle = '#fff';
+                window.ctx.fillText(charData.chatText, pCX, by + boxH - 6);
+            } else {
+                window.ctx.font = 'bold 13px Inter, sans-serif';
+                window.ctx.fillStyle = '#fff';
+                window.ctx.fillText(charData.chatText, pCX, by + boxH/2 + 5);
+            }
+            window.ctx.shadowBlur = 0;
         }
+    };
+
+    // Helper roundRect si no existe
+    window._roundRect = window._roundRect || function(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
     };
     
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id) drawNameAndChat(p, false); }); }
