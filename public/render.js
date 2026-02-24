@@ -146,109 +146,90 @@ window.draw = function() {
         window.ctx.globalAlpha = 1;
     }
 
+    // --- NUEVO SISTEMA DE SOL CON SPRITES ---
     if (hourFloat > 5 && hourFloat < 19) {
         let dayProgress = (hourFloat - 5) / 14;
         let sunX = W * dayProgress;
         let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7);
-        if (!window.game.isRaining) {
-            let haloGrad = window.ctx.createRadialGradient(sunX, sunY, 30, sunX, sunY, 120);
-            haloGrad.addColorStop(0, 'rgba(255,220,80,0.25)');
-            haloGrad.addColorStop(1, 'rgba(255,150,30,0)');
-            window.ctx.fillStyle = haloGrad;
-            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 120, 0, Math.PI*2); window.ctx.fill();
+        
+        let sunSize = 140; // Puedes ajustar el tamaño en píxeles
+        if (window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) {
+            window.ctx.drawImage(window.sprites.sprite_sun, sunX - sunSize/2, sunY - sunSize/2, sunSize, sunSize);
+        } else {
+            // Fallback por si la imagen tarda en cargar
+            window.ctx.fillStyle = '#FFE566';
+            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill();
         }
-        window.ctx.fillStyle = '#FFE566';
-        window.ctx.shadowColor = '#FF9500'; window.ctx.shadowBlur = window.game.isRaining ? 8 : 45;
-        window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill();
-        window.ctx.fillStyle = '#FFF5A0';
-        window.ctx.shadowBlur = 0;
-        window.ctx.beginPath(); window.ctx.arc(sunX - 6, sunY - 8, 28, 0, Math.PI*2); window.ctx.fill();
-        window.ctx.shadowBlur = 0;
     }
 
+    // --- NUEVO SISTEMA DE LUNA CON SPRITES ---
     if (hourFloat >= 17 || hourFloat <= 7) {
         let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14;
         let moonX = W * nightProgress;
         let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7);
-        window.ctx.fillStyle = '#E8EEE0';
-        window.ctx.shadowColor = '#CCDDFF'; window.ctx.shadowBlur = window.game.isRaining ? 4 : 30;
-        window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill();
-        window.ctx.shadowBlur = 0;
-        window.ctx.fillStyle = 'rgba(0,0,0,0.08)';
-        [[- 8, 6, 7], [11, -7, 5], [2, 11, 5], [-4, -10, 4]].forEach(([ox, oy, or]) => {
-            window.ctx.beginPath(); window.ctx.arc(moonX + ox, moonY + oy, or, 0, Math.PI*2); window.ctx.fill();
-        });
-        window.ctx.shadowBlur = 0;
+        
+        let moonSize = 120; // Puedes ajustar el tamaño en píxeles
+        if (window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) {
+            window.ctx.drawImage(window.sprites.sprite_moon, moonX - moonSize/2, moonY - moonSize/2, moonSize, moonSize);
+        } else {
+            // Fallback por si la imagen tarda en cargar
+            window.ctx.fillStyle = '#E8EEE0';
+            window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill();
+        }
     }
 
+    // --- NUEVO SISTEMA DE NUBES CON SPRITES ---
     window.clouds.forEach(c => {
         c.x += c.v; if (c.x > W + 150) c.x = -150;
         let cloudAlpha = window.game.isRaining ? 0.75 : Math.max(0, 0.7 * (1 - darkness * 1.2));
         if (cloudAlpha <= 0) return;
+        
         window.ctx.save();
         window.ctx.globalAlpha = cloudAlpha;
-        window.ctx.fillStyle = window.game.isRaining ? 'rgba(70,80,100,0.6)' : 'rgba(200,215,240,0.4)';
-        window.ctx.beginPath();
-        window.ctx.arc(c.x + 2, c.y + 6, 28*c.s, 0, Math.PI*2);
-        window.ctx.arc(c.x + 27*c.s + 2, c.y - 13*c.s + 6, 33*c.s, 0, Math.PI*2);
-        window.ctx.arc(c.x + 52*c.s + 2, c.y + 6, 23*c.s, 0, Math.PI*2);
-        window.ctx.fill();
-        window.ctx.fillStyle = window.game.isRaining ? 'rgba(110,120,140,0.85)' : 'rgba(255,255,255,0.88)';
-        window.ctx.beginPath();
-        window.ctx.arc(c.x, c.y, 28*c.s, 0, Math.PI*2);
-        window.ctx.arc(c.x + 25*c.s, c.y - 14*c.s, 33*c.s, 0, Math.PI*2);
-        window.ctx.arc(c.x + 50*c.s, c.y, 23*c.s, 0, Math.PI*2);
-        window.ctx.fill();
-        if (!window.game.isRaining) {
-            window.ctx.fillStyle = 'rgba(255,255,255,0.5)';
-            window.ctx.beginPath();
-            window.ctx.arc(c.x + 22*c.s, c.y - 18*c.s, 18*c.s, 0, Math.PI*2);
-            window.ctx.fill();
+        
+        // Si llueve, oscurecemos la textura de la nube nativamente
+        if (window.game.isRaining) {
+            window.ctx.filter = 'brightness(45%)';
+        }
+
+        if (window.sprites.sprite_cloud.complete && window.sprites.sprite_cloud.naturalWidth > 0) {
+            // Escalamos la textura usando c.s (el factor de tamaño aleatorio que ya tenías)
+            let cW = 200 * c.s; 
+            let cH = 100 * c.s;
+            window.ctx.drawImage(window.sprites.sprite_cloud, c.x, c.y - cH/2, cW, cH);
+        } else {
+            // Fallback si no hay sprite
+            window.ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            window.ctx.beginPath(); window.ctx.arc(c.x, c.y, 28*c.s, 0, Math.PI*2); window.ctx.fill();
         }
         window.ctx.restore();
     });
 
-    let mCol1 = `rgb(${Math.max(5,r-50)},${Math.max(5,g-50)},${Math.max(15,b-30)})`;
-    let mCol2 = `rgb(${Math.max(5,r-35)},${Math.max(5,g-35)},${Math.max(15,b-18)})`;
-    window.ctx.fillStyle = mCol1;
-    window.ctx.beginPath();
-    let mX = -(window.camera.x * 0.05) % 900;
-    for (let i = -1; i < 5; i++) {
-        let bx = mX + i * 900;
-        window.ctx.moveTo(bx, window.game.groundLevel);
-        window.ctx.lineTo(bx + 120, window.game.groundLevel - 260);
-        window.ctx.lineTo(bx + 280, window.game.groundLevel - 210);
-        window.ctx.lineTo(bx + 420, window.game.groundLevel - 320);
-        window.ctx.lineTo(bx + 600, window.game.groundLevel - 180);
-        window.ctx.lineTo(bx + 750, window.game.groundLevel - 240);
-        window.ctx.lineTo(bx + 900, window.game.groundLevel);
-    }
-    window.ctx.fill();
-    if (darkness < 0.7) {
-        window.ctx.fillStyle = `rgba(255,255,255,${0.25 * (1-darkness)})`;
-        window.ctx.beginPath();
-        for (let i = -1; i < 5; i++) {
-            let bx = mX + i * 900;
-            [[120,260,50],[420,320,60],[750,240,45]].forEach(([px, py, pw]) => {
-                window.ctx.moveTo(bx+px, window.game.groundLevel - py);
-                window.ctx.lineTo(bx+px-pw*0.5, window.game.groundLevel - py + pw*0.7);
-                window.ctx.lineTo(bx+px+pw*0.5, window.game.groundLevel - py + pw*0.7);
-            });
+    // --- FONDOS DE MONTAÑAS CON SPRITES (PARALLAX) ---
+    let bgW = 1280; 
+    let bgBackH = 500; // Alto visual de la capa más lejana
+    let bgMidH = 350;  // Alto visual de la capa intermedia
+
+    let backX = -(window.camera.x * 0.05) % bgW;
+    if (backX > 0) backX -= bgW;
+
+    let midX = -(window.camera.x * 0.15) % bgW;
+    if (midX > 0) midX -= bgW;
+
+    // Capa Lejana
+    if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
+        for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
+            window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), window.game.groundLevel - bgBackH + 80, bgW, bgBackH);
         }
-        window.ctx.fill();
     }
 
-    window.ctx.fillStyle = mCol2;
-    window.ctx.beginPath();
-    let hX = -(window.camera.x * 0.2) % 1000;
-    for (let i = -1; i < 4; i++) {
-        let bx = hX + i * 1000;
-        window.ctx.moveTo(bx, window.game.groundLevel);
-        window.ctx.bezierCurveTo(bx + 100, window.game.groundLevel - 80, bx + 200, window.game.groundLevel - 130, bx + 350, window.game.groundLevel - 100);
-        window.ctx.bezierCurveTo(bx + 500, window.game.groundLevel - 70, bx + 650, window.game.groundLevel - 160, bx + 800, window.game.groundLevel - 90);
-        window.ctx.bezierCurveTo(bx + 900, window.game.groundLevel - 50, bx + 950, window.game.groundLevel - 30, bx + 1000, window.game.groundLevel);
+    // Capa Intermedia
+    if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
+        for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
+            window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), window.game.groundLevel - bgMidH + 30, bgW, bgMidH);
+        }
     }
-    window.ctx.fill();
+    // -------------------------------------------------
 
     window.ctx.translate(-window.camera.x, -window.camera.y);
 
@@ -256,41 +237,36 @@ window.draw = function() {
     const startX = Math.max(window.camera.x, window.game.shoreX);
     const endX = window.camera.x + W + 100;
 
-    // --- NUEVO SISTEMA DE TILING PARA BIOMAS ---
+    // --- SISTEMA DE TILING PARA BIOMAS ---
     const tileSize = 64;
     let startTileX = startX - (startX % tileSize);
     let startTileY = gL;
 
     for (let px = startTileX; px < endX; px += tileSize) {
-        // Cálculo de transparencia para la transición Bosque -> Desierto
         let desertAlpha = 0;
         if (px > 3400) desertAlpha = 1;
-        else if (px > 2600) desertAlpha = (px - 2600) / 800; // Transición de 800px
+        else if (px > 2600) desertAlpha = (px - 2600) / 800; 
 
         for (let py = startTileY; py < H; py += tileSize) {
             let isTop = (py === startTileY);
             
-            // Dibujar capa Bosque (Pasto/Tierra)
             if (desertAlpha < 1) {
                 window.ctx.globalAlpha = 1;
                 let fImg = isTop ? window.sprites.tile_grass_top : window.sprites.tile_dirt;
                 if (fImg && fImg.complete && fImg.naturalWidth > 0) {
                     window.ctx.drawImage(fImg, px, py, tileSize, tileSize);
                 } else {
-                    // Fallback visual si no hay PNG
                     window.ctx.fillStyle = isTop ? '#528c2a' : '#3d2412';
                     window.ctx.fillRect(px, py, tileSize, tileSize);
                 }
             }
 
-            // Dibujar capa Desierto (Arena) encima con opacidad variable
             if (desertAlpha > 0) {
                 window.ctx.globalAlpha = desertAlpha;
                 let dImg = isTop ? window.sprites.tile_sand_top : window.sprites.tile_sand_base;
                 if (dImg && dImg.complete && dImg.naturalWidth > 0) {
                     window.ctx.drawImage(dImg, px, py, tileSize, tileSize);
                 } else {
-                    // Fallback visual si no hay PNG
                     window.ctx.fillStyle = isTop ? '#e6c280' : '#d4a853';
                     window.ctx.fillRect(px, py, tileSize, tileSize);
                 }
@@ -298,7 +274,6 @@ window.draw = function() {
             window.ctx.globalAlpha = 1;
         }
 
-        // Detalles de pasto solo donde hay bosque
         if (desertAlpha < 1 && darkness < 0.8) {
             window.ctx.globalAlpha = 1 - desertAlpha;
             window.ctx.fillStyle = 'rgba(80,120,40,0.6)';
@@ -311,7 +286,6 @@ window.draw = function() {
     }
     // -------------------------------------------
 
-    // Agua
     if (window.camera.x < window.game.shoreX) {
         window.ctx.fillStyle = '#C8B878';
         window.ctx.fillRect(window.game.shoreX - 70, gL, 70, H - gL);
@@ -327,13 +301,11 @@ window.draw = function() {
         window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
     }
 
-    // --- LIENZO OFF-SCREEN GLOBAL (PARA DAÑO) ---
     if (!window.hitCanvas) {
         window.hitCanvas = document.createElement('canvas');
         window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true });
     }
 
-    // --- RENDERIZADO DE ÁRBOLES PRIMERO (Para quedar detrás de las rocas) ---
     window.trees.forEach(t => {
         if (t.x + t.width > window.camera.x && t.x < window.camera.x + window._canvasLogicW) {
             window.ctx.save();
@@ -351,7 +323,7 @@ window.draw = function() {
             let drawH = 256; 
             let drawW = 128;    
             let drawX = -drawW / 2;
-            let offsetVisualY = 0; // Eleva el árbol para que no parezca hundido
+            let offsetVisualY = 0; // Arreglado para que pise el pasto sin flotar
             let drawY = -drawH + offsetVisualY;
 
             if (img && img.complete && img.naturalWidth > 0) {
@@ -376,14 +348,12 @@ window.draw = function() {
         }
     });
 
-    // --- RENDERIZADO DE ROCAS SEGUNDO (Por delante de los árboles) ---
     window.rocks.forEach(r => {
         if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
             window.ctx.save();
             window.ctx.translate(r.x + r.width/2, r.y + r.height);
             let hw = r.width / 2;
             
-            // Lógica de sprites para Roca Entera o Dañada (<= 50% HP)
             let img = (r.hp <= r.maxHp / 2) ? window.sprites.rock_damaged : window.sprites.rock_full;
             
             let drawW = 80; let drawH = 80; let drawX = -drawW / 2; let drawY = -drawH;
@@ -411,7 +381,6 @@ window.draw = function() {
         }
     });
 
-    // RENDERIZADO DE BLOQUES (Construcciones del jugador)
     window.blocks.forEach(b => {
         if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + window._canvasLogicW) {
             if (b.type === 'block') {

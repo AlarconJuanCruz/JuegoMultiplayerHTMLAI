@@ -16,7 +16,12 @@ window.sprites = {
     tile_grass_top: new Image(),
     tile_dirt: new Image(),
     tile_sand_top: new Image(),
-    tile_sand_base: new Image()
+    tile_sand_base: new Image(),
+    bg_mountains_back: new Image(), // <-- NUEVA
+    bg_mountains_mid: new Image(),  // <-- NUEVA
+    sprite_sun: new Image(),        // <-- NUEVA
+    sprite_moon: new Image(),       // <-- NUEVA
+    sprite_cloud: new Image()       // <-- NUEVA
 };
 window.sprites.tree_oak.src = 'assets/tree_oak.png';
 window.sprites.tree_pine.src = 'assets/tree_pine.png';
@@ -28,6 +33,11 @@ window.sprites.tile_grass_top.src = 'assets/tile_grass_top.png';
 window.sprites.tile_dirt.src = 'assets/tile_dirt.png';
 window.sprites.tile_sand_top.src = 'assets/tile_sand_top.png';
 window.sprites.tile_sand_base.src = 'assets/tile_sand_base.png';
+window.sprites.bg_mountains_back.src = 'assets/bg_mountains_back.png'; // <-- NUEVA
+window.sprites.bg_mountains_mid.src = 'assets/bg_mountains_mid.png';   // <-- NUEVA
+window.sprites.sprite_sun.src = 'assets/sprite_sun.png';               // <-- NUEVA
+window.sprites.sprite_moon.src = 'assets/sprite_moon.png';             // <-- NUEVA
+window.sprites.sprite_cloud.src = 'assets/sprite_cloud.png';           // <-- NUEVA
 // ------------------------
 
 // Alta resolución (2x) para canvas nítido
