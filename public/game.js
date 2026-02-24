@@ -53,23 +53,27 @@ window.destroyBlockLocally = function(b) {
 };
 
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
-    if (y + h > window.game.groundLevel) return false;
+    const bs = window.game.blockSize;
+    let localGY = window.getGroundY ? window.getGroundY(x + w/2) : window.game.groundLevel;
+    // No permitir colocar bloques dentro o debajo del suelo
+    if (y + h > localGY) return false;
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
     if (window.game.isMultiplayer && window.otherPlayers) { for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; } }
     
-    let isItem = !isStructure; let isDoor = isStructure && h > window.game.blockSize;
+    let isItem = !isStructure; let isDoor = isStructure && h > bs;
     if (isItem || isDoor) {
         let supported = false;
-        if (Math.abs((y + h) - window.game.groundLevel) < 1) supported = true;
-        else { for (let b of window.blocks) { if (b.type === 'block' && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < 1) { supported = true; break; } } }
+        // Soportado si el fondo toca el suelo (con tolerancia de 1px por snapping)
+        if (Math.abs((y + h) - localGY) <= bs) supported = true;
+        if (!supported) { for (let b of window.blocks) { if (b.type === 'block' && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < bs / 2) { supported = true; break; } } }
         if (!supported) return false; 
     }
 
     for (let b of window.blocks) { 
-        let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
-        if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
+        let bh = b.type === 'door' ? bs * 2 : bs; 
+        if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false; 
         
-        let isHorizontallyAdjacent = (Math.abs(x - (b.x - window.game.blockSize)) < 1 || Math.abs(x - (b.x + window.game.blockSize)) < 1);
+        let isHorizontallyAdjacent = (Math.abs(x - (b.x - bs)) < 1 || Math.abs(x - (b.x + bs)) < 1);
         let isVerticallyOverlapping = (y < b.y + bh && y + h > b.y);
 
         if (isHorizontallyAdjacent && isVerticallyOverlapping) {
@@ -79,11 +83,19 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
         if (isDoor && b.type === 'door' && Math.abs(b.x - x) < 1 && (Math.abs(b.y - (y + h)) < 1 || Math.abs((b.y + bh) - y) < 1)) return false;
 
         if (isItem && (b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade')) { 
-            if (Math.abs(b.x - x) < window.game.blockSize && Math.abs(b.y - (y + h)) < 1) return false; 
+            if (Math.abs(b.x - x) < bs && Math.abs(b.y - (y + h)) < 1) return false; 
         }
     }
-    for (let t of window.trees) { let th = t.isStump ? 80 : t.height; let ty = t.isStump ? t.y + t.height - th : t.y; if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; }
-    for (let r of window.rocks) { if (window.checkRectIntersection(x, y, w, h, r.x, r.y, r.width, r.height)) return false; }
+    for (let t of window.trees) { 
+        const tFY = window.getGroundY ? window.getGroundY(t.x + t.width/2) : (t.groundY || t.y + t.height);
+        let th = t.isStump ? 80 : t.height; 
+        let ty = tFY - th; 
+        if (window.checkRectIntersection(x, y, w, h, t.x, ty, t.width, th)) return false; 
+    }
+    for (let r of window.rocks) { 
+        const rFY2 = window.getGroundY ? window.getGroundY(r.x + r.width/2) : (r.y + r.height);
+        if (window.checkRectIntersection(x, y, w, h, r.x, rFY2 - r.height, r.width, r.height)) return false; 
+    }
     if (requireAdjacency) { if (!window.isAdjacentToBlockOrGround(x, y, w, h)) return false; }
     return true;
 };
@@ -97,7 +109,8 @@ window.isOverlappingSolidBlock = function() {
 };
 
 window.isAdjacentToBlockOrGround = function(x, y, w, h) {
-    if (y + h >= window.game.groundLevel) return true; 
+    let localGY = window.getGroundY ? window.getGroundY(x + w/2) : window.game.groundLevel;
+    if (y + h >= localGY - 2) return true; 
     const expX = x - 2, expY = y - 2, expW = w + 4, expH = h + 4;
     for (let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
 }
@@ -150,26 +163,47 @@ window.generateWorldSector = function(startX, endX) {
     
     if (!window.removedTrees) window.removedTrees = []; if (!window.treeState) window.treeState = {}; if (!window.removedRocks) window.removedRocks = []; if (!window.killedEntities) window.killedEntities = [];
 
+    // --- Helper: verifica exactamente 2 columnas de blockSize planas a cada lado del centro ---
+    // Muestrea sobre el grid real (múltiplos de bs) igual que getGroundY los produce.
+    // "Plano" = misma Y exacta (getGroundY ya snapea, así que igualdad estricta funciona).
+    const bs = window.game.blockSize;
+    function isTerrainFlat(cx) {
+        if (!window.getGroundY) return true;
+        // Snap al grid de blockSize
+        const col = Math.round(cx / bs) * bs;
+        const baseY = window.getGroundY(col);
+        // Exigir 2 bloques consecutivos idénticos ANTES y DESPUÉS
+        for (let s = 1; s <= 2; s++) {
+            if (window.getGroundY(col - s * bs) !== baseY) return false;
+            if (window.getGroundY(col + s * bs) !== baseY) return false;
+        }
+        return true;
+    }
+
     const numTrees = Math.floor(sRandom() * 5) + 3; 
     let localTreeX = []; 
+    const TREE_W = 40; const TREE_H = 240; // constantes fijas para el check de posición
     
     for (let i = 0; i < numTrees; i++) { 
         let tx; let validPos = false; let attempts = 0;
-        while (attempts < 10 && !validPos) {
+        while (attempts < 15 && !validPos) {
             tx = Math.floor(startX + 50 + sRandom() * (endX - startX - 100)); 
             validPos = true;
             for (let existingX of localTreeX) { if (Math.abs(tx - existingX) < 140) { validPos = false; break; } }
+            // Verificar terreno plano: 2 bloques idénticos a cada lado del centro del árbol
+            if (validPos && !isTerrainFlat(tx + TREE_W / 2)) validPos = false;
             attempts++;
         }
         if (validPos) {
             localTreeX.push(tx);
-            let tHeight = 240; let tWidth = 40; 
+            let tHeight = TREE_H; let tWidth = TREE_W; 
             if (!window.removedTrees.some(rx => Math.abs(rx - tx) < 1)) {
                 let stateKey = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - tx) < 1);
                 let tState = stateKey ? window.treeState[stateKey] : false;
                 let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
                 let hp = isStump ? 50 : 100;
-                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) { window.trees.push({ id: 't_'+tx, x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); }
+                let tGroundY = window.getGroundY ? window.getGroundY(tx + tWidth/2) : window.game.groundLevel;
+                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) { window.trees.push({ id: 't_'+tx, x: tx, y: tGroundY - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay, groundY: tGroundY }); }
             }
         }
     }
@@ -178,17 +212,22 @@ window.generateWorldSector = function(startX, endX) {
         const numRocks = Math.floor(sRandom() * 3) + 2; 
         for (let i=0; i<numRocks; i++) { 
             let rx = Math.floor(startX + sRandom() * (endX - startX)); let rW = 50 + Math.floor(sRandom()*40); let rH = 35 + Math.floor(sRandom()*25); 
-            if (!window.removedRocks.some(rrx => Math.abs(rrx - rx) < 1) && !window.rocks.some(r => Math.abs(r.x - rx) < 1)) { window.rocks.push({id: 'r_'+rx, x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); }
+            // Verificar terreno plano: 2 bloques idénticos a cada lado del centro de la roca
+            const rcx = rx + rW / 2;
+            if (!isTerrainFlat(rcx)) continue;
+            let rGroundY = window.getGroundY ? window.getGroundY(rcx) : window.game.groundLevel;
+            if (!window.removedRocks.some(rrx => Math.abs(rrx - rx) < 1) && !window.rocks.some(r => Math.abs(r.x - rx) < 1)) { window.rocks.push({id: 'r_'+rx, x: rx, y: rGroundY - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); }
         }
     }
     
     let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; let newId = 'e_' + cx;
+    let cGroundY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
     if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
         if (distToShore > 2000) {
-            if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
-            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
-            else { let spiderMaxHp = 20 + (lvl * 15); let sWidth = 14 + (lvl * 2), sHeight = 8 + (lvl * 1.5); window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: window.game.groundLevel - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); }
-        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: window.game.groundLevel - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); }
+            if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: cGroundY - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
+            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
+            else { let spiderMaxHp = 20 + (lvl * 15); let sWidth = 14 + (lvl * 2), sHeight = 8 + (lvl * 1.5); window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: cGroundY - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); }
+        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); }
     }
 };
 
@@ -304,6 +343,33 @@ window.addEventListener('keydown', (e) => {
             if (document.activeElement === chatInput) {
                 let msg = chatInput.value.trim();
                 if (msg.length > 0) {
+                    // --- COMANDOS DE CHAT ---
+                    if (msg.startsWith('/')) {
+                        const cmd = msg.toLowerCase();
+                        if (cmd === '/madera') {
+                            window.player.inventory.wood = (window.player.inventory.wood || 0) + 100;
+                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Madera 🌲', '#c19a6b');
+                            if (window.updateUI) window.updateUI();
+                        } else if (cmd === '/piedra') {
+                            window.player.inventory.stone = (window.player.inventory.stone || 0) + 100;
+                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Piedra ⛏️', '#999');
+                            if (window.updateUI) window.updateUI();
+                        } else if (cmd === '/flechas') {
+                            window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10;
+                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22');
+                            if (window.updateUI) window.updateUI();
+                        } else if (cmd === '/dance') {
+                            window.player.isDancing = true;
+                            window.player.danceStart = window.game.frameCount;
+                            window.player.chatText = '🕺 ¡A bailar!';
+                            window.player.chatExpires = Date.now() + 3000;
+                        } else {
+                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, 'Comando desconocido', '#e74c3c');
+                        }
+                        chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none'; window.player.isTyping = false;
+                        return;
+                    }
+                    // Mensaje normal
                     window.player.chatText = msg; window.player.chatExpires = Date.now() + 6500;
                     if(window.addGlobalMessage) window.addGlobalMessage(`💬 [Tú]: ${msg}`, '#3498db');
                     if (window.socket) window.socket.emit('chatMessage', msg);
@@ -318,6 +384,8 @@ window.addEventListener('keydown', (e) => {
     if (window.player.isDead) return; 
 
     if (!window.keys) window.keys = {};
+    // Cancelar baile con cualquier tecla de movimiento/acción
+    if (window.player.isDancing) { window.player.isDancing = false; }
     if (e.key === 'a' || e.key === 'A') window.keys.a = true; if (e.key === 'd' || e.key === 'D') window.keys.d = true; if (e.key === 'Shift') window.keys.shift = true; if (e.key === 'w' || e.key === 'W' || e.key === ' ') window.keys.jumpPressed = true; if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
     
     if (!window.player.placementMode) {
@@ -350,6 +418,10 @@ window.addEventListener('keydown', (e) => {
             }
         }
         
+        if (e.key === 'z' || e.key === 'Z') { window.game.zoomTarget = 1.0; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Zoom: 1.0×`, '#aaddff'); }
+        if (e.key === '+' || e.key === '=') { window.game.zoomTarget = Math.min(window.game.maxZoom, (window.game.zoomTarget||1) + 0.15); }
+        if (e.key === '-' || e.key === '_') { window.game.zoomTarget = Math.max(window.game.minZoom, (window.game.zoomTarget||1) - 0.15); }
+
         const num = parseInt(e.key); if (!isNaN(num) && num >= 1 && num <= 6) { if(window.selectToolbarSlot) window.selectToolbarSlot(num - 1); if(window.renderToolbar) window.renderToolbar(); }
     }
 });
@@ -357,7 +429,10 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('mousemove', (e) => {
     if(!window.canvas || !window.player || window.player.isDead) return;
     const rect = window.canvas.getBoundingClientRect(); const scaleX = window._canvasLogicW / rect.width; const scaleY = window._canvasLogicH / rect.height;
-    window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY; window.mouseWorldX = window.screenMouseX + window.camera.x; window.mouseWorldY = window.screenMouseY + window.camera.y;
+    window.screenMouseX = (e.clientX - rect.left) * scaleX; window.screenMouseY = (e.clientY - rect.top) * scaleY;
+    const W = window._canvasLogicW || 1280; const H = window._canvasLogicH || 720; const z = window.game.zoom || 1;
+    window.mouseWorldX = (window.screenMouseX - W/2) / z + window.camera.x + W/2;
+    window.mouseWorldY = (window.screenMouseY - H/2) / z + window.camera.y + H/2;
     if (window.player.isAiming || window.player.attackFrame > 0) window.player.facingRight = window.mouseWorldX >= window.player.x + window.player.width / 2;
 });
 
@@ -371,11 +446,13 @@ document.addEventListener('drop', (e) => {
     }
 });
 
-window.tryHitEntity = function(pCX, pCY, dmg) {
+window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
+    const range = meleeRange || window.player.miningRange;
     for (let i = window.entities.length - 1; i >= 0; i--) {
         let ent = window.entities[i];
-        if (window.mouseWorldX >= ent.x - 10 && window.mouseWorldX <= ent.x + ent.width + 10 && window.mouseWorldY >= ent.y - 10 && window.mouseWorldY <= ent.y + ent.height + 10) {
-            if (Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2)) <= window.player.miningRange) {
+        // Usar distancia directa al jugador, sin requerir que el cursor esté sobre la entidad
+        const dist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
+        if (dist <= range) {
                 ent.hp -= dmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
                 if (window.playSound) window.playSound('hit_entity');
                 window.spawnDamageText(ent.x+ent.width/2+(Math.random()-0.5)*16, ent.y-5-Math.random()*8, `-${dmg}`, 'melee');
@@ -390,17 +467,17 @@ window.tryHitEntity = function(pCX, pCY, dmg) {
                     window.entities.splice(i, 1); if(window.updateUI) window.updateUI(); 
                 } else { window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: dmg }); if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pCX) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); } }
                 return true; 
-            }
         }
     } return false;
 };
 
-window.tryHitBlock = function(pCX, pCY, dmg) {
+window.tryHitBlock = function(pCX, pCY, dmg, meleeRange) {
+    const range = meleeRange || window.player.miningRange;
     let clickedBlockIndex = -1;
     for (let i = window.blocks.length - 1; i >= 0; i--) { let b = window.blocks[i], h = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.mouseWorldX >= b.x && window.mouseWorldX <= b.x + window.game.blockSize && window.mouseWorldY >= b.y && window.mouseWorldY <= b.y + h) { clickedBlockIndex = i; break; } }
     if (clickedBlockIndex !== -1) {
         let b = window.blocks[clickedBlockIndex], h = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-        if (Math.hypot(pCX - (b.x + window.game.blockSize/2), pCY - (b.y + h/2)) <= window.player.miningRange) {
+        if (Math.hypot(pCX - (b.x + window.game.blockSize/2), pCY - (b.y + h/2)) <= range) {
             b.hp -= dmg; window.setHit(b); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 5);
             if (window.playSound) window.playSound('hit_block');
             if (b.hp <= 0) { window.destroyBlockLocally(b); } else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: dmg }); }
@@ -410,53 +487,78 @@ window.tryHitBlock = function(pCX, pCY, dmg) {
     } return false;
 };
 
-window.tryHitRock = function(pCX, pCY, dmg) {
+window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
+    const range = meleeRange || window.player.miningRange;
+    // Dirección del golpe: del jugador hacia el cursor del mouse
+    const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
+    const halfArc = Math.PI * 0.55; // arco de ~110° (±55° del eje del golpe)
+
     for (let i = window.rocks.length - 1; i >= 0; i--) {
         const r = window.rocks[i];
-        if (window.mouseWorldX >= r.x && window.mouseWorldX <= r.x + r.width && window.mouseWorldY >= r.y && window.mouseWorldY <= r.y + r.height) { 
-            if (Math.hypot(pCX - (r.x + r.width/2), pCY - (r.y + r.height/2)) <= window.player.miningRange) {
-                r.hp -= dmg; window.setHit(r); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#fff', 8); 
-                if (window.playSound) window.playSound('hit_rock');
-                window.spawnDamageText(r.x+r.width/2+(Math.random()-0.5)*16, r.y+r.height/2-Math.random()*8, `-${dmg}`, 'melee');
-                if (r.hp <= 0) { 
-                    window.sendWorldUpdate('destroy_rock', { x: r.x }); window.spawnParticles(r.x + 15, r.y + 15, '#888', 20, 1.5); 
-                    let ni = { id: Math.random().toString(36).substring(2,9), x:r.x+15, y:r.y+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:15 + Math.floor(Math.random()*10), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.rocks.splice(i, 1); window.gainXP(25); 
-                } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: dmg }); }
-                window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
-                return true;
-            }
-        }
+        const rFY = window.getGroundY ? window.getGroundY(r.x + r.width/2) : (r.y + r.height);
+        const rTopY = rFY - r.height;
+        const rCX = r.x + r.width / 2;
+        const rCY = rTopY + r.height / 2;
+
+        const dist = Math.hypot(pCX - rCX, pCY - rCY);
+        if (dist > range) continue;
+
+        // Verificar que la roca esté dentro del arco de golpe
+        const angleToRock = Math.atan2(rCY - pCY, rCX - pCX);
+        let angleDiff = Math.abs(angleToRock - swingAngle);
+        if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+        if (angleDiff > halfArc) continue;
+
+        r.hp -= dmg; window.setHit(r); window.spawnParticles(rCX, rCY, '#fff', 8); 
+        if (window.playSound) window.playSound('hit_rock');
+        window.spawnDamageText(rCX + (Math.random()-0.5)*16, rCY - Math.random()*8, `-${dmg}`, 'melee');
+        if (r.hp <= 0) { 
+            window.sendWorldUpdate('destroy_rock', { x: r.x }); window.spawnParticles(rCX, rTopY + 15, '#888', 20, 1.5); 
+            let ni = { id: Math.random().toString(36).substring(2,9), x:rCX, y:rTopY+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:15 + Math.floor(Math.random()*10), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.rocks.splice(i, 1); window.gainXP(25); 
+        } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: dmg }); }
+        window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+        return true;
     } return false;
 };
 
-window.tryHitTree = function(pCX, pCY, dmg) {
+window.tryHitTree = function(pCX, pCY, dmg, meleeRange) {
+    const range = meleeRange || window.player.miningRange;
+    // Dirección del golpe: del jugador hacia el cursor del mouse
+    const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
+    const halfArc = Math.PI * 0.55; // arco de ~110°
+
     for (let i = window.trees.length - 1; i >= 0; i--) {
         const t = window.trees[i];
-        
-        let clickW = t.width * 2.5; 
-        let th = t.isStump ? 80 : t.height; 
-        let ty = t.isStump ? t.y + t.height - th : t.y - 100; 
-        let hitY = t.isStump ? t.y + t.height - 40 : t.y + t.height/2;
-        
-        if (window.mouseWorldX >= t.x - clickW/2 && window.mouseWorldX <= t.x + t.width + clickW/2 && window.mouseWorldY >= ty && window.mouseWorldY <= t.y + t.height) { 
-            if (Math.hypot(pCX - (t.x + t.width/2), pCY - hitY) <= window.player.miningRange) {
-                t.hp -= dmg; window.setHit(t); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 8); 
-                if (window.playSound) window.playSound('hit_tree'); window.spawnDamageText(t.x+t.width/2+(Math.random()-0.5)*16, t.y+t.height/2-Math.random()*8, `-${dmg}`, 'melee');
-                if (t.hp <= 0) {
-                    if (t.isStump || t.regrowthCount >= 3) {
-                        window.spawnParticles(t.x + 15, t.y + t.height, '#C19A6B', 15, 1.2); 
-                        let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount: (t.isStump ? 4 : 6), life:1.0}; 
-                        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
-                    } else {
-                        window.spawnParticles(t.x + 15, t.y + t.height - 20, '#2E8B57', 20, 1.5); 
-                        let ni = { id: Math.random().toString(36).substring(2,9), x:t.x+15, y:t.y+t.height-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:10, life:1.0}; 
-                        window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
-                    }
-                } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: dmg }); }
-                window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
-                return true;
+        const tFootY = window.getGroundY ? window.getGroundY(t.x + t.width/2) : (t.groundY || t.y + t.height);
+        const tCX = t.x + t.width / 2;
+        // Centro de golpe: parte baja del árbol (tronco), accesible desde el suelo
+        const tHitY = t.isStump ? tFootY - 40 : tFootY - Math.min(t.height * 0.35, range * 0.6);
+
+        const dist = Math.hypot(pCX - tCX, pCY - tHitY);
+        if (dist > range) continue;
+
+        // Verificar arco de golpe
+        const angleToTree = Math.atan2(tHitY - pCY, tCX - pCX);
+        let angleDiff = Math.abs(angleToTree - swingAngle);
+        if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+        if (angleDiff > halfArc) continue;
+
+        t.hp -= dmg; window.setHit(t); window.spawnParticles(tCX, tHitY, '#c8a96b', 8); 
+        if (window.playSound) window.playSound('hit_tree');
+        window.spawnDamageText(tCX + (Math.random()-0.5)*16, tHitY - Math.random()*8, `-${dmg}`, 'melee');
+        if (t.hp <= 0) {
+            if (t.isStump || t.regrowthCount >= 3) {
+                window.spawnParticles(tCX, tFootY, '#C19A6B', 15, 1.2); 
+                let ni = { id: Math.random().toString(36).substring(2,9), x:tCX, y:tFootY-10, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount: (t.isStump ? 4 : 6), life:1.0}; 
+                window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.sendWorldUpdate('destroy_tree', { x: t.x }); window.trees.splice(i, 1); window.gainXP(5); 
+            } else {
+                window.spawnParticles(tCX, tFootY - 20, '#2E8B57', 20, 1.5); 
+                let ni = { id: Math.random().toString(36).substring(2,9), x:tCX, y:tFootY-30, vx:(Math.random()-0.5)*3, vy:-2, type:'wood', amount:10, life:1.0}; 
+                window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
             }
-        }
+        } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: dmg }); }
+        window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+        return true;
     } return false;
 };
 
@@ -467,12 +569,16 @@ window.attemptAction = function() {
     if (window.player.activeTool === 'bow') return;
     if ((window.player.meleeCooldown || 0) > 0) return; 
 
-    window.player.attackFrame = 12; 
+    window.player.attackFrame = 28; 
     const pCX = window.player.x + window.player.width / 2;
     const pCY = window.player.y + window.player.height / 2; 
     const baseDmg = typeof window.getMeleeDamage === 'function' ? window.getMeleeDamage() : (window.player.baseDamage[window.player.activeTool] || 9); 
     const tool = window.player.activeTool; 
     let actionDone = false;
+
+    // Rango de MELEE: corto, para combate y tala/minería cercana
+    // Rango de CONSTRUCCIÓN (miningRange) se mantiene intacto para el martillo
+    const meleeRange = 80 + (window.player.stats.str || 0) * 2; // ~80px base, crece con STR
 
     let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
     let treeDmg = tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0));
@@ -482,15 +588,17 @@ window.attemptAction = function() {
     // Aplicar cooldown base para evitar que hacer "clic al aire" ocurra 60 veces por segundo
     window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
 
-    if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg)) actionDone = true;
-    if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg)) actionDone = true;
-    if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg)) actionDone = true;
-    if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg)) actionDone = true;
+    if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg, meleeRange)) actionDone = true;
+    if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg, meleeRange)) actionDone = true;
+    if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg, meleeRange)) actionDone = true;
+    if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
 
     if (!actionDone && tool === 'hammer') {
-        let offsetY = window.game.groundLevel % window.game.blockSize; 
-        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
-        const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        // La cuadrícula se alinea al terreno local: como getGroundY ya snapea a blockSize,
+        // simplemente snapeamos X e Y a múltiplos de blockSize.
+        const bs = window.game.blockSize;
+        const gridX = Math.floor(window.mouseWorldX / bs) * bs;
+        const gridY = Math.floor(window.mouseWorldY / bs) * bs;
         const isDoorMode = window.player.buildMode === 'door'; 
         const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; 
         const cost = isDoorMode ? 4 : 2; 
@@ -522,7 +630,9 @@ window.addEventListener('mousedown', (e) => {
     if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
         if (e.button === 0) {
-            let offsetY = window.game.groundLevel % window.game.blockSize; const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+            const bs2 = window.game.blockSize;
+            const gridX = Math.floor(window.mouseWorldX / bs2) * bs2;
+            const gridY = Math.floor(window.mouseWorldY / bs2) * bs2;
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
                 let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : (window.player.placementMode === 'barricade_item' ? 'barricade' : 'campfire'));
                 if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
@@ -569,16 +679,61 @@ window.addEventListener('mouseup', (e) => {
 });
 
 window.addEventListener('wheel', (e) => {
-    if (!window.game || !window.game.isRunning || !window.player || window.player.isDead || window.player.placementMode) return;
+    if (!window.game || !window.game.isRunning || !window.player || window.player.isDead) return;
+    // Ctrl / Meta + scroll → Zoom (siempre, incluso en placement)
+    if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        let delta = e.deltaY > 0 ? -0.1 : 0.1;
+        window.game.zoomTarget = Math.min(window.game.maxZoom, Math.max(window.game.minZoom, (window.game.zoomTarget || 1) + delta));
+        return;
+    }
+
     let dir = Math.sign(e.deltaY);
+
+    // En modo de colocación: scroll cambia de slot y actualiza el item a colocar
+    if (window.player.placementMode) {
+        e.preventDefault();
+        // Cambiar al siguiente slot con item colocable
+        const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item'];
+        let nextSlot = window.player.activeSlot;
+        for (let tries = 0; tries < 6; tries++) {
+            nextSlot = (nextSlot + (dir > 0 ? 1 : -1) + 6) % 6;
+            const toolInSlot = window.player.toolbar[nextSlot];
+            if (toolInSlot && placeableItems.includes(toolInSlot) && window.player.inventory[toolInSlot] > 0) {
+                window.selectToolbarSlot(nextSlot);
+                window.player.placementMode = toolInSlot;
+                if(window.renderToolbar) window.renderToolbar();
+                break;
+            } else if (!toolInSlot) {
+                // Slot vacío: cancelar colocación
+                window.player.placementMode = null;
+                window.selectToolbarSlot(nextSlot);
+                if(window.renderToolbar) window.renderToolbar();
+                break;
+            }
+        }
+        return;
+    }
+
+    // Scroll normal → cambiar slot toolbar
     if (dir > 0) window.player.activeSlot = (window.player.activeSlot + 1) % 6; else if (dir < 0) window.player.activeSlot = (window.player.activeSlot - 1 + 6) % 6;
     if(window.selectToolbarSlot) window.selectToolbarSlot(window.player.activeSlot); if(window.renderToolbar) window.renderToolbar();
-});
+}, { passive: false });
 
 function update() {
     try {
         if (!window.game || !window.game.isRunning || !window.canvas || !window.player) return;
+        const bs = window.game.blockSize; // ← disponible en todo update() incl. el loop de IA
         let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + window.player.height/2;
+
+        // Recalcular coordenadas de mundo del mouse cada frame usando la posición de cámara actual.
+        // Esto es esencial para que la mira del arco no se mueva al desplazarse la cámara.
+        {
+            const _W = window._canvasLogicW || 1280; const _H = window._canvasLogicH || 720;
+            const _z = window.game.zoom || 1;
+            window.mouseWorldX = (window.screenMouseX - _W/2) / _z + window.camera.x + _W/2;
+            window.mouseWorldY = (window.screenMouseY - _H/2) / _z + window.camera.y + _H/2;
+        }
 
         window.game.frameCount++;
         if (window.game.screenShake > 0) window.game.screenShake--;
@@ -629,9 +784,10 @@ function update() {
         window.player.x += window.player.vx; if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
         window.checkBlockCollisions('x');
         window.player.vy += window.game.gravity; window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
-        if (window.player.y + window.player.height >= window.game.groundLevel) { window.player.y = window.game.groundLevel - window.player.height; window.player.vy = 0; window.player.isGrounded = true; }
+        let _pGroundY = window.getGroundY ? window.getGroundY(window.player.x + window.player.width / 2) : window.game.groundLevel;
+        if (window.player.y + window.player.height >= _pGroundY) { window.player.y = _pGroundY - window.player.height; window.player.vy = 0; window.player.isGrounded = true; }
         if (window.player.isGrounded) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
-        if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.placementMode && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
+        if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
 
         // EJECUTAR AUTO-ATAQUE SI SE MANTIENE EL CLIC
@@ -698,7 +854,8 @@ function update() {
                 }
             } else {
                 item.vy += window.game.gravity * 0.5; item.x += item.vx; item.y += item.vy; item.vx *= 0.95; 
-                if (item.y + s >= window.game.groundLevel) { item.y = window.game.groundLevel - s; item.vy *= -0.5; item.vx *= 0.8; }
+                let _itemGY = window.getGroundY ? window.getGroundY(item.x) : window.game.groundLevel;
+                if (item.y + s >= _itemGY) { item.y = _itemGY - s; item.vy *= -0.5; item.vx *= 0.8; }
                 for (let b of window.blocks) { if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'barricade') continue; let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(item.x, item.y, s, s, b.x, b.y, window.game.blockSize, itemHeight)) { if (item.vy > 0 && item.y + s - item.vy <= b.y) { item.y = b.y - s; item.vy *= -0.5; item.vx *= 0.8; } } }
                 if (d < 60 && !window.player.isDead) { anyItemHovered = true; window.player.nearbyItem = item; }
             }
@@ -723,10 +880,11 @@ function update() {
             let pr = window.projectiles[i]; pr.x += pr.vx; pr.vy += window.game.gravity * 0.4; pr.y += pr.vy; pr.angle = Math.atan2(pr.vy, pr.vx); pr.life--;
             
             let isMyArrow = (pr.owner === window.socket?.id) || (!window.game.isMultiplayer);
+            let _prGroundY = window.getGroundY ? window.getGroundY(pr.x) : window.game.groundLevel;
 
-            if(pr.y >= window.game.groundLevel || pr.x < window.game.shoreX) { 
+            if(pr.y >= _prGroundY || pr.x < window.game.shoreX) { 
                 if (isMyArrow && !pr.isEnemy && Math.random() < 0.5) { 
-                    let newSa = { id: Math.random().toString(36).substring(2,9), x: pr.x, y: window.game.groundLevel, angle: pr.angle, life: 18000 };
+                    let newSa = { id: Math.random().toString(36).substring(2,9), x: pr.x, y: _prGroundY, angle: pr.angle, life: 18000 };
                     window.stuckArrows.push(newSa); window.sendWorldUpdate('spawn_stuck_arrow', newSa);
                 } else if (isMyArrow && !pr.isEnemy) window.playSound('arrow_break');
                 
@@ -780,8 +938,8 @@ function update() {
             let cx = window.player.x + 800; if (Math.random() > 0.5 && window.player.x - 800 > window.game.shoreX + 2000) cx = window.player.x - 800; 
             let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
             if (distToShore > 2000) { 
-                let newEnt = null;
-                if (distToShore > 3000 && Math.random() < 0.4 && window.entities.filter(e => e.type === 'archer').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: 30 + (lvl * 20), maxHp: 30 + (lvl * 20), damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; } else if (window.entities.filter(e => e.type === 'zombie').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: window.game.groundLevel - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: 60 + (lvl * 30), maxHp: 60 + (lvl * 30), damage: 15 + (lvl * 4), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; }
+                let newEnt = null; let _spawnGY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
+                if (distToShore > 3000 && Math.random() < 0.4 && window.entities.filter(e => e.type === 'archer').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: _spawnGY - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: 30 + (lvl * 20), maxHp: 30 + (lvl * 20), damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; } else if (window.entities.filter(e => e.type === 'zombie').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: _spawnGY - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: 60 + (lvl * 30), maxHp: 60 + (lvl * 30), damage: 15 + (lvl * 4), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; }
                 if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity', { entity: newEnt }); }
             }
         }
@@ -803,7 +961,8 @@ function update() {
             let lastX = ent.x; ent.x += ent.vx; let hitWall = window.checkEntityCollisions(ent, 'x'); 
             if (ent.x < window.game.shoreX + 2000) { ent.x = window.game.shoreX + 2000; ent.vx = Math.abs(ent.vx); hitWall = true; }
             ent.vy += window.game.gravity; ent.y += ent.vy; window.checkEntityCollisions(ent, 'y'); 
-            if (ent.y + ent.height >= window.game.groundLevel) { ent.y = window.game.groundLevel - ent.height; ent.vy = 0; }
+            let _entGroundY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
+            if (ent.y + ent.height >= _entGroundY) { ent.y = _entGroundY - ent.height; ent.vy = 0; }
             
             let targetPlayer = window.player; let targetCX = pCX, targetCY = pCY; let minDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
             if (window.game.isMultiplayer && window.otherPlayers) { Object.values(window.otherPlayers).forEach(op => { if (op.isDead) return; let opCX = op.x + (op.width||24)/2; let opCY = op.y + (op.height||48)/2; let dist = Math.hypot(opCX - (ent.x + ent.width/2), opCY - (ent.y + ent.height/2)); if (dist < minDist) { minDist = dist; targetPlayer = op; targetCX = opCX; targetCY = opCY; } }); }
@@ -816,25 +975,79 @@ function update() {
                 if (ent.ignorePlayer > 0) ent.ignorePlayer--;
                 let aggroRange = 180; if (isNight && !targetPlayer.isStealth) aggroRange = 600; if (ent.type === 'zombie' && !targetPlayer.isStealth) aggroRange = 800; 
                 let repelledByTorch = isHoldingTorch && minDist < 250 && ent.level <= 3 && targetPlayer === window.player;
+                const isGrounded = (ent.y + ent.height >= _entGroundY - 2);
 
                 if (repelledByTorch) { ent.vx = (ent.x > targetCX) ? 1.5 : -1.5; ent.ignorePlayer = 60; } 
                 else if ((ent.knockbackFrames||0) > 0) {} 
                 else if (minDist < aggroRange && ent.ignorePlayer <= 0) {
-                    let _bs = ent.type === 'zombie' ? 0.4 : 0.8; _bs *= ((ent.enragedFrames||0) > 0 ? 1.6 : 1.0); let targetVx = (targetPlayer.x > ent.x) ? _bs : -_bs; ent.vx = targetVx;
-                    if (hitWall || Math.abs(ent.x - lastX) < 0.1) { ent.stuckFrames++; const hasBarricadeAhead = window.blocks.some(b => b.type === 'barricade' && Math.abs((ent.x + ent.width/2) - (b.x + window.game.blockSize/2)) < ent.width + 5 && Math.abs((ent.y + ent.height/2) - (b.y + window.game.blockSize/2)) < ent.height + 5); if (ent.stuckFrames > 60 && ent.type !== 'zombie' && !hasBarricadeAhead) { ent.ignorePlayer = 180; ent.vx = -targetVx * 1.5; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
+                    let _spd = ent.type === 'zombie' ? 0.4 : 0.8; _spd *= ((ent.enragedFrames||0) > 0 ? 1.6 : 1.0);
+                    let dirX = (targetPlayer.x > ent.x) ? 1 : -1;
+                    ent.vx = dirX * _spd;
+
+                    // --- Detección de terreno adelante: saltar si el suelo sube ---
+                    if (isGrounded && window.getGroundY) {
+                        const lookDist = bs * 1.5;
+                        const groundHere  = window.getGroundY(ent.x + ent.width / 2);
+                        const groundAhead = window.getGroundY(ent.x + ent.width / 2 + dirX * lookDist);
+                        // El terreno sube más de medio bloque → saltar proactivamente
+                        if (groundAhead < groundHere - bs * 0.4) {
+                            ent.vy = ent.type === 'zombie' ? -7 : -9;
+                            ent.stuckFrames = 0;
+                        }
+                    }
+
+                    // --- Stuck fallback: saltar si bloqueado por pared o bloque ---
+                    if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
+                        ent.stuckFrames++;
+                        const hasBarricadeAhead = window.blocks.some(b => b.type === 'barricade' && Math.abs((ent.x + ent.width/2) - (b.x + window.game.blockSize/2)) < ent.width + 5 && Math.abs((ent.y + ent.height/2) - (b.y + window.game.blockSize/2)) < ent.height + 5);
+                        if (ent.stuckFrames > 20 && isGrounded) {
+                            // Saltar para superar el obstáculo
+                            ent.vy = ent.type === 'zombie' ? -7 : -9;
+                            if (ent.stuckFrames > 60 && ent.type !== 'zombie' && !hasBarricadeAhead) {
+                                ent.ignorePlayer = 180; ent.vx = -dirX * _spd * 1.5; ent.stuckFrames = 0;
+                            }
+                        }
+                    } else { ent.stuckFrames = 0; }
+
                     if (minDist < 40 && ent.attackCooldown <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) { if (targetPlayer === window.player) window.damagePlayer(ent.damage, ent.name); ent.attackCooldown = 150; }
                 } else { if(ent.type === 'spider' && Math.random() < 0.02 && ent.ignorePlayer <= 0) ent.vx = (Math.random() > 0.5 ? 0.5 : -0.5); }
                 if (ent.attackCooldown > 0) ent.attackCooldown--;
             } 
             else if (!repelled && ent.type === 'archer') {
-                let aggroRange = (isNight && !targetPlayer.isStealth) ? 1000 : 800; 
+                if (ent.ignorePlayer > 0) ent.ignorePlayer--;
+                let aggroRange = (isNight && !targetPlayer.isStealth) ? 1000 : 800;
+                const isGrounded = (ent.y + ent.height >= _entGroundY - 2);
                 if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
                     let dirX = targetPlayer.x > ent.x ? 1 : -1;
-                    if (minDist > 500) ent.vx = dirX * 0.9; else if (minDist < 250) ent.vx = -dirX * 1.1; else ent.vx = 0; 
-                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) { ent.stuckFrames++; if (ent.stuckFrames > 30) { ent.vy = -6; ent.ignorePlayer = 60; ent.stuckFrames = 0; } } else ent.stuckFrames = 0;
+                    // Posicionamiento: acercarse si lejos, retroceder si muy cerca, mantenerse en rango ideal
+                    if (minDist > 500) ent.vx = dirX * 0.9; 
+                    else if (minDist < 250) ent.vx = -dirX * 1.1; 
+                    else ent.vx = 0;
+
+                    // --- Detección de terreno adelante para el archer ---
+                    if (isGrounded && window.getGroundY && ent.vx !== 0) {
+                        const mvDir = ent.vx > 0 ? 1 : -1;
+                        const groundHere  = window.getGroundY(ent.x + ent.width / 2);
+                        const groundAhead = window.getGroundY(ent.x + ent.width / 2 + mvDir * bs * 1.5);
+                        if (groundAhead < groundHere - bs * 0.4) {
+                            ent.vy = -7; // saltar pendiente
+                            ent.stuckFrames = 0;
+                        }
+                    }
+
+                    // Stuck: saltar sobre bloque/pared
+                    if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) {
+                        ent.stuckFrames++;
+                        if (ent.stuckFrames > 20 && isGrounded) { ent.vy = -7; }
+                        if (ent.stuckFrames > 60) { ent.ignorePlayer = 60; ent.stuckFrames = 0; }
+                    } else { ent.stuckFrames = 0; }
+
+                    // Disparar
                     if (ent.attackCooldown <= 0 && minDist < 550) {
-                        let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2); let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
-                        let arrowSpeed = 11; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed; let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
+                        let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2);
+                        let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
+                        let arrowSpeed = 11; let vx = (vx_base / currentSpeed) * arrowSpeed; let vy = (vy_base / currentSpeed) * arrowSpeed;
+                        let timeInAir = minDist / arrowSpeed; vy -= (timeInAir * window.game.gravity * 0.4 * 0.5); 
                         let angle = Math.atan2(vy, vx); let errorMargin = Math.max(0, 0.2 - (ent.level * 0.02)); angle += (Math.random() - 0.5) * errorMargin;
                         window.projectiles.push({ x: ent.x + ent.width/2, y: ent.y + ent.height/2, vx: Math.cos(angle)*arrowSpeed, vy: Math.sin(angle)*arrowSpeed, life: 250, damage: ent.damage, isEnemy: true, owner: ent.id });
                         ent.attackCooldown = Math.max(120, 250 - (ent.level * 10)); 
@@ -845,11 +1058,31 @@ function update() {
             else if (ent.type === 'chicken') { if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 1.5; } else if(Math.random() < 0.02) { ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); } }
         });
 
-        window.camera.x = window.player.x - (window._canvasLogicW / 2) + (window.player.width / 2);
-        if (window.camera.x < window.game.shoreX - window._canvasLogicW/2) window.camera.x = window.game.shoreX - window._canvasLogicW/2; 
+        // Zoom suave con interpolación
+        if (window.game.zoomTarget !== undefined) {
+            window.game.zoom += (window.game.zoomTarget - window.game.zoom) * 0.12;
+        }
+        const _W = window._canvasLogicW || 1280;
+        const _H = window._canvasLogicH || 720;
+        // Cámara X: directa, sin lag
+        window.camera.x = window.player.x + window.player.width/2 - _W/2;
+        // Cámara Y estilo Terraria: jugador en el ~38% superior → más suelo visible abajo
+        let idealCamY = window.player.y + window.player.height - _H * 0.62;
+        if (window.camera._targetY === undefined) window.camera._targetY = idealCamY;
+        // Lerp más rápido (0.18) para que la cámara no parezca trabada.
+        // Si la diferencia es mayor a 200px (cambio brusco de terreno) → snap directo.
+        const camDiff = idealCamY - window.camera._targetY;
+        if (Math.abs(camDiff) > 200) {
+            window.camera._targetY = idealCamY;
+        } else {
+            window.camera._targetY += camDiff * 0.18;
+        }
+        window.camera.y = window.camera._targetY;
+        // Límite izquierdo
+        if (window.camera.x < window.game.shoreX - _W/2) window.camera.x = window.game.shoreX - _W/2;
         if (window.player.x + (window._canvasLogicW / 2) > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
 
-        for (let i = window.particles.length - 1; i >= 0; i--) { let p = window.particles[i]; p.x += p.vx; p.y += p.vy; p.vy += window.game.gravity * 0.4; p.life -= p.decay; if (p.y >= window.game.groundLevel) { p.y = window.game.groundLevel; p.vy = -p.vy * 0.5; p.vx *= 0.8; } if (p.life <= 0.05 || isNaN(p.life)) window.particles.splice(i, 1); }
+        for (let i = window.particles.length - 1; i >= 0; i--) { let p = window.particles[i]; p.x += p.vx; p.y += p.vy; p.vy += window.game.gravity * 0.4; p.life -= p.decay; let _pGY = window.getGroundY ? window.getGroundY(p.x) : window.game.groundLevel; if (p.y >= _pGY) { p.y = _pGY; p.vy = -p.vy * 0.5; p.vx *= 0.8; } if (p.life <= 0.05 || isNaN(p.life)) window.particles.splice(i, 1); }
         for (let i = window.damageTexts.length - 1; i >= 0; i--) { let dt = window.damageTexts[i]; dt.y -= 0.2; dt.life -= 0.008; if (dt.life <= 0.05 || isNaN(dt.life)) window.damageTexts.splice(i, 1); }
 
         if (window.game.frameCount % 60 === 0 && !window.player.isDead) { window.player.hunger -= isMoving ? 0.1 : 0.02; if (window.player.hunger <= 0) { window.player.hunger = 0; window.damagePlayer(2, 'Hambre'); } if (window.player.hunger > 50 && window.player.hp < window.player.maxHp) { window.player.hp += 0.5; if(typeof window.updateUI==='function') window.updateUI(); } }

@@ -53,13 +53,28 @@ window.drawCharacter = function(charData, isLocal) {
     }
 
     let aimAngle = 0;
-    if (charData.activeTool === 'torch') {
+    // === BAILE (/dance) ===
+    if (charData.isDancing) {
+        const dt = (window.game.frameCount - (charData.danceStart || 0)) * 0.07;
+        // Cumbia / shuffle gracioso: brazos asimétricos, rodillas levantadas, cuerpo ladeado
+        legR   =  Math.sin(dt * 2.1) * 1.2;
+        kneeR  =  Math.max(0, Math.sin(dt * 2.1 - 0.8) * 1.8);
+        legL   =  Math.sin(dt * 2.1 + Math.PI) * 1.2;
+        kneeL  =  Math.max(0, Math.sin(dt * 2.1 + Math.PI - 0.8) * 1.8);
+        armR   = -Math.PI * 0.5 + Math.sin(dt * 1.7) * 0.9;
+        elbowR =  Math.cos(dt * 2.3) * 0.7 - 0.3;
+        armL   = -Math.PI * 0.3 + Math.sin(dt * 1.7 + Math.PI) * 0.9;
+        elbowL =  Math.cos(dt * 2.3 + Math.PI) * 0.7 - 0.3;
+        torsoR =  Math.sin(dt * 1.4) * 0.25;
+        headR  =  Math.sin(dt * 0.9 + 0.5) * 0.18;
+        bob    =  Math.abs(Math.sin(dt * 2.1)) * 6;
+    } else if (charData.activeTool === 'torch') {
         armR = -Math.PI / 2.5; elbowR = -0.3; 
     } else if (charData.activeTool === 'bow' && charData.isAiming) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
-        let progress = charData.attackFrame / 22; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
+        let progress = charData.attackFrame / 30; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
 
     let skin = charData.isHit ? '#ff4444' : '#f1c27d'; let shirt = charData.isHit ? '#ff4444' : (isLocal ? '#3498db' : '#686868'); let shirtDark = charData.isHit ? '#cc0000' : (isLocal ? '#2980b9' : '#4a4a4a');
@@ -231,70 +246,102 @@ window.draw = function() {
     }
     // -------------------------------------------------
 
+    // --- ZOOM: aplicar transformación centrada en canvas ---
+    const z = window.game.zoom || 1;
+    window.ctx.save();
+    window.ctx.translate(W / 2, H / 2);
+    window.ctx.scale(z, z);
+    window.ctx.translate(-W / 2, -H / 2);
     window.ctx.translate(-window.camera.x, -window.camera.y);
 
-    const gL = window.game.groundLevel;
-    const startX = Math.max(window.camera.x, window.game.shoreX);
-    const endX = window.camera.x + W + 100;
+    const bs = window.game.blockSize; // 30px — granularidad del terreno
+    const startX = Math.max(Math.floor((window.camera.x - 60) / bs) * bs, window.game.shoreX);
+    const endX   = window.camera.x + W / z + 60 + bs;
+    const bottomY = window.camera.y + H / z + 60;
 
-    // --- SISTEMA DE TILING PARA BIOMAS ---
-    const tileSize = 64;
-    let startTileX = startX - (startX % tileSize);
-    let startTileY = gL;
+    // === TERRENO DINÁMICO POR COLUMNAS DE blockSize ===
+    // Cada columna tiene su propia altura getGroundY → alineación perfecta con físicas
+    for (let px = startX; px < endX; px += bs) {
+        const colCenterX = px + bs / 2;
+        const gY = window.getGroundY ? window.getGroundY(colCenterX) : window.game.groundLevel;
 
-    for (let px = startTileX; px < endX; px += tileSize) {
+        // Bioma: desierto a partir de 2600px
+        // desertAlpha = cuánto de DESIERTO se muestra encima del pasto base
         let desertAlpha = 0;
-        if (px > 3400) desertAlpha = 1;
-        else if (px > 2600) desertAlpha = (px - 2600) / 800; 
+        if (colCenterX > 3400) desertAlpha = 1;
+        else if (colCenterX > 2600) desertAlpha = (colCenterX - 2600) / 800;
 
-        for (let py = startTileY; py < H; py += tileSize) {
-            let isTop = (py === startTileY);
-            
-            if (desertAlpha < 1) {
-                window.ctx.globalAlpha = 1;
-                let fImg = isTop ? window.sprites.tile_grass_top : window.sprites.tile_dirt;
-                if (fImg && fImg.complete && fImg.naturalWidth > 0) {
-                    window.ctx.drawImage(fImg, px, py, tileSize, tileSize);
+        // ── CAPA BASE (pasto/tierra) a alpha COMPLETO ──────────────────────────
+        // Se dibuja SIEMPRE a opacidad 1 para que no haya huecos transparentes.
+        // En la zona de desierto puro, el overlay de arena cubrirá todo encima.
+        window.ctx.globalAlpha = 1;
+        {
+            const fImg = window.sprites.tile_grass_top;
+            if (fImg && fImg.complete && fImg.naturalWidth > 0) {
+                window.ctx.drawImage(fImg, px, gY, bs + 1, 64);
+            } else {
+                window.ctx.fillStyle = '#528c2a';
+                window.ctx.fillRect(px, gY, bs + 1, 20);
+            }
+            for (let py = gY + 64; py < bottomY; py += 64) {
+                const dImg = window.sprites.tile_dirt;
+                if (dImg && dImg.complete && dImg.naturalWidth > 0) {
+                    window.ctx.drawImage(dImg, px, py, bs + 1, 64);
                 } else {
-                    window.ctx.fillStyle = isTop ? '#528c2a' : '#3d2412';
-                    window.ctx.fillRect(px, py, tileSize, tileSize);
+                    window.ctx.fillStyle = '#3d2412';
+                    window.ctx.fillRect(px, py, bs + 1, 64);
                 }
             }
+        }
 
-            if (desertAlpha > 0) {
-                window.ctx.globalAlpha = desertAlpha;
-                let dImg = isTop ? window.sprites.tile_sand_top : window.sprites.tile_sand_base;
-                if (dImg && dImg.complete && dImg.naturalWidth > 0) {
-                    window.ctx.drawImage(dImg, px, py, tileSize, tileSize);
+        // ── CAPA DE ARENA encima, a alpha = desertAlpha ────────────────────────
+        // Se pinta SOBRE el pasto ya existente → no deja huecos
+        if (desertAlpha > 0) {
+            window.ctx.globalAlpha = desertAlpha;
+            {
+                const sImg = window.sprites.tile_sand_top;
+                if (sImg && sImg.complete && sImg.naturalWidth > 0) {
+                    window.ctx.drawImage(sImg, px, gY, bs + 1, 64);
                 } else {
-                    window.ctx.fillStyle = isTop ? '#e6c280' : '#d4a853';
-                    window.ctx.fillRect(px, py, tileSize, tileSize);
+                    window.ctx.fillStyle = '#e6c280';
+                    window.ctx.fillRect(px, gY, bs + 1, 20);
+                }
+                for (let py = gY + 64; py < bottomY; py += 64) {
+                    const sBaseImg = window.sprites.tile_sand_base;
+                    if (sBaseImg && sBaseImg.complete && sBaseImg.naturalWidth > 0) {
+                        window.ctx.drawImage(sBaseImg, px, py, bs + 1, 64);
+                    } else {
+                        window.ctx.fillStyle = '#d4a853';
+                        window.ctx.fillRect(px, py, bs + 1, 64);
+                    }
                 }
             }
             window.ctx.globalAlpha = 1;
         }
 
+        // ── Hierba decorativa encima de la superficie (solo zona verde) ─────────
         if (desertAlpha < 1 && darkness < 0.8) {
-            window.ctx.globalAlpha = 1 - desertAlpha;
-            window.ctx.fillStyle = 'rgba(80,120,40,0.6)';
-            let seed = Math.sin(px * 0.017) * 0.5 + 0.5;
-            let grassH = 4 + seed * 6;
-            window.ctx.fillRect(px + seed * 30, gL - grassH, 2, grassH);
-            window.ctx.fillRect(px + seed * 55, gL - grassH * 0.7, 2, grassH * 0.7);
+            window.ctx.globalAlpha = (1 - desertAlpha) * 0.75;
+            window.ctx.fillStyle = 'rgba(70,110,30,0.8)';
+            const seed = Math.sin(px * 0.0173) * 0.5 + 0.5;
+            const grassH = 5 + seed * 7;
+            window.ctx.fillRect(px + seed * (bs - 4), gY - grassH, 2, grassH);
+            if (seed > 0.3) window.ctx.fillRect(px + seed * (bs - 10) + 4, gY - grassH * 0.65, 2, grassH * 0.65);
             window.ctx.globalAlpha = 1;
         }
     }
-    // -------------------------------------------
+    // =================================================
 
     if (window.camera.x < window.game.shoreX) {
+        const gL = window.game.baseGroundLevel || window.game.groundLevel;
         window.ctx.fillStyle = '#C8B878';
-        window.ctx.fillRect(window.game.shoreX - 70, gL, 70, H - gL);
+        window.ctx.fillRect(window.game.shoreX - 70, gL, 70, (window.camera.y + H / (window.game.zoom||1)) - gL);
         let waveOffset = Math.sin(window.game.frameCount * 0.04) * 6;
         let waterGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 60);
         waterGrad.addColorStop(0, '#1a8fc0');
         waterGrad.addColorStop(1, '#0a5c8a');
         window.ctx.fillStyle = waterGrad;
-        window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H - gL);
+        window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H);
         window.ctx.fillStyle = 'rgba(100,200,255,0.4)';
         window.ctx.fillRect(window.camera.x, gL + 6 + waveOffset, window.game.shoreX - 70 - window.camera.x, 12);
         window.ctx.fillStyle = 'rgba(255,255,255,0.6)';
@@ -307,10 +354,13 @@ window.draw = function() {
     }
 
     window.trees.forEach(t => {
-        if (t.x + t.width > window.camera.x && t.x < window.camera.x + window._canvasLogicW) {
+        if (t.x + t.width > window.camera.x - 200 && t.x < window.camera.x + W / z + 200) {
             window.ctx.save();
             
-            window.ctx.translate(t.x + t.width/2, t.y + t.height);
+            // Anclar el pie del árbol al suelo real en tiempo de render
+            const tFootX = t.x + t.width / 2;
+            const tFootY = window.getGroundY ? window.getGroundY(tFootX) : (t.groundY || t.y + t.height);
+            window.ctx.translate(tFootX, tFootY);
             
             let hw = t.width / 2; 
             let img = null;
@@ -323,8 +373,7 @@ window.draw = function() {
             let drawH = 256; 
             let drawW = 128;    
             let drawX = -drawW / 2;
-            let offsetVisualY = 0; // Arreglado para que pise el pasto sin flotar
-            let drawY = -drawH + offsetVisualY;
+            let drawY = -drawH;
 
             if (img && img.complete && img.naturalWidth > 0) {
                 if (t.isHit) {
@@ -349,9 +398,10 @@ window.draw = function() {
     });
 
     window.rocks.forEach(r => {
-        if (r.x + r.width > window.camera.x && r.x < window.camera.x + window._canvasLogicW) {
+        if (r.x + r.width > window.camera.x - 100 && r.x < window.camera.x + W / z + 100) {
             window.ctx.save();
-            window.ctx.translate(r.x + r.width/2, r.y + r.height);
+            const rFootY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
+            window.ctx.translate(r.x + r.width/2, rFootY);
             let hw = r.width / 2;
             
             let img = (r.hp <= r.maxHp / 2) ? window.sprites.rock_damaged : window.sprites.rock_full;
@@ -382,7 +432,7 @@ window.draw = function() {
     });
 
     window.blocks.forEach(b => {
-        if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + window._canvasLogicW) {
+        if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + W / z + 120) {
             if (b.type === 'block') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
                 window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
@@ -418,21 +468,21 @@ window.draw = function() {
     });
 
     window.droppedItems.forEach(item => {
-        if (item.x + 20 > window.camera.x && item.x < window.camera.x + window._canvasLogicW) {
+        if (item.x + 20 > window.camera.x && item.x < window.camera.x + W / z + 60) {
             window.ctx.fillStyle = window.itemDefs[item.type] ? window.itemDefs[item.type].color : '#fff'; let s = window.itemDefs[item.type] ? window.itemDefs[item.type].size : 10; let floatOffset = Math.sin(item.life) * 3; window.ctx.fillRect(item.x, item.y + floatOffset, s, s);
         }
     });
 
     if (window.game.isMultiplayer) {
         Object.values(window.otherPlayers).forEach(p => { 
-            if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + window._canvasLogicW + 50) { window.drawCharacter(p, false); }
+            if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + W / z + 150) { window.drawCharacter(p, false); }
         });
     }
 
     if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
     window.entities.forEach(ent => {
-        if (!(ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window._canvasLogicW)) return;
+        if (!(ent.x + ent.width > window.camera.x && ent.x < window.camera.x + W / z + 120)) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
 
         C.save();
@@ -579,7 +629,7 @@ window.draw = function() {
     }
 
     window.projectiles.forEach(pr => {
-        if (pr.x + 20 > window.camera.x && pr.x - 20 < window.camera.x + window._canvasLogicW) {
+        if (pr.x + 20 > window.camera.x && pr.x - 20 < window.camera.x + W / z + 60) {
             window.ctx.save(); window.ctx.translate(pr.x, pr.y); window.ctx.rotate(pr.angle);
             if (pr.isEnemy) { window.ctx.fillStyle = '#ff4444'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#000'; window.ctx.fillRect(5, -2, 4, 4); } 
             else { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(5, -2, 4, 4); window.ctx.fillStyle = '#fff'; window.ctx.fillRect(-17, -2, 4, 4); }
@@ -588,7 +638,7 @@ window.draw = function() {
     });
 
     window.stuckArrows.forEach(sa => {
-        if (sa.x + 20 > window.camera.x && sa.x - 20 < window.camera.x + window._canvasLogicW) {
+        if (sa.x + 20 > window.camera.x && sa.x - 20 < window.camera.x + W / z + 60) {
             window.ctx.save();
             window.ctx.translate(sa.x, sa.y);
             window.ctx.rotate(sa.angle);
@@ -631,40 +681,49 @@ window.draw = function() {
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         let ambientDarkness = 0.2 + (0.75 * darkness); 
         window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window._canvasLogicW, window._canvasLogicH);
-        
         window.lightCtx.globalCompositeOperation = 'destination-out';
+        // Helper: world position → lightCanvas screen position (accounting for zoom)
+        const _lz = window.game.zoom || 1;
+        const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
+        function _wts(wx, wy) { return [(wx - window.camera.x - _lW/2)*_lz + _lW/2, (wy - window.camera.y - _lH/2)*_lz + _lH/2]; }
         
         if (!window.player.isDead && window.player.activeTool === 'torch') {
-            let flicker = Math.random() * 20; let pGlowSize = 250 + flicker; 
-            let pGrad = window.lightCtx.createRadialGradient(window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, 0, window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, pGlowSize);
+            let flicker = Math.random() * 20; let pGlowSize = (250 + flicker) * _lz; 
+            let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
+            let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
             pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.8)'); pGrad.addColorStop(1, 'rgba(255, 150, 50, 0)');
-            window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(window.player.x + window.player.width/2 - window.camera.x, window.player.y + window.player.height/2 - window.camera.y, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
+            window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
         }
 
         if (window.game.isMultiplayer) {
             Object.values(window.otherPlayers).forEach(p => { 
                 if (p.id !== window.socket?.id && !p.isDead && p.activeTool === 'torch') {
-                    let cx = p.x + (p.width||24)/2 - window.camera.x; let cy = p.y + (p.height||48)/2 - window.camera.y;
-                    let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, 250 + Math.random()*20);
+                    let [cx, cy] = _wts(p.x + (p.width||24)/2, p.y + (p.height||48)/2);
+                    let pGlowSize2 = (250 + Math.random()*20) * _lz;
+                    let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, pGlowSize2);
                     pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.8)'); pGrad.addColorStop(1, 'rgba(255, 150, 50, 0)');
-                    window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(cx, cy, 270, 0, Math.PI*2); window.lightCtx.fill();
+                    window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(cx, cy, 270*_lz, 0, Math.PI*2); window.lightCtx.fill();
                 }
             });
         }
 
         window.blocks.forEach(b => {
             if (b.type === 'campfire' && b.isBurning) {
-                let glow = 250 + Math.random()*10; 
-                let cGrad = window.lightCtx.createRadialGradient(b.x+15 - window.camera.x, b.y+15 - window.camera.y, 0, b.x+15 - window.camera.x, b.y+15 - window.camera.y, glow);
+                let glow = (250 + Math.random()*10) * _lz; 
+                let [bx, by] = _wts(b.x+15, b.y+15);
+                let cGrad = window.lightCtx.createRadialGradient(bx, by, 0, bx, by, glow);
                 cGrad.addColorStop(0, 'rgba(255, 200, 100, 0.8)'); cGrad.addColorStop(1, 'rgba(255, 200, 100, 0)');
-                window.lightCtx.fillStyle = cGrad; window.lightCtx.beginPath(); window.lightCtx.arc(b.x+15 - window.camera.x, b.y+15 - window.camera.y, glow, 0, Math.PI*2); window.lightCtx.fill();
+                window.lightCtx.fillStyle = cGrad; window.lightCtx.beginPath(); window.lightCtx.arc(bx, by, glow, 0, Math.PI*2); window.lightCtx.fill();
             }
         });
         window.lightCtx.globalCompositeOperation = 'source-over'; 
         window.ctx.drawImage(window.lightCanvas, 0, 0, window._canvasLogicW, window._canvasLogicH);
     }
 
-    window.ctx.save(); window.ctx.translate(-window.camera.x, -window.camera.y);
+    // Nombres y chat: aplicar el mismo zoom para alinear con los personajes renderizados
+    const _ncz = window.game.zoom || 1;
+    const _ncW = window._canvasLogicW, _ncH = window._canvasLogicH;
+    window.ctx.save(); window.ctx.translate(_ncW/2, _ncH/2); window.ctx.scale(_ncz, _ncz); window.ctx.translate(-_ncW/2, -_ncH/2); window.ctx.translate(-window.camera.x, -window.camera.y);
 
     const PLAYER_COLORS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#fff176','#ff8a65'];
     function playerColor(name) {
@@ -784,5 +843,6 @@ window.draw = function() {
     
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id) drawNameAndChat(p, false); }); }
     if (!window.player.inBackground) drawNameAndChat(window.player, true);
-    window.ctx.restore();
+    window.ctx.restore(); // fin zoom/name-chat
+    window.ctx.restore(); // fin screen-shake
 };

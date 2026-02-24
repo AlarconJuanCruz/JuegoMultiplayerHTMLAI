@@ -62,7 +62,50 @@ window.lightCtx.scale(window._dpr, window._dpr);
 
 window.socket = null; window.otherPlayers = {}; 
 
-window.game = { gravity: 0.5, blockSize: 30, groundLevel: 580, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false, serverStartTime: 0 };
+window.game = { gravity: 0.5, blockSize: 30, groundLevel: 510, baseGroundLevel: 510, chunkSize: 1280, exploredRight: 1280, frameCount: 0, screenShake: 0, days: 1, shoreX: 200, isRunning: false, isMultiplayer: false, isRaining: false, serverStartTime: 0, zoom: 1.0, minZoom: 0.4, maxZoom: 2.5, zoomTarget: 1.0 };
+
+// --- FUNCIÓN DE TERRENO DINÁMICO (Terraria-style) ---
+// Retorna la Y del suelo en X, siempre múltiplo de blockSize para alineación perfecta.
+window.getGroundY = function(x) {
+    const bs  = window.game.blockSize;     // 30
+    const base = window.game.baseGroundLevel; // 510
+
+    // Zona de playa: totalmente plana
+    if (x <= window.game.shoreX + 60) return base;
+
+    // Blend suave en la transición desde la orilla (60–400px)
+    let blend = Math.min(1.0, (x - window.game.shoreX - 60) / 340);
+
+    // --- ZONA NORMAL: 0–10200 px (0–1000 m desde la costa) ---
+    // Colinas suaves y medianas, amplitud total ±90px
+    let h = 0;
+    h += Math.sin(x * 0.0022 + 1.5)  * 45;   // colinas grandes
+    h += Math.cos(x * 0.0041 + 0.8)  * 28;   // colinas medianas
+    h += Math.sin(x * 0.0093 + 2.3)  * 14;   // bumps
+    h += Math.cos(x * 0.0190 + 0.4)  *  7;   // detalles
+    h += Math.sin(x * 0.0380 + 3.7)  *  3;   // micro
+
+    // --- ZONA DE MONTAÑAS: después de 10200 px (>1000 m) ---
+    // Mezcla progresiva hacia montañas mucho más altas (±200px extra)
+    const mountainStart = window.game.shoreX + 10000;
+    if (x > mountainStart) {
+        let mt = Math.min(1.0, (x - mountainStart) / 3000); // 3000px de transición
+        let mh = 0;
+        mh += Math.sin(x * 0.0008 + 4.2)  * 130;  // cordillera principal
+        mh += Math.cos(x * 0.0014 + 1.1)  *  90;  // cordillera secundaria
+        mh += Math.sin(x * 0.0028 + 2.8)  *  45;  // colinas sobre montañas
+        mh += Math.cos(x * 0.0060 + 0.5)  *  18;  // rugosidad
+        h = h * (1 - mt) + mh * mt;
+    }
+
+    // Snap al múltiplo de blockSize más cercano → alineación perfecta con bloques
+    let rawY = base + h * blend;
+    let snapped = Math.round(rawY / bs) * bs;
+
+    // Límites: techo mínimo 180px desde arriba, piso máximo 630px
+    return Math.max(180, Math.min(630, snapped));
+};
+// ----------------------------------------------------
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 

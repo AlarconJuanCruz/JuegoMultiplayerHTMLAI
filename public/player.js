@@ -76,7 +76,8 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         
         let graveId = 'g_' + Math.random().toString(36).substr(2, 9);
         let graveX = Math.floor((window.player.x + window.player.width/2) / window.game.blockSize) * window.game.blockSize;
-        let grave = { id: graveId, x: graveX, y: window.game.groundLevel - window.game.blockSize, type: 'grave', owner: window.player.name, inventory: { ...window.player.inventory }, hp: 200, maxHp: 200, isHit: false, createdAt: Date.now() };
+        let _graveGY = window.getGroundY ? window.getGroundY(graveX + window.game.blockSize/2) : window.game.groundLevel;
+        let grave = { id: graveId, x: graveX, y: _graveGY - window.game.blockSize, type: 'grave', owner: window.player.name, inventory: { ...window.player.inventory }, hp: 200, maxHp: 200, isHit: false, createdAt: Date.now() };
         window.blocks.push(grave);
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
