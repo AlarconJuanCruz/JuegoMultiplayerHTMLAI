@@ -25,7 +25,7 @@ window.destroyBlockLocally = function(b) {
 
     if (window.currentOpenBox && window.currentOpenBox.x === b.x && window.currentOpenBox.y === b.y) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if(dBox) dBox.classList.remove('open'); }
     
-    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : 'wood'))); 
+    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : (b.type === 'ladder' ? 'ladder_item' : 'wood')))); 
     let refundAmt = b.type === 'door' ? 2 : 1;
     if (b.type !== 'grave') { let ni = { id: Math.random().toString(36).substring(2,9), x:b.x+15, y:b.y+15, vx:0, vy:-2, type:refundType, amount:refundAmt, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); }
 
@@ -65,11 +65,13 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
         let supported = false;
         // Soportado si el fondo toca el suelo (con tolerancia de 1px por snapping)
         if (Math.abs((y + h) - localGY) <= bs) supported = true;
-        if (!supported) { for (let b of window.blocks) { if (b.type === 'block' && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < bs / 2) { supported = true; break; } } }
+        if (!supported) { for (let b of window.blocks) { if ((b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < bs / 2) { supported = true; break; } } }
         if (!supported) return false; 
     }
 
     for (let b of window.blocks) { 
+        // Escaleras son atravesables: no bloquean colocación de otras escaleras en la misma posición X
+        if (b.type === 'ladder') continue;
         let bh = b.type === 'door' ? bs * 2 : bs; 
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false; 
         
@@ -102,7 +104,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
 
 window.isOverlappingSolidBlock = function() {
     for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade' || b.type === 'ladder') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) return true;
     } return false;
@@ -115,10 +117,24 @@ window.isAdjacentToBlockOrGround = function(x, y, w, h) {
     for (let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
 }
 
+// Devuelve verdadero si el jugador está dentro de una escalera (para trepar)
+window.isOnLadder = function() {
+    const pCX = window.player.x + window.player.width / 2;
+    for (let b of window.blocks) {
+        if (b.type !== 'ladder') continue;
+        const bs = window.game.blockSize;
+        if (pCX >= b.x && pCX <= b.x + bs &&
+            window.player.y + window.player.height > b.y &&
+            window.player.y < b.y + bs) return true;
+    }
+    return false;
+};
+
 window.checkBlockCollisions = function(axis) {
     if (window.player.inBackground) return;
     for (let b of window.blocks) {
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade') continue; 
+        // Escaleras: traversables, colisión sólo gestionada por trepado
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade' || b.type === 'ladder') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') { if (window.player.vx > 0) window.player.x = b.x - window.player.width - 0.05; else if (window.player.vx < 0) window.player.x = b.x + window.game.blockSize + 0.05; window.player.vx = 0; } 
@@ -357,6 +373,10 @@ window.addEventListener('keydown', (e) => {
                         } else if (cmd === '/flechas') {
                             window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10;
                             window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22');
+                            if (window.updateUI) window.updateUI();
+                        } else if (cmd === '/escalera') {
+                            window.player.inventory.ladder_item = (window.player.inventory.ladder_item || 0) + 10;
+                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Escaleras 🪜', '#c8a86a');
                             if (window.updateUI) window.updateUI();
                         } else if (cmd === '/dance') {
                             window.player.isDancing = true;
@@ -634,9 +654,24 @@ window.addEventListener('mousedown', (e) => {
             const gridX = Math.floor(window.mouseWorldX / bs2) * bs2;
             const gridY = Math.floor(window.mouseWorldY / bs2) * bs2;
             if (Math.hypot((window.player.x + window.player.width/2) - (gridX + window.game.blockSize/2), (window.player.y + window.player.height/2) - (gridY + window.game.blockSize/2)) <= window.player.miningRange) {
-                let type = window.player.placementMode === 'boxes' ? 'box' : (window.player.placementMode === 'bed_item' ? 'bed' : (window.player.placementMode === 'barricade_item' ? 'barricade' : 'campfire'));
-                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false)) {
-                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : 200, maxHp: type === 'barricade' ? 150 : 200, isHit: false };
+                let type = window.player.placementMode === 'boxes' ? 'box' 
+                         : window.player.placementMode === 'bed_item' ? 'bed' 
+                         : window.player.placementMode === 'barricade_item' ? 'barricade'
+                         : window.player.placementMode === 'ladder_item' ? 'ladder'
+                         : 'campfire';
+                // Escalera: validación especial — solo sobre suelo, block, o otra escalera
+                let validPlace = false;
+                if (type === 'ladder') {
+                    const localGY = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel;
+                    const onGround = Math.abs((gridY + bs2) - localGY) <= bs2;
+                    const onBlock = window.blocks.some(b => (b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < bs2/2);
+                    const noPlayerOverlap = !window.checkRectIntersection(gridX, gridY, bs2, bs2, window.player.x, window.player.y, window.player.width, window.player.height);
+                    validPlace = (onGround || onBlock) && noPlayerOverlap;
+                } else {
+                    validPlace = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
+                }
+                if (validPlace) {
+                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : 200), maxHp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : 200), isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
                     if (type === 'bed') { window.blocks = window.blocks.filter(b => b.type !== 'bed' || b.owner !== window.player.name); newB.owner = window.player.name; window.player.bedPos = { x: gridX, y: gridY }; window.spawnDamageText(gridX + 15, gridY - 10, "Punto Respawn", '#4CAF50'); window.sendWorldUpdate('remove_old_bed', { owner: window.player.name }); }
@@ -694,7 +729,7 @@ window.addEventListener('wheel', (e) => {
     if (window.player.placementMode) {
         e.preventDefault();
         // Cambiar al siguiente slot con item colocable
-        const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item'];
+        const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'];
         let nextSlot = window.player.activeSlot;
         for (let tries = 0; tries < 6; tries++) {
             nextSlot = (nextSlot + (dir > 0 ? 1 : -1) + 6) % 6;
@@ -783,12 +818,26 @@ function update() {
 
         window.player.x += window.player.vx; if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
         window.checkBlockCollisions('x');
-        window.player.vy += window.game.gravity; window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
+
+        // === ESCALERA: si el jugador está sobre una, cancelar gravedad y trepar con W ===
+        const _onLadder = !window.player.isDead && window.isOnLadder();
+        if (_onLadder) {
+            window.player.vy = 0; // cancelar gravedad mientras esté en la escalera
+            if (window.keys && window.keys.jumpPressed) {
+                window.player.vy = -3.5; // subir escalera
+            }
+            window.player.isGrounded = false; // no cuenta como suelo (sigue en escalera)
+            window.player.isJumping = false;
+            window.player.coyoteTime = 10; // puede saltar desde escalera
+        } else {
+            window.player.vy += window.game.gravity;
+        }
+        window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
         let _pGroundY = window.getGroundY ? window.getGroundY(window.player.x + window.player.width / 2) : window.game.groundLevel;
         if (window.player.y + window.player.height >= _pGroundY) { window.player.y = _pGroundY - window.player.height; window.player.vy = 0; window.player.isGrounded = true; }
-        if (window.player.isGrounded) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
-        if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
-        if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
+        if (window.player.isGrounded || _onLadder) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
+        if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead && !_onLadder) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
+        if (window.keys && !window.keys.jumpPressed && window.player.vy < 0 && !_onLadder) window.player.vy *= 0.5;
 
         // EJECUTAR AUTO-ATAQUE SI SE MANTIENE EL CLIC
         if (window.keys && window.keys.mouseLeft && !window.player.isDead) {

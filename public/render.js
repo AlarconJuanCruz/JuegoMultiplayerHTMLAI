@@ -161,33 +161,55 @@ window.draw = function() {
         window.ctx.globalAlpha = 1;
     }
 
-    // --- NUEVO SISTEMA DE SOL CON SPRITES ---
+    // --- NUEVO SISTEMA DE SOL CON SPRITES + BLOOM ---
     if (hourFloat > 5 && hourFloat < 19) {
         let dayProgress = (hourFloat - 5) / 14;
         let sunX = W * dayProgress;
         let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7);
         
-        let sunSize = 140; // Puedes ajustar el tamaño en píxeles
-        if (window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) {
+        // Bloom: halo radial multicapa
+        const sunPulse = 1 + Math.sin(window.game.frameCount * 0.02) * 0.04;
+        for (let r = 140; r >= 20; r -= 20) {
+            const a = 0.03 * (1 - r/160) * sunPulse;
+            const glowGrad = window.ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, r * 2.5);
+            glowGrad.addColorStop(0, `rgba(255,240,100,${a * 3})`);
+            glowGrad.addColorStop(0.4, `rgba(255,200,50,${a})`);
+            glowGrad.addColorStop(1, 'rgba(255,180,0,0)');
+            window.ctx.fillStyle = glowGrad;
+            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, r * 2.5, 0, Math.PI*2); window.ctx.fill();
+        }
+
+        let sunSize = 140;
+        if (window.sprites.sprite_sun && window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) {
             window.ctx.drawImage(window.sprites.sprite_sun, sunX - sunSize/2, sunY - sunSize/2, sunSize, sunSize);
         } else {
-            // Fallback por si la imagen tarda en cargar
             window.ctx.fillStyle = '#FFE566';
             window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill();
         }
     }
 
-    // --- NUEVO SISTEMA DE LUNA CON SPRITES ---
+    // --- NUEVO SISTEMA DE LUNA CON SPRITES + BLOOM ---
     if (hourFloat >= 17 || hourFloat <= 7) {
         let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14;
         let moonX = W * nightProgress;
         let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7);
         
-        let moonSize = 120; // Puedes ajustar el tamaño en píxeles
-        if (window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) {
+        // Bloom suave plateado para la luna
+        const moonPulse = 1 + Math.sin(window.game.frameCount * 0.015 + 1.5) * 0.05;
+        for (let r = 100; r >= 15; r -= 15) {
+            const a = 0.025 * (1 - r/110) * moonPulse;
+            const moonGrad = window.ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, r * 2.8);
+            moonGrad.addColorStop(0, `rgba(200,220,255,${a * 4})`);
+            moonGrad.addColorStop(0.4, `rgba(170,200,240,${a})`);
+            moonGrad.addColorStop(1, 'rgba(140,170,220,0)');
+            window.ctx.fillStyle = moonGrad;
+            window.ctx.beginPath(); window.ctx.arc(moonX, moonY, r * 2.8, 0, Math.PI*2); window.ctx.fill();
+        }
+
+        let moonSize = 120;
+        if (window.sprites.sprite_moon && window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) {
             window.ctx.drawImage(window.sprites.sprite_moon, moonX - moonSize/2, moonY - moonSize/2, moonSize, moonSize);
         } else {
-            // Fallback por si la imagen tarda en cargar
             window.ctx.fillStyle = '#E8EEE0';
             window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill();
         }
@@ -463,6 +485,19 @@ window.draw = function() {
                 window.ctx.moveTo(b.x + 12, b.y + 24); window.ctx.lineTo(b.x + 15, b.y + 2); window.ctx.lineTo(b.x + 18, b.y + 24);
                 window.ctx.moveTo(b.x + 20, b.y + 24); window.ctx.lineTo(b.x + 28, b.y + 8); window.ctx.lineTo(b.x + 25, b.y + 24);
                 window.ctx.fill();
+            } else if (b.type === 'ladder') {
+                const lc = b.isHit ? '#ff9966' : '#c8a86a';
+                const lsd = b.isHit ? '#cc6633' : '#8B6230';
+                // Postes laterales
+                window.ctx.fillStyle = lsd;
+                window.ctx.fillRect(b.x + 5, b.y, 5, 30);
+                window.ctx.fillRect(b.x + 20, b.y, 5, 30);
+                // Peldaños (3 peldaños por tile)
+                window.ctx.fillStyle = lc;
+                for (let rung = 0; rung < 3; rung++) {
+                    const ry = b.y + 4 + rung * 9;
+                    window.ctx.fillRect(b.x + 5, ry, 20, 3);
+                }
             }
         }
     });
@@ -560,8 +595,17 @@ window.draw = function() {
         let offsetY = window.game.groundLevel % window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
         const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        const bs2 = window.game.blockSize;
         
-        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
+        let valid;
+        if (window.player.placementMode === 'ladder_item') {
+            const localGY = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel;
+            const onGround = Math.abs((gridY + bs2) - localGY) <= bs2;
+            const onBlock = window.blocks.some(b => (b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < bs2/2);
+            valid = (onGround || onBlock);
+        } else {
+            valid = window.isValidPlacement(gridX, gridY, bs2, bs2, true, false);
+        }
         let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
 
         window.ctx.globalAlpha = 0.6;
@@ -569,6 +613,11 @@ window.draw = function() {
         else if (window.player.placementMode === 'campfire_item') { window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(gridX + 2, gridY + 20, 26, 10); }
         else if (window.player.placementMode === 'bed_item') { window.ctx.fillStyle = '#8B4513'; window.ctx.fillRect(gridX, gridY + 20, 30, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(gridX + 2, gridY + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(gridX + 12, gridY + 16, 18, 4); }
         else if (window.player.placementMode === 'barricade_item') { window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(gridX + 2, gridY + 24, 26, 6); window.ctx.fillStyle = '#bdc3c7'; window.ctx.beginPath(); window.ctx.moveTo(gridX + 5, gridY + 24); window.ctx.lineTo(gridX + 2, gridY + 5); window.ctx.lineTo(gridX + 10, gridY + 24); window.ctx.fill(); }
+        else if (window.player.placementMode === 'ladder_item') {
+            window.ctx.fillStyle = '#8B6230'; window.ctx.fillRect(gridX + 5, gridY, 5, 30); window.ctx.fillRect(gridX + 20, gridY, 5, 30);
+            window.ctx.fillStyle = '#c8a86a';
+            for (let r = 0; r < 3; r++) window.ctx.fillRect(gridX + 5, gridY + 4 + r * 9, 20, 3);
+        }
         
         window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.strokeRect(gridX, gridY, window.game.blockSize, window.game.blockSize); 
         window.ctx.fillStyle = validFill; window.ctx.fillRect(gridX, gridY, window.game.blockSize, window.game.blockSize); window.ctx.globalAlpha = 1.0;
