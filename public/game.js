@@ -14,7 +14,7 @@ window.openChat = function() {
     let chatContainer = window.getEl('chat-container'); let chatInput = window.getEl('chat-input');
     if (chatContainer && chatInput && !window.player.isDead) { 
         chatContainer.style.display = 'block'; chatInput.focus(); 
-        if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; }
+        if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; window.keys.mouseLeft = false; }
         if(window.player) window.player.isCharging = false;
     }
 };
@@ -67,7 +67,6 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
 
     for (let b of window.blocks) { 
         let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; 
-        
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, window.game.blockSize, bh)) return false; 
         
         let isHorizontallyAdjacent = (Math.abs(x - (b.x - window.game.blockSize)) < 1 || Math.abs(x - (b.x + window.game.blockSize)) < 1);
@@ -147,10 +146,7 @@ window.checkEntityCollisions = function(ent, axis) {
 
 window.generateWorldSector = function(startX, endX) {
     if (startX < window.game.shoreX + 50) startX = window.game.shoreX + 50; 
-    
-    // Generador LCG determinista perfecto
-    let seed = Math.floor(startX) + 12345; 
-    function sRandom() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    let seed = Math.floor(startX) + 12345; function sRandom() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
     
     if (!window.removedTrees) window.removedTrees = []; if (!window.treeState) window.treeState = {}; if (!window.removedRocks) window.removedRocks = []; if (!window.killedEntities) window.killedEntities = [];
 
@@ -158,31 +154,22 @@ window.generateWorldSector = function(startX, endX) {
     let localTreeX = []; 
     
     for (let i = 0; i < numTrees; i++) { 
-        let tx;
-        let validPos = false;
-        let attempts = 0;
-        
+        let tx; let validPos = false; let attempts = 0;
         while (attempts < 10 && !validPos) {
-            tx = Math.floor(startX + 50 + sRandom() * (endX - startX - 100)); // ENTERO EXACTO
+            tx = Math.floor(startX + 50 + sRandom() * (endX - startX - 100)); 
             validPos = true;
-            for (let existingX of localTreeX) {
-                if (Math.abs(tx - existingX) < 140) { validPos = false; break; }
-            }
+            for (let existingX of localTreeX) { if (Math.abs(tx - existingX) < 140) { validPos = false; break; } }
             attempts++;
         }
-        
         if (validPos) {
             localTreeX.push(tx);
             let tHeight = 240; let tWidth = 40; 
-            
             if (!window.removedTrees.some(rx => Math.abs(rx - tx) < 1)) {
                 let stateKey = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - tx) < 1);
                 let tState = stateKey ? window.treeState[stateKey] : false;
                 let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
                 let hp = isStump ? 50 : 100;
-                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) {
-                    window.trees.push({ id: 't_'+tx, x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); 
-                }
+                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) { window.trees.push({ id: 't_'+tx, x: tx, y: window.game.groundLevel - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay }); }
             }
         }
     }
@@ -190,16 +177,12 @@ window.generateWorldSector = function(startX, endX) {
     if (startX > 800 && sRandom() < 0.75) { 
         const numRocks = Math.floor(sRandom() * 3) + 2; 
         for (let i=0; i<numRocks; i++) { 
-            let rx = Math.floor(startX + sRandom() * (endX - startX)); 
-            let rW = 50 + Math.floor(sRandom()*40); let rH = 35 + Math.floor(sRandom()*25); 
-            if (!window.removedRocks.some(rrx => Math.abs(rrx - rx) < 1) && !window.rocks.some(r => Math.abs(r.x - rx) < 1)) { 
-                window.rocks.push({id: 'r_'+rx, x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); 
-            }
+            let rx = Math.floor(startX + sRandom() * (endX - startX)); let rW = 50 + Math.floor(sRandom()*40); let rH = 35 + Math.floor(sRandom()*25); 
+            if (!window.removedRocks.some(rrx => Math.abs(rrx - rx) < 1) && !window.rocks.some(r => Math.abs(r.x - rx) < 1)) { window.rocks.push({id: 'r_'+rx, x: rx, y: window.game.groundLevel - rH, width: rW, height: rH, hp: 300, maxHp: 300, isHit: false}); }
         }
     }
     
-    let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); 
-    let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; let newId = 'e_' + cx;
+    let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; let newId = 'e_' + cx;
     if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
         if (distToShore > 2000) {
             if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: window.game.groundLevel - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
@@ -216,9 +199,7 @@ window.startGame = function(multiplayer, ip = null) {
 
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
-    
     if (window.initRenderCaches) window.initRenderCaches(); 
-    
     window.generateWorldSector(window.game.shoreX, window.game.exploredRight);
 
     if (multiplayer && typeof io !== 'undefined') {
@@ -246,17 +227,10 @@ window.startGame = function(multiplayer, ip = null) {
             
             window.socket.on('initWorldState', (state) => {
                 window.blocks = state.blocks; window.removedTrees = state.removedTrees; window.removedRocks = state.removedRocks; window.treeState = state.treeState || {}; window.killedEntities = state.killedEntities || [];
-                
-                // MÁXIMA SEGURIDAD: Tolerancia de 1 pixel por si hay micro-desincronizaciones
                 window.trees = window.trees.filter(t => !window.removedTrees.some(rx => Math.abs(rx - t.x) < 1)); 
                 window.trees.forEach(t => { 
                     let stateKey = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - t.x) < 1);
-                    if (stateKey) { 
-                        t.isStump = window.treeState[stateKey].isStump; 
-                        t.regrowthCount = window.treeState[stateKey].regrowthCount; 
-                        t.grownDay = window.treeState[stateKey].grownDay; 
-                        if (t.isStump) { t.hp = 50; t.maxHp = 50; } 
-                    } 
+                    if (stateKey) { t.isStump = window.treeState[stateKey].isStump; t.regrowthCount = window.treeState[stateKey].regrowthCount; t.grownDay = window.treeState[stateKey].grownDay; if (t.isStump) { t.hp = 50; t.maxHp = 50; } } 
                 });
                 window.rocks = window.rocks.filter(r => !window.removedRocks.some(rx => Math.abs(rx - r.x) < 1));
                 window.entities = window.entities.filter(e => !window.killedEntities.includes(e.id));
@@ -273,17 +247,9 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
                 else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
                 else if (data.action === 'grow_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = false; t.hp = 100; t.maxHp = 100; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: false, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
-                else if (data.action === 'destroy_tree') { 
-                    window.removedTrees.push(data.payload.x); 
-                    let stateKey = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - data.payload.x) < 1);
-                    if(stateKey) delete window.treeState[stateKey]; 
-                    window.trees = window.trees.filter(t => Math.abs(t.x - data.payload.x) > 1); 
-                }
+                else if (data.action === 'destroy_tree') { window.removedTrees.push(data.payload.x); let stateKey = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - data.payload.x) < 1); if(stateKey) delete window.treeState[stateKey]; window.trees = window.trees.filter(t => Math.abs(t.x - data.payload.x) > 1); }
                 else if (data.action === 'hit_rock') { let r = window.rocks.find(ro => Math.abs(ro.x - data.payload.x) < 1); if (r) { r.hp -= data.payload.dmg; window.setHit(r); } }
-                else if (data.action === 'destroy_rock') { 
-                    window.removedRocks.push(data.payload.x); 
-                    window.rocks = window.rocks.filter(r => Math.abs(r.x - data.payload.x) > 1); 
-                }
+                else if (data.action === 'destroy_rock') { window.removedRocks.push(data.payload.x); window.rocks = window.rocks.filter(r => Math.abs(r.x - data.payload.x) > 1); }
                 else if (data.action === 'hit_block') { let b = window.blocks.find(bl => Math.abs(bl.x - data.payload.x) < 1 && Math.abs(bl.y - data.payload.y) < 1); if (b) { b.hp -= data.payload.dmg; window.setHit(b); if(data.payload.destroyed || b.hp <= 0) { if (window.currentOpenBox && window.currentOpenBox.x === b.x && window.currentOpenBox.y === b.y) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } window.blocks = window.blocks.filter(bl => bl !== b); } } }
                 else if (data.action === 'destroy_grave') { if (window.currentOpenBox && window.currentOpenBox.id === data.payload.id) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if (dBox) dBox.classList.remove('open'); } window.blocks = window.blocks.filter(b => b.id !== data.payload.id); }
                 else if (data.action === 'place_block') { let exists = window.blocks.find(bl => bl.x === data.payload.block.x && bl.y === data.payload.block.y); if (!exists) window.blocks.push(data.payload.block); }
@@ -310,7 +276,15 @@ window.startGame = function(multiplayer, ip = null) {
 // === EVENTOS ===
 
 window.addEventListener('contextmenu', (e) => { e.preventDefault(); });
-window.addEventListener('blur', () => { if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; } if(window.player) window.player.isCharging = false; });
+
+window.addEventListener('blur', () => { 
+    if(window.keys) { 
+        window.keys.a = false; window.keys.d = false; window.keys.w = false; 
+        window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; 
+        window.keys.mouseLeft = false; 
+    } 
+    if(window.player) window.player.isCharging = false; 
+});
 
 window.addEventListener('keyup', (e) => {
     if (!window.game || !window.game.isRunning) return;
@@ -486,9 +460,64 @@ window.tryHitTree = function(pCX, pCY, dmg) {
     } return false;
 };
 
+// --- NUEVA FUNCIÓN MAESTRA DE AUTO-ATAQUE / CONSTRUCCIÓN ---
+window.attemptAction = function() {
+    if (!window.player || window.player.isDead || document.querySelector('.window-menu.open')) return;
+    if (window.player.placementMode) return;
+    if (window.player.activeTool === 'bow') return;
+    if ((window.player.meleeCooldown || 0) > 0) return; 
+
+    window.player.attackFrame = 12; 
+    const pCX = window.player.x + window.player.width / 2;
+    const pCY = window.player.y + window.player.height / 2; 
+    const baseDmg = typeof window.getMeleeDamage === 'function' ? window.getMeleeDamage() : (window.player.baseDamage[window.player.activeTool] || 9); 
+    const tool = window.player.activeTool; 
+    let actionDone = false;
+
+    let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
+    let treeDmg = tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0));
+    let rockDmg = tool === 'pickaxe' ? Math.floor(baseDmg * 3) : (tool === 'hammer' ? 0 : 1);
+    let blockDmg = tool === 'hammer' ? Math.floor(baseDmg * 3) : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
+
+    // Aplicar cooldown base para evitar que hacer "clic al aire" ocurra 60 veces por segundo
+    window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+
+    if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg)) actionDone = true;
+    if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg)) actionDone = true;
+    if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg)) actionDone = true;
+    if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg)) actionDone = true;
+
+    if (!actionDone && tool === 'hammer') {
+        let offsetY = window.game.groundLevel % window.game.blockSize; 
+        const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
+        const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
+        const isDoorMode = window.player.buildMode === 'door'; 
+        const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; 
+        const cost = isDoorMode ? 4 : 2; 
+        if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
+            if (window.player.inventory.wood >= cost) {
+                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
+                    let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
+                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if (window.playSound) window.playSound('build'); if(window.updateUI) window.updateUI();
+                } else { 
+                    if (window.game.frameCount % 30 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00'); 
+                }
+            } else { 
+                if (window.game.frameCount % 30 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `Faltan ${cost} Mad.`, '#ff4444'); 
+            }
+        }
+    }
+    if(actionDone && window.useTool) window.useTool();
+};
+
 window.addEventListener('mousedown', (e) => {
     if (!window.game || !window.game.isRunning || !window.player || window.player.isDead || document.querySelector('.window-menu.open')) return;
     if (e.target.closest('#global-chat-log') || e.target.closest('.log-msg') || e.target.closest('#chat-container')) return;
+
+    if (e.button === 0) {
+        if (!window.keys) window.keys = {};
+        window.keys.mouseLeft = true;
+    }
 
     if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
@@ -509,38 +538,22 @@ window.addEventListener('mousedown', (e) => {
         } return;
     }
 
-    if (window.player.activeTool === 'bow') { if (e.button === 2) window.player.isAiming = true; if (e.button === 0 && window.player.isAiming && window.player.inventory.arrows > 0) window.player.isCharging = true; return; }
-    if (e.button !== 0 || (window.player.meleeCooldown||0) > 0) return; 
-
-    window.player.attackFrame = 12; const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2; const baseDmg = window.getMeleeDamage(); const tool = window.player.activeTool; let actionDone = false;
-
-    let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
-    let treeDmg = tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0));
-    let rockDmg = tool === 'pickaxe' ? Math.floor(baseDmg * 3) : (tool === 'hammer' ? 0 : 1);
-    let blockDmg = tool === 'hammer' ? Math.floor(baseDmg * 3) : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
-
-    if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg)) actionDone = true;
-    if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg)) actionDone = true;
-    if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg)) actionDone = true;
-    if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg)) actionDone = true;
-
-    if (!actionDone && window.player.activeTool === 'hammer') {
-        let offsetY = window.game.groundLevel % window.game.blockSize; const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
-        const isDoorMode = window.player.buildMode === 'door'; const itemHeight = isDoorMode ? window.game.blockSize * 2 : window.game.blockSize; const cost = isDoorMode ? 4 : 2; 
-        if (Math.hypot(pCX - (gridX + window.game.blockSize/2), pCY - (gridY + itemHeight/2)) <= window.player.miningRange) {
-            if (window.player.inventory.wood >= cost) {
-                if (window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true)) {
-                    let newB = { x: gridX, y: gridY, type: isDoorMode ? 'door' : 'block', open: false, hp: 300, maxHp: 300, isHit: false };
-                    window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if (window.playSound) window.playSound('build'); if(window.updateUI) window.updateUI();
-                } else { window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00'); }
-            } else { window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `Faltan ${cost} Mad.`, '#ff4444'); }
-        }
+    if (window.player.activeTool === 'bow') { 
+        if (e.button === 2) window.player.isAiming = true; 
+        if (e.button === 0 && window.player.isAiming && window.player.inventory.arrows > 0) window.player.isCharging = true; 
+        return; 
     }
-    if(actionDone && window.useTool) window.useTool();
+    
+    // Disparo inmediato para evitar lag visual al hacer clic simple
+    if (e.button === 0) {
+        window.attemptAction();
+    }
 });
 
 window.addEventListener('mouseup', (e) => {
     if (!window.game || !window.game.isRunning || window.player.isDead) return;
+    if (e.button === 0 && window.keys) window.keys.mouseLeft = false;
+
     if (window.player.activeTool === 'bow') {
         if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
         if (e.button === 0 && window.player.isCharging) {
@@ -620,6 +633,11 @@ function update() {
         if (window.player.isGrounded) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
         if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.placementMode && !window.player.isDead) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0) window.player.vy *= 0.5;
+
+        // EJECUTAR AUTO-ATAQUE SI SE MANTIENE EL CLIC
+        if (window.keys && window.keys.mouseLeft && !window.player.isDead) {
+            window.attemptAction();
+        }
 
         if (window.game.isMultiplayer) {
             if (window.socket && (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState)) {
