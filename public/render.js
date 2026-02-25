@@ -277,8 +277,16 @@ window.draw = function() {
     window.ctx.translate(-window.camera.x, -window.camera.y);
 
     const bs = window.game.blockSize; // 30px — granularidad del terreno
-    const startX = Math.max(Math.floor((window.camera.x - 60) / bs) * bs, window.game.shoreX);
-    const endX   = window.camera.x + W / z + 60 + bs;
+    // Con zoom centrado en el canvas, los bordes visibles en coordenadas de mundo son:
+    //   Izquierdo: camera.x + W/2 - W/(2*z)
+    //   Derecho:   camera.x + W/2 + W/(2*z)
+    const _visHalfW = (W / 2) / z;  // mitad del ancho visible en coords de mundo
+    const _visCenterX = window.camera.x + W / 2;
+    const _visLeft  = _visCenterX - _visHalfW;
+    const _visRight = _visCenterX + _visHalfW;
+    const _visHalfH = (H / 2) / z;
+    const startX = Math.max(Math.floor((_visLeft - 60) / bs) * bs, window.game.shoreX);
+    const endX   = _visRight + 60 + bs;
     const bottomY = window.camera.y + H / z + 60;
 
     // === TERRENO DINÁMICO POR COLUMNAS DE blockSize ===
@@ -376,7 +384,7 @@ window.draw = function() {
     }
 
     window.trees.forEach(t => {
-        if (t.x + t.width > window.camera.x - 200 && t.x < window.camera.x + W / z + 200) {
+        if (t.x + t.width > _visLeft - 200 && t.x < _visRight + 200) {
             window.ctx.save();
             
             // Anclar el pie del árbol al suelo real en tiempo de render
@@ -420,7 +428,7 @@ window.draw = function() {
     });
 
     window.rocks.forEach(r => {
-        if (r.x + r.width > window.camera.x - 100 && r.x < window.camera.x + W / z + 100) {
+        if (r.x + r.width > _visLeft - 100 && r.x < _visRight + 100) {
             window.ctx.save();
             const rFootY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
             window.ctx.translate(r.x + r.width/2, rFootY);
@@ -454,7 +462,7 @@ window.draw = function() {
     });
 
     window.blocks.forEach(b => {
-        if (b.x + window.game.blockSize > window.camera.x && b.x < window.camera.x + W / z + 120) {
+        if (b.x + window.game.blockSize > _visLeft && b.x < _visRight + 120) {
             if (b.type === 'block') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
                 window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
@@ -503,21 +511,21 @@ window.draw = function() {
     });
 
     window.droppedItems.forEach(item => {
-        if (item.x + 20 > window.camera.x && item.x < window.camera.x + W / z + 60) {
+        if (item.x + 20 > _visLeft && item.x < _visRight + 60) {
             window.ctx.fillStyle = window.itemDefs[item.type] ? window.itemDefs[item.type].color : '#fff'; let s = window.itemDefs[item.type] ? window.itemDefs[item.type].size : 10; let floatOffset = Math.sin(item.life) * 3; window.ctx.fillRect(item.x, item.y + floatOffset, s, s);
         }
     });
 
     if (window.game.isMultiplayer) {
         Object.values(window.otherPlayers).forEach(p => { 
-            if (p.id !== window.socket?.id && p.x > window.camera.x - 50 && p.x < window.camera.x + W / z + 150) { window.drawCharacter(p, false); }
+            if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); }
         });
     }
 
     if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
     window.entities.forEach(ent => {
-        if (!(ent.x + ent.width > window.camera.x && ent.x < window.camera.x + W / z + 120)) return;
+        if (!(ent.x + ent.width > _visLeft && ent.x < _visRight + 120)) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
 
         C.save();
@@ -678,7 +686,7 @@ window.draw = function() {
     }
 
     window.projectiles.forEach(pr => {
-        if (pr.x + 20 > window.camera.x && pr.x - 20 < window.camera.x + W / z + 60) {
+        if (pr.x + 20 > _visLeft && pr.x - 20 < _visRight + 60) {
             window.ctx.save(); window.ctx.translate(pr.x, pr.y); window.ctx.rotate(pr.angle);
             if (pr.isEnemy) { window.ctx.fillStyle = '#ff4444'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#000'; window.ctx.fillRect(5, -2, 4, 4); } 
             else { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(5, -2, 4, 4); window.ctx.fillStyle = '#fff'; window.ctx.fillRect(-17, -2, 4, 4); }
@@ -687,7 +695,7 @@ window.draw = function() {
     });
 
     window.stuckArrows.forEach(sa => {
-        if (sa.x + 20 > window.camera.x && sa.x - 20 < window.camera.x + W / z + 60) {
+        if (sa.x + 20 > _visLeft && sa.x - 20 < _visRight + 60) {
             window.ctx.save();
             window.ctx.translate(sa.x, sa.y);
             window.ctx.rotate(sa.angle);
@@ -894,4 +902,83 @@ window.draw = function() {
     if (!window.player.inBackground) drawNameAndChat(window.player, true);
     window.ctx.restore(); // fin zoom/name-chat
     window.ctx.restore(); // fin screen-shake
+
+    // === PVP: flecha de dirección al rival (HUD en coordenadas de pantalla) ===
+    if (window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer) {
+        const rival = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
+        if (rival && !rival.isDead) {
+            const rWorldX = rival.x + (rival.width||24)/2;
+            const rWorldY = rival.y + (rival.height||48)/2;
+            const pWorldX = window.player.x + window.player.width/2;
+            const pWorldY = window.player.y + window.player.height/2;
+
+            // Convertir rival a coordenadas de pantalla
+            const _z2 = window.game.zoom || 1;
+            const rSX = (rWorldX - window.camera.x - W/2) * _z2 + W/2;
+            const rSY = (rWorldY - window.camera.y - H/2) * _z2 + H/2;
+
+            const dist = Math.round(Math.hypot(rWorldX - pWorldX, rWorldY - pWorldY) / 10);
+            const offScreen = rSX < 20 || rSX > W - 20 || rSY < 20 || rSY > H - 20;
+
+            window.ctx.save();
+            if (offScreen) {
+                // Calcular ángulo y posición del indicador en el borde de la pantalla
+                const angle = Math.atan2(rWorldY - pWorldY, rWorldX - pWorldX);
+                const margin = 50;
+                const cx2 = W / 2, cy2 = H / 2;
+                const tx = cx2 + Math.cos(angle) * (cx2 - margin);
+                const ty = cy2 + Math.sin(angle) * (cy2 - margin);
+                const clampedX = Math.max(margin, Math.min(W - margin, tx));
+                const clampedY = Math.max(margin, Math.min(H - margin, ty));
+
+                window.ctx.translate(clampedX, clampedY);
+                window.ctx.rotate(angle);
+
+                // Fondo del indicador
+                window.ctx.fillStyle = 'rgba(180,20,20,0.85)';
+                window.ctx.beginPath();
+                window.ctx.roundRect(-32, -14, 64, 28, 6);
+                window.ctx.fill();
+
+                // Flecha
+                window.ctx.fillStyle = '#ff6666';
+                window.ctx.beginPath();
+                window.ctx.moveTo(22, 0); window.ctx.lineTo(10, -8); window.ctx.lineTo(10, 8);
+                window.ctx.closePath(); window.ctx.fill();
+
+                // Texto distancia
+                window.ctx.rotate(-angle);
+                window.ctx.fillStyle = '#fff';
+                window.ctx.font = 'bold 11px Inter, sans-serif';
+                window.ctx.textAlign = 'center';
+                window.ctx.textBaseline = 'middle';
+                const rivalName = rival.name ? rival.name.substring(0,8) : '?';
+                window.ctx.fillText(`${rivalName} ${dist}m`, 0, 0);
+            } else {
+                // Rival visible: mostrar marco rojo parpadeante alrededor de él
+                const pulse = Math.sin(window.game.frameCount * 0.15) * 0.4 + 0.7;
+                window.ctx.strokeStyle = `rgba(255,50,50,${pulse})`;
+                window.ctx.lineWidth = 2.5;
+                const rivalW = (rival.width||24) * _z2;
+                const rivalH = (rival.height||48) * _z2;
+                window.ctx.strokeRect(rSX - rivalW/2 - 4, rSY - rivalH/2 - 4, rivalW + 8, rivalH + 8);
+
+                // Distancia encima del marco
+                window.ctx.fillStyle = `rgba(255,80,80,${pulse})`;
+                window.ctx.font = 'bold 12px Inter, sans-serif';
+                window.ctx.textAlign = 'center';
+                window.ctx.textBaseline = 'bottom';
+                window.ctx.fillText(`⚔️ ${dist}m`, rSX, rSY - rivalH/2 - 8);
+            }
+            window.ctx.restore();
+
+            // Actualizar lista de jugadores periódicamente
+            if (window.game.frameCount % 60 === 0 && window.updatePlayerList) window.updatePlayerList();
+        } else if (rival && rival.isDead) {
+            // Rival murió → fin del pvp
+            window.pvp.activeOpponent = null;
+            if(window.addGlobalMessage) window.addGlobalMessage('🏆 ¡Tu rival cayó! Ganaste el duelo.', '#f1c40f');
+            if(window.updatePlayerList) window.updatePlayerList();
+        }
+    }
 };

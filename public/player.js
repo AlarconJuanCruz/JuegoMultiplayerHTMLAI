@@ -71,6 +71,13 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if(window.addGlobalMessage) window.addGlobalMessage(`☠️ Has muerto por ${source}`, '#e74c3c');
         if(window.sendWorldUpdate) window.sendWorldUpdate('player_death', { name: window.player.name, source: source });
 
+        // Terminar PVP activo si el jugador muere
+        if (window.pvp && window.pvp.activeOpponent && window.socket) {
+            window.sendWorldUpdate('pvp_ended', { p1: window.socket.id, p2: window.pvp.activeOpponent });
+            window.pvp.activeOpponent = null;
+            if(window.updatePlayerList) window.updatePlayerList();
+        }
+
         window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false;
         window.player.isCharging = false; window.player.isAiming = false;
         
@@ -82,7 +89,7 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if(window.sendWorldUpdate) window.sendWorldUpdate('place_block', { block: grave });
 
         // Al morir se pierden los objetos y materiales
-        window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0 }; 
+        window.player.inventory = { wood: 0, stone: 0, meat: 0, cooked_meat: 0, web: 0, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0, ladder_item: 0 }; 
         window.player.toolbar = ['hand', null, null, null, null, null];
         if(window.selectToolbarSlot) window.selectToolbarSlot(0);
         window.player.xp = 0; 

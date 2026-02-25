@@ -298,6 +298,54 @@ window.startGame = function(multiplayer, ip = null) {
             });
             
             window.socket.on('worldUpdate', (data) => {
+                const myId = window.socket.id;
+
+                // ── PVP (túnel por worldUpdate) ─────────────────────────────────
+                if (data.action === 'pvp_challenge') {
+                    // Solo le importa al targetId
+                    if (data.payload.toId !== myId) return;
+                    window.pvp = window.pvp || {};
+                    window.pvp.pendingChallenge = { fromId: data.payload.fromId, fromName: data.payload.fromName };
+                    window.showPvpNotification(data.payload.fromName, data.payload.fromId);
+                    return;
+                }
+                if (data.action === 'pvp_accepted') {
+                    // Le importa al que envió el desafío original
+                    if (data.payload.fromId !== myId) return;
+                    window.pvp = window.pvp || {};
+                    const opName = window.otherPlayers[data.payload.toId]?.name || data.payload.toName;
+                    window.pvp.activeOpponent = data.payload.toId;
+                    if(window.otherPlayers[data.payload.toId]) window.otherPlayers[data.payload.toId].pvpActive = true;
+                    if(window.addGlobalMessage) window.addGlobalMessage(`⚔️ PVP activo con ${opName}! ¡Lucha!`, '#ff4444');
+                    if(window.updatePlayerList) window.updatePlayerList();
+                    return;
+                }
+                if (data.action === 'pvp_declined') {
+                    if (data.payload.fromId !== myId) return;
+                    const opName = window.otherPlayers[data.payload.toId]?.name || '?';
+                    if(window.addGlobalMessage) window.addGlobalMessage(`❌ ${opName} rechazó el duelo.`, '#aaa');
+                    return;
+                }
+                if (data.action === 'pvp_ended') {
+                    window.pvp = window.pvp || {};
+                    if (window.pvp.activeOpponent === data.payload.p1 || window.pvp.activeOpponent === data.payload.p2) {
+                        window.pvp.activeOpponent = null;
+                        if(window.addGlobalMessage) window.addGlobalMessage(`🏁 El duelo PVP terminó.`, '#f0a020');
+                        if(window.updatePlayerList) window.updatePlayerList();
+                    }
+                    if (window.otherPlayers[data.payload.p1]) window.otherPlayers[data.payload.p1].pvpActive = false;
+                    if (window.otherPlayers[data.payload.p2]) window.otherPlayers[data.payload.p2].pvpActive = false;
+                    return;
+                }
+                if (data.action === 'pvp_hit') {
+                    if (data.payload.targetId !== myId) return;
+                    window.pvp = window.pvp || {};
+                    if (window.pvp.activeOpponent !== data.payload.sourceId) return;
+                    window.damagePlayer(data.payload.dmg, window.otherPlayers[data.payload.sourceId]?.name || 'Rival');
+                    return;
+                }
+
+                // ── Resto de eventos del mundo ──────────────────────────────────
                 if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
                 else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
                 else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
@@ -326,6 +374,111 @@ window.startGame = function(multiplayer, ip = null) {
         } catch(e) { console.error("Error Socket:", e); alert("No se pudo conectar al servidor. Verifica la IP."); }
     }
     window.recalculateStats(); if(window.updateUI) window.updateUI(); if(window.renderToolbar) window.renderToolbar(); 
+};
+
+// ============================================================
+// === SISTEMA PVP ===========================================
+// ============================================================
+window.pvp = { activeOpponent: null, pendingChallenge: null };
+
+window.showPvpNotification = function(fromName, fromId) {
+    let notif = document.createElement('div');
+    notif.id = 'pvp-notif';
+    notif.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(20,0,0,0.95);border:2px solid #ff4444;color:#fff;padding:24px 32px;border-radius:12px;z-index:9999;text-align:center;font-family:inherit;backdrop-filter:blur(8px);';
+    notif.innerHTML = `<div style="font-size:22px;font-weight:700;color:#ff4444;margin-bottom:8px;">⚔️ ¡Desafío PVP!</div>
+<div style="margin-bottom:18px;"><span style="color:#f0a020;font-weight:600;">${fromName}</span> te desafía a un duelo.</div>
+<div style="display:flex;gap:12px;justify-content:center;">
+  <button onclick="window.acceptPvp('${fromId}')" style="background:#c0392b;color:#fff;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:700;font-size:14px;">✅ Aceptar</button>
+  <button onclick="window.declinePvp('${fromId}')" style="background:#2c2c2c;color:#aaa;border:1px solid #555;padding:10px 22px;border-radius:6px;cursor:pointer;font-size:14px;">❌ Rechazar</button>
+</div>`;
+    document.body.appendChild(notif);
+    setTimeout(() => { if(document.getElementById('pvp-notif') === notif) notif.remove(); }, 15000);
+};
+
+window.challengePvp = function(targetId) {
+    if (!window.socket || !window.game.isMultiplayer) { 
+        if(window.addGlobalMessage) window.addGlobalMessage('⚠️ PVP requiere modo multijugador.', '#f0a020'); return; 
+    }
+    const targetName = window.otherPlayers[targetId]?.name || '?';
+    // Túnel por worldUpdate (el servidor ya lo broadcast a todos; el receptor filtra por toId)
+    window.sendWorldUpdate('pvp_challenge', { toId: targetId, fromId: window.socket.id, fromName: window.player.name });
+    if(window.addGlobalMessage) window.addGlobalMessage(`⚔️ Desafío enviado a ${targetName}...`, '#f0a020');
+};
+
+window.acceptPvp = function(fromId) {
+    let notif = document.getElementById('pvp-notif'); if(notif) notif.remove();
+    if (!window.socket) return;
+    window.pvp.activeOpponent = fromId;
+    if(window.otherPlayers[fromId]) window.otherPlayers[fromId].pvpActive = true;
+    // Túnel por worldUpdate
+    window.sendWorldUpdate('pvp_accepted', { fromId: fromId, toId: window.socket.id, toName: window.player.name });
+    if(window.addGlobalMessage) window.addGlobalMessage(`⚔️ ¡Duelo aceptado! A luchar.`, '#ff4444');
+    if(window.updatePlayerList) window.updatePlayerList();
+};
+
+window.declinePvp = function(fromId) {
+    let notif = document.getElementById('pvp-notif'); if(notif) notif.remove();
+    if (!window.socket) return;
+    window.sendWorldUpdate('pvp_declined', { fromId: fromId, toId: window.socket.id });
+};
+
+window.updatePlayerList = function() {
+    let inner = document.getElementById('pvp-player-list-inner');
+    if (!inner) return;
+    if (!window.game.isMultiplayer || !window.otherPlayers) { 
+        inner.innerHTML = '<div style="color:#5a6475; font-size:12px; text-align:center; padding:16px 0; font-family:var(--font-ui);">🔌 Solo multijugador<br><span style="font-size:10px;">Conecta a un servidor para duelos</span></div>'; 
+        return; 
+    }
+    const myId = window.socket?.id;
+    // Mostrar todos los jugadores, incluyendo el propio, pero sin botón PVP para uno mismo
+    const ops = Object.values(window.otherPlayers).filter(p => p.name);
+    if (ops.length === 0) { 
+        inner.innerHTML = '<div style="color:#5a6475; font-size:12px; text-align:center; padding:16px 0; font-family:var(--font-ui);">Sin jugadores en línea</div>'; 
+        return; 
+    }
+    inner.innerHTML = ops.map(op => {
+        const isSelf = op.id === myId;
+        const isPvpActive = window.pvp.activeOpponent === op.id;
+        const opName = op.name || '?';
+        const dist = Math.round(Math.hypot((op.x||0) - window.player.x, (op.y||0) - window.player.y) / 10);
+        const deadBadge = op.isDead ? '<span style="color:#e74c3c; font-size:10px;"> ☠</span>' : '';
+        
+        let actionEl;
+        if (isSelf) {
+            actionEl = `<span style="color:#5a6475; font-size:10px; font-family:var(--font-ui); font-style:italic;">Tú</span>`;
+        } else if (isPvpActive) {
+            actionEl = `<span style="color:#ff6666; font-weight:700; font-size:11px; white-space:nowrap; font-family:var(--font-ui);">⚔ DUELO</span>`;
+        } else {
+            actionEl = `<button onclick="window.challengePvp('${op.id}')"
+                style="background:linear-gradient(135deg,rgba(120,15,15,0.9),rgba(80,5,5,0.95));
+                       color:#ff9090; border:1px solid rgba(200,50,50,0.35); border-radius:5px;
+                       padding:4px 9px; cursor:pointer; font-size:11px; font-weight:700;
+                       font-family:var(--font-ui); white-space:nowrap;"
+                onmouseover="this.style.background='linear-gradient(135deg,rgba(180,20,20,0.95),rgba(120,5,5,0.99))'"
+                onmouseout="this.style.background='linear-gradient(135deg,rgba(120,15,15,0.9),rgba(80,5,5,0.95))'">
+                ⚔ PVP
+               </button>`;
+        }
+
+        return `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px;
+                    padding:7px 8px; margin-bottom:4px; border-radius:6px;
+                    background:${isSelf ? 'rgba(61,220,132,0.04)' : 'rgba(255,255,255,0.03)'}; 
+                    border:1px solid ${isSelf ? 'rgba(61,220,132,0.12)' : 'rgba(255,255,255,0.05)'};">
+            <div style="min-width:0;">
+                <div style="color:${isSelf ? '#3ddc84' : '#d8dde6'}; font-weight:700; font-size:12px; font-family:var(--font-ui);">${opName}${deadBadge}</div>
+                <div style="color:#5a6475; font-size:10px; font-family:var(--font-ui);">Niv.${op.level||1}${!isSelf ? ` &nbsp;·&nbsp; ${dist}m` : ''}</div>
+            </div>
+            ${actionEl}
+        </div>`;
+    }).join('');
+};
+
+window.togglePlayerList = function() {
+    let panel = document.getElementById('pvp-player-panel');
+    if (!panel) return;
+    const isVisible = panel.style.display === 'block';
+    panel.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) window.updatePlayerList();
 };
 
 // === EVENTOS ===
