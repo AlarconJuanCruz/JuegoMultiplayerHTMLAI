@@ -67,6 +67,7 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
     if (window.player.hp <= 0) { 
         window.player.hp = 0;
         window.player.isDead = true;
+        window.player.deathAnimFrame = 40; // 40 frames de animación de caída (~0.65s)
         
         if(window.addGlobalMessage) window.addGlobalMessage(`☠️ Has muerto por ${source}`, '#e74c3c');
         if(window.sendWorldUpdate) window.sendWorldUpdate('player_death', { name: window.player.name, source: source });
@@ -78,7 +79,7 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
             if(window.updatePlayerList) window.updatePlayerList();
         }
 
-        window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false;
+        window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; window.keys.mouseLeft = false;
         window.player.isCharging = false; window.player.isAiming = false;
         
         let graveId = 'g_' + Math.random().toString(36).substr(2, 9);
@@ -94,10 +95,14 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
         if(window.selectToolbarSlot) window.selectToolbarSlot(0);
         window.player.xp = 0; 
         
-        let deathScreen = window.getEl('death-screen');
-        let bedBtn = window.getEl('btn-respawn-bed');
-        if (deathScreen) deathScreen.style.display = 'block';
-        if (bedBtn) { if (window.player.bedPos) bedBtn.style.display = 'inline-block'; else bedBtn.style.display = 'none'; }
+        // Mostrar pantalla de muerte DESPUÉS de la animación (1.5s)
+        const bedHasPos = !!window.player.bedPos;
+        setTimeout(() => {
+            let deathScreen = window.getEl('death-screen');
+            let bedBtn = window.getEl('btn-respawn-bed');
+            if (deathScreen) deathScreen.style.display = 'block';
+            if (bedBtn) { if (bedHasPos) bedBtn.style.display = 'inline-block'; else bedBtn.style.display = 'none'; }
+        }, 1500);
     }
     if(window.updateUI) window.updateUI();
     if(window.renderToolbar) window.renderToolbar();

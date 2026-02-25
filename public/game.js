@@ -114,7 +114,7 @@ window.isAdjacentToBlockOrGround = function(x, y, w, h) {
     let localGY = window.getGroundY ? window.getGroundY(x + w/2) : window.game.groundLevel;
     if (y + h >= localGY - 2) return true; 
     const expX = x - 2, expY = y - 2, expW = w + 4, expH = h + 4;
-    for (let b of window.blocks) { let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
+    for (let b of window.blocks) { if (b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
 }
 
 // Devuelve verdadero si el jugador está dentro de una escalera (para trepar)
@@ -275,6 +275,8 @@ window.startGame = function(multiplayer, ip = null) {
                     op.attackFrame = pInfo.attackFrame; op.isAiming = pInfo.isAiming; op.isCharging = pInfo.isCharging;
                     op.chargeLevel = pInfo.chargeLevel; op.isDead = pInfo.isDead; op.level = pInfo.level;
                     op.mouseX = pInfo.mouseX; op.mouseY = pInfo.mouseY;
+                    op.isDancing = pInfo.isDancing || false; op.danceStart = pInfo.danceStart || 0;
+                    if (pInfo.isDead && pInfo.deathAnimFrame > 0) op.deathAnimFrame = pInfo.deathAnimFrame;
                 } 
             });
             
@@ -342,6 +344,8 @@ window.startGame = function(multiplayer, ip = null) {
                     window.pvp = window.pvp || {};
                     if (window.pvp.activeOpponent !== data.payload.sourceId) return;
                     window.damagePlayer(data.payload.dmg, window.otherPlayers[data.payload.sourceId]?.name || 'Rival');
+                    // Flash visual en el jugador local
+                    window.player.pvpHitFlash = 8;
                     return;
                 }
 
@@ -526,10 +530,6 @@ window.addEventListener('keydown', (e) => {
                         } else if (cmd === '/flechas') {
                             window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10;
                             window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22');
-                            if (window.updateUI) window.updateUI();
-                        } else if (cmd === '/escalera') {
-                            window.player.inventory.ladder_item = (window.player.inventory.ladder_item || 0) + 10;
-                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Escaleras 🪜', '#c8a86a');
                             if (window.updateUI) window.updateUI();
                         } else if (cmd === '/dance') {
                             window.player.isDancing = true;
@@ -762,6 +762,29 @@ window.attemptAction = function() {
     window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
 
     if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg, meleeRange)) actionDone = true;
+
+    // === PVP: golpe melee al oponente activo ===
+    if (!actionDone && entityDmg > 0 && window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer) {
+        const op = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
+        if (op && !op.isDead) {
+            const opCX = op.x + (op.width || 24) / 2;
+            const opCY = op.y + (op.height || 48) / 2;
+            const dist = Math.hypot(opCX - pCX, opCY - pCY);
+            if (dist <= meleeRange) {
+                // Verificar arco de swing
+                const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
+                const angleToOp = Math.atan2(opCY - pCY, opCX - pCX);
+                let aDiff = Math.abs(angleToOp - swingAngle);
+                if (aDiff > Math.PI) aDiff = Math.PI * 2 - aDiff;
+                if (aDiff <= Math.PI * 0.6) {
+                    window.sendWorldUpdate('pvp_hit', { targetId: window.pvp.activeOpponent, sourceId: window.socket.id, dmg: entityDmg });
+                    window.spawnDamageText(opCX, opCY - 20, `-${Math.floor(entityDmg)}`, '#ff4444');
+                    window.spawnParticles(opCX, opCY, '#ff4444', 6);
+                    actionDone = true;
+                }
+            }
+        }
+    }
     if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg, meleeRange)) actionDone = true;
     if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg, meleeRange)) actionDone = true;
     if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
@@ -812,14 +835,18 @@ window.addEventListener('mousedown', (e) => {
                          : window.player.placementMode === 'barricade_item' ? 'barricade'
                          : window.player.placementMode === 'ladder_item' ? 'ladder'
                          : 'campfire';
-                // Escalera: validación especial — solo sobre suelo, block, o otra escalera
-                let validPlace = false;
+                // Escalera: puede ponerse sobre suelo o encima de otra escalera
+                let validPlace;
                 if (type === 'ladder') {
-                    const localGY = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel;
-                    const onGround = Math.abs((gridY + bs2) - localGY) <= bs2;
-                    const onBlock = window.blocks.some(b => (b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < bs2/2);
-                    const noPlayerOverlap = !window.checkRectIntersection(gridX, gridY, bs2, bs2, window.player.x, window.player.y, window.player.width, window.player.height);
-                    validPlace = (onGround || onBlock) && noPlayerOverlap;
+                    const bs_l = window.game.blockSize;
+                    const lGY = window.getGroundY ? window.getGroundY(gridX + bs_l/2) : window.game.groundLevel;
+                    const noOverlapPlayer = !window.checkRectIntersection(gridX, gridY, bs_l, bs_l, window.player.x, window.player.y, window.player.width, window.player.height);
+                    const alreadyHere = window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - gridY) < 1);
+                    const onGround = Math.abs((gridY + bs_l) - lGY) <= 2;
+                    const onLadder = window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs_l)) < 2);
+                    const onBlock = window.blocks.some(b => (b.type === 'block') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs_l)) < 2);
+                    const inRange = Math.hypot((window.player.x + window.player.width/2) - (gridX + bs_l/2), (window.player.y + window.player.height/2) - (gridY + bs_l/2)) <= window.player.miningRange + 60;
+                    validPlace = noOverlapPlayer && !alreadyHere && (onGround || onLadder || onBlock) && inRange;
                 } else {
                     validPlace = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
                 }
@@ -849,8 +876,9 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
-    if (!window.game || !window.game.isRunning || window.player.isDead) return;
-    if (e.button === 0 && window.keys) window.keys.mouseLeft = false;
+    if (!window.game || !window.game.isRunning) return;
+    if (e.button === 0 && window.keys) { window.keys.mouseLeft = false; }
+    if (!window.player || window.player.isDead) return;
 
     if (window.player.activeTool === 'bow') {
         if (e.button === 2) { window.player.isAiming = false; window.player.isCharging = false; window.player.chargeLevel = 0; }
@@ -948,7 +976,14 @@ function update() {
         if (isNaN(window.player.vx) || !isFinite(window.player.vx)) window.player.vx = 0; if (isNaN(window.player.vy) || !isFinite(window.player.vy)) window.player.vy = 0;
         if (!window.player.isAiming && window.player.attackFrame <= 0 && !window.player.isDead) { if (window.player.vx > 0.1) window.player.facingRight = true; else if (window.player.vx < -0.1) window.player.facingRight = false; }
 
-        if (window.player.isDead) { window.player.vx = 0; window.player.isStealth = false; let pO = window.getEl('placement-overlay'); if(pO) pO.style.display = 'none'; } 
+        if (window.player.isDead) { 
+            window.player.vx = 0; window.player.isStealth = false; 
+            let pO = window.getEl('placement-overlay'); if(pO) pO.style.display = 'none';
+            // Tick de animación de muerte
+            if ((window.player.deathAnimFrame || 0) > 0) window.player.deathAnimFrame--;
+        }
+        // Tick pvpHitFlash del jugador local
+        if ((window.player.pvpHitFlash || 0) > 0) window.player.pvpHitFlash--;
         else if (window.keys && window.keys.shift) { window.player.wantsBackground = true; } else { window.player.wantsBackground = false; }
         
         if (!window.player.isDead && !window.player.wantsBackground) { if (!window.isOverlappingSolidBlock()) window.player.inBackground = false; } else if (!window.player.isDead) { window.player.inBackground = true; }
@@ -975,13 +1010,15 @@ function update() {
         // === ESCALERA: si el jugador está sobre una, cancelar gravedad y trepar con W ===
         const _onLadder = !window.player.isDead && window.isOnLadder();
         if (_onLadder) {
-            window.player.vy = 0; // cancelar gravedad mientras esté en la escalera
+            if (window.player.vy > 0) window.player.vy = 0; // detener caída al entrar en escalera
             if (window.keys && window.keys.jumpPressed) {
                 window.player.vy = -3.5; // subir escalera
+            } else if (!window.keys || (!window.keys.jumpPressed && !window.keys.s)) {
+                window.player.vy = 0; // flotar en escalera si no se presiona nada
             }
-            window.player.isGrounded = false; // no cuenta como suelo (sigue en escalera)
+            window.player.isGrounded = false;
             window.player.isJumping = false;
-            window.player.coyoteTime = 10; // puede saltar desde escalera
+            window.player.coyoteTime = 10;
         } else {
             window.player.vy += window.game.gravity;
         }
@@ -999,7 +1036,7 @@ function update() {
 
         if (window.game.isMultiplayer) {
             if (window.socket && (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState)) {
-                window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping || false });
+                window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping || false, isDancing: window.player.isDancing || false, danceStart: window.player.danceStart || 0, deathAnimFrame: window.player.deathAnimFrame || 0 });
                 window.player._lastTypingState = window.player.isTyping;
             }
             if (window.otherPlayers) {
@@ -1008,6 +1045,8 @@ function update() {
                         op.x += (op.targetX - op.x) * 0.35;
                         op.y += (op.targetY - op.y) * 0.35;
                     }
+                    // Tick pvpHitFlash
+                    if ((op.pvpHitFlash || 0) > 0) op.pvpHitFlash--;
                 });
             }
         }
@@ -1116,7 +1155,18 @@ function update() {
                         if(ent.hp <= 0) { window.killedEntities.push(ent.id); window.sendWorldUpdate('kill_entity', { id: ent.id }); window.spawnParticles(ent.x, ent.y, '#ff4444', 15); if (ent.type === 'spider') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'web', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(20 * ent.level); } else if (ent.type === 'chicken') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:1, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(10); } else if (ent.type === 'zombie') { let ni = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:0, vy:-1, type:'meat', amount:2, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.gainXP(50 * ent.level); } else if (ent.type === 'archer') { let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(40 * ent.level); } window.entities.splice(e, 1); if(window.updateUI) window.updateUI(); } else { window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: pr.damage }); if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pr.x) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); } }
                         hitEnt = true; break;
                     }
-                } if(hitEnt) { window.playSound('arrow_hit_flesh'); window.projectiles.splice(i,1); continue; }
+                }
+                // PVP: flecha del jugador golpea a oponente activo
+                if (!hitEnt && window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer && pr.owner === window.socket?.id) {
+                    const opPvp = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
+                    if (opPvp && !opPvp.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, opPvp.x, opPvp.y, opPvp.width||24, opPvp.height||48)) {
+                        window.sendWorldUpdate('pvp_hit', { targetId: window.pvp.activeOpponent, sourceId: window.socket.id, dmg: pr.damage });
+                        window.spawnDamageText(opPvp.x + (opPvp.width||24)/2, opPvp.y - 10, `-${Math.floor(pr.damage)}`, '#ff4444');
+                        window.spawnParticles(pr.x, pr.y, '#ff4444', 5);
+                        hitEnt = true;
+                    }
+                }
+                if(hitEnt) { window.playSound('arrow_hit_flesh'); window.projectiles.splice(i,1); continue; }
             }
             if(pr.life <= 0) window.projectiles.splice(i, 1);
         }

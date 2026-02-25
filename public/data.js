@@ -136,7 +136,7 @@ window.player = {
     baseSpeed: 2.8, baseJump: -7.2, baseHp: 100, baseHunger: 100, speed: 2.8, jumpPower: -7.2, hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
-    inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0, ladder_item: 5 }, 
+    inventory: { wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10, arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0, barricade_item: 0, ladder_item: 0 }, 
     toolbar: ['hand', null, null, null, null, null],
     activeSlot: 0,
     activeTool: 'hand', 

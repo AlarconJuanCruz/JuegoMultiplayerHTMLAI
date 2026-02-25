@@ -7,7 +7,54 @@ window.roundRect = function(ctx, x, y, width, height, radius) {
 };
 
 window.drawCharacter = function(charData, isLocal) {
-    if (!window.ctx || charData.isDead) return;
+    if (!window.ctx) return;
+
+    // === ANIMACIÓN DE MUERTE ===
+    if (charData.isDead) {
+        // Solo mostrar si tiene frames de animación activos (o siempre para otros jugadores)
+        const daf = charData.deathAnimFrame !== undefined ? charData.deathAnimFrame : 0;
+        if (daf <= 0 && !isLocal) return; // otros jugadores muertos no se ven
+        if (isLocal && daf <= 0) return;  // jugador local: solo durante animación
+
+        window.ctx.save();
+        const pCX = charData.x + (charData.width || 24) / 2;
+        const pCY = charData.y + (charData.height || 48);
+        window.ctx.translate(pCX, pCY);
+        if (!charData.facingRight) window.ctx.scale(-1, 1);
+
+        // Rotación caída: empieza en 0, llega a -PI/2 (tumbado) en 40 frames
+        const maxFrames = 40;
+        const t = Math.max(0, Math.min(1, 1 - daf / maxFrames));
+        const fallAngle = t * (-Math.PI / 2);
+        const fallY = t * 20; // cuerpo baja mientras cae
+
+        window.ctx.translate(0, fallY);
+        window.ctx.rotate(fallAngle);
+
+        // Dibujar cuerpo simple tumbado (versión reducida)
+        window.ctx.globalAlpha = Math.max(0.4, 1 - t * 0.4);
+        const skin = '#cc8855'; const shirt = isLocal ? '#1a5c8a' : '#404040';
+        // Piernas
+        window.ctx.fillStyle = '#1a252f';
+        window.roundRect(window.ctx, -12, -10, 24, 10, 3);
+        // Torso
+        window.ctx.fillStyle = shirt;
+        window.roundRect(window.ctx, -10, -30, 20, 22, 5);
+        // Cabeza
+        window.ctx.fillStyle = skin;
+        window.roundRect(window.ctx, -9, -48, 18, 18, 7);
+        // X en los ojos
+        window.ctx.strokeStyle = '#333'; window.ctx.lineWidth = 1.5;
+        window.ctx.beginPath();
+        window.ctx.moveTo(-3, -42); window.ctx.lineTo(-1, -40);
+        window.ctx.moveTo(-1, -42); window.ctx.lineTo(-3, -40);
+        window.ctx.moveTo(3, -42); window.ctx.lineTo(5, -40);
+        window.ctx.moveTo(5, -42); window.ctx.lineTo(3, -40);
+        window.ctx.stroke();
+        window.ctx.globalAlpha = 1;
+        window.ctx.restore();
+        return;
+    }
     window.ctx.save();
     
     const pCX = charData.x + (charData.width || 24) / 2;
@@ -77,7 +124,9 @@ window.drawCharacter = function(charData, isLocal) {
         let progress = charData.attackFrame / 30; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
 
-    let skin = charData.isHit ? '#ff4444' : '#f1c27d'; let shirt = charData.isHit ? '#ff4444' : (isLocal ? '#3498db' : '#686868'); let shirtDark = charData.isHit ? '#cc0000' : (isLocal ? '#2980b9' : '#4a4a4a');
+    let skin = charData.isHit ? '#ff4444' : (charData.pvpHitFlash ? '#ff6600' : '#f1c27d');
+    let shirt = charData.isHit ? '#ff4444' : (charData.pvpHitFlash ? '#ff6600' : (isLocal ? '#3498db' : '#686868'));
+    let shirtDark = charData.isHit ? '#cc0000' : (charData.pvpHitFlash ? '#cc3300' : (isLocal ? '#2980b9' : '#4a4a4a'));
     let pants = '#2c3e50'; let pantsDark = '#1a252f'; let shoes = '#222'; let shoesDark = '#111';
     if (charData.inBackground) { skin='#888'; shirt='#666'; shirtDark='#555'; pants='#444'; pantsDark='#333'; }
 
@@ -142,6 +191,25 @@ window.draw = function() {
     }
     window.ctx.fillStyle = skyGrad;
     window.ctx.fillRect(0, 0, W, H);
+
+    // Línea de horizonte con brillo atmosférico
+    {
+        const horizonY = window.game.groundLevel ? 
+            ((window.game.groundLevel - window.camera.y - H/2)*(window.game.zoom||1)+H/2) : H*0.72;
+        const hazeAlpha = darkness < 0.4 ? 0.06 : (darkness < 0.7 ? 0.04 : 0.02);
+        const hazeGrad = window.ctx.createLinearGradient(0, horizonY-60, 0, horizonY+30);
+        if (darkness < 0.4) {
+            hazeGrad.addColorStop(0, 'rgba(255,255,255,0)');
+            hazeGrad.addColorStop(0.5, `rgba(255,240,200,${hazeAlpha})`);
+            hazeGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        } else {
+            hazeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            hazeGrad.addColorStop(0.5, `rgba(30,50,80,${hazeAlpha})`);
+            hazeGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        }
+        window.ctx.fillStyle = hazeGrad;
+        window.ctx.fillRect(0, horizonY-60, W, 90);
+    }
 
     window.ctx.save(); 
     if (window.game.screenShake > 0) {
@@ -465,6 +533,12 @@ window.draw = function() {
         if (b.x + window.game.blockSize > _visLeft && b.x < _visRight + 120) {
             if (b.type === 'block') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
+                // Depth shading: top highlight + bottom shadow
+                if (!b.isHit) {
+                    window.ctx.fillStyle = 'rgba(255,255,255,0.12)'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, 4);
+                    window.ctx.fillStyle = 'rgba(0,0,0,0.22)'; window.ctx.fillRect(b.x, b.y + window.game.blockSize - 5, window.game.blockSize, 5);
+                    window.ctx.fillStyle = 'rgba(0,0,0,0.1)'; window.ctx.fillRect(b.x + window.game.blockSize - 4, b.y, 4, window.game.blockSize);
+                }
                 window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
             } else if (b.type === 'door') {
                 if (b.open) { window.ctx.fillStyle = '#3a2518'; window.ctx.fillRect(b.x + 12, b.y, 6, window.game.blockSize * 2); } 
@@ -607,10 +681,13 @@ window.draw = function() {
         
         let valid;
         if (window.player.placementMode === 'ladder_item') {
-            const localGY = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel;
-            const onGround = Math.abs((gridY + bs2) - localGY) <= bs2;
-            const onBlock = window.blocks.some(b => (b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < bs2/2);
-            valid = (onGround || onBlock);
+            const lGY2 = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel;
+            const alreadyHere2 = window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - gridY) < 1);
+            valid = !alreadyHere2 && (
+                Math.abs((gridY + bs2) - lGY2) <= 2 ||
+                window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2) ||
+                window.blocks.some(b => b.type === 'block' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2)
+            );
         } else {
             valid = window.isValidPlacement(gridX, gridY, bs2, bs2, true, false);
         }
@@ -730,6 +807,23 @@ window.draw = function() {
         for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window._canvasLogicW; let ry = (i * 93 + window.game.frameCount * 25) % window._canvasLogicH; window.ctx.moveTo(window.camera.x + rx, window.camera.y + ry); window.ctx.lineTo(window.camera.x + rx - 3, window.camera.y + ry + 25); }
         window.ctx.stroke(); window.ctx.restore();
         if (Math.random() < 0.005) { window.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; window.ctx.fillRect(window.camera.x, window.camera.y, window._canvasLogicW, window._canvasLogicH); }
+    }
+
+    // AMBIENT OCCLUSION: sombra en la base de objetos y bloques sobre el suelo
+    {
+        const _lGY_ao = window.getGroundY ? window.getGroundY(window.player.x) : window.game.groundLevel;
+        const _aoZ = window.game.zoom || 1;
+        const _aoW = window._canvasLogicW || 1280;
+        const _aoH = window._canvasLogicH || 720;
+        window.ctx.save();
+        window.ctx.translate(_aoW/2, _aoH/2); window.ctx.scale(_aoZ, _aoZ); window.ctx.translate(-_aoW/2, -_aoH/2); window.ctx.translate(-window.camera.x, -window.camera.y);
+        // Sombra suave debajo del suelo principal
+        const shadowGrad = window.ctx.createLinearGradient(0, _lGY_ao - 8, 0, _lGY_ao + 20);
+        shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
+        shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        window.ctx.fillStyle = shadowGrad;
+        window.ctx.fillRect(window.camera.x - 100, _lGY_ao - 8, _aoW / _aoZ + 200, 28);
+        window.ctx.restore();
     }
 
     window.ctx.restore(); 
@@ -955,20 +1049,21 @@ window.draw = function() {
                 const rivalName = rival.name ? rival.name.substring(0,8) : '?';
                 window.ctx.fillText(`${rivalName} ${dist}m`, 0, 0);
             } else {
-                // Rival visible: mostrar marco rojo parpadeante alrededor de él
-                const pulse = Math.sin(window.game.frameCount * 0.15) * 0.4 + 0.7;
-                window.ctx.strokeStyle = `rgba(255,50,50,${pulse})`;
-                window.ctx.lineWidth = 2.5;
-                const rivalW = (rival.width||24) * _z2;
+                // Rival visible en pantalla: mostrar solo tag flotante sobre su cabeza, sin caja roja
+                const pulse = Math.sin(window.game.frameCount * 0.12) * 0.3 + 0.85;
                 const rivalH = (rival.height||48) * _z2;
-                window.ctx.strokeRect(rSX - rivalW/2 - 4, rSY - rivalH/2 - 4, rivalW + 8, rivalH + 8);
-
-                // Distancia encima del marco
-                window.ctx.fillStyle = `rgba(255,80,80,${pulse})`;
-                window.ctx.font = 'bold 12px Inter, sans-serif';
+                window.ctx.globalAlpha = pulse;
+                window.ctx.fillStyle = 'rgba(160,10,10,0.82)';
+                window.ctx.beginPath();
+                const tagW = 54, tagH = 16, tagX = rSX - tagW/2, tagY = rSY - rivalH/2 - 48;
+                window.ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+                window.ctx.fill();
+                window.ctx.globalAlpha = 1;
+                window.ctx.fillStyle = '#ffaaaa';
+                window.ctx.font = 'bold 10px Inter, sans-serif';
                 window.ctx.textAlign = 'center';
-                window.ctx.textBaseline = 'bottom';
-                window.ctx.fillText(`⚔️ ${dist}m`, rSX, rSY - rivalH/2 - 8);
+                window.ctx.textBaseline = 'middle';
+                window.ctx.fillText(`⚔ ${dist}m`, rSX, tagY + tagH/2);
             }
             window.ctx.restore();
 
@@ -981,4 +1076,108 @@ window.draw = function() {
             if(window.updatePlayerList) window.updatePlayerList();
         }
     }
-};
+    // ═══════════════════════════════════════════════════════════
+    // POST-PROCESSING: Viñeta + Film Grain + Aberración + Lluvia
+    // ═══════════════════════════════════════════════════════════
+    const _ppW = window._canvasLogicW || 1280;
+    const _ppH = window._canvasLogicH || 720;
+
+    // 1. VIÑETA — bordes oscuros suaves, más intensos de noche
+    {
+        const vigStrength = 0.35 + darkness * 0.3;
+        const vigGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.25, _ppW/2, _ppH/2, _ppH * 0.85);
+        vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+        vigGrad.addColorStop(0.6, `rgba(0,0,0,${vigStrength * 0.3})`);
+        vigGrad.addColorStop(1, `rgba(0,0,0,${vigStrength})`);
+        window.ctx.fillStyle = vigGrad;
+        window.ctx.fillRect(0, 0, _ppW, _ppH);
+    }
+
+    // 2. ABERRACIÓN CROMÁTICA — tinte rojo/azul en bordes, pulsante en combate
+    if (window.game.screenShake > 0 || (window.player && (window.player.pvpHitFlash||0) > 0)) {
+        const aberAmt = window.game.screenShake > 0 ? Math.min(window.game.screenShake * 0.3, 4) : 3;
+        window.ctx.globalAlpha = 0.08;
+        window.ctx.globalCompositeOperation = 'screen';
+        // Canal rojo desplazado
+        window.ctx.fillStyle = '#ff0000';
+        window.ctx.fillRect(-aberAmt, 0, _ppW, _ppH);
+        // Canal azul desplazado
+        window.ctx.fillStyle = '#0000ff';
+        window.ctx.fillRect(aberAmt, 0, _ppW, _ppH);
+        window.ctx.globalCompositeOperation = 'source-over';
+        window.ctx.globalAlpha = 1;
+    }
+
+    // 3. FILM GRAIN — ruido sutil frame a frame
+    {
+        const grainAmt = darkness > 0.5 ? 0.045 : 0.025;
+        const grainSeed = window.game.frameCount * 7919;
+        const gCanvas = window._grainCanvas || (window._grainCanvas = document.createElement('canvas'));
+        gCanvas.width = 256; gCanvas.height = 256;
+        const gCtx = gCanvas.getContext('2d');
+        const imgData = gCtx.createImageData(256, 256);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const n = ((Math.sin(i * 0.0137 + grainSeed) * 43758.5453) % 1 + 1) % 1;
+            const v = (n - 0.5) * 255 * grainAmt * 4;
+            data[i] = data[i+1] = data[i+2] = 128 + v;
+            data[i+3] = 18 + Math.floor(darkness * 12);
+        }
+        gCtx.putImageData(imgData, 0, 0);
+        const grainPattern = window.ctx.createPattern(gCanvas, 'repeat');
+        window.ctx.globalCompositeOperation = 'overlay';
+        window.ctx.globalAlpha = 1;
+        window.ctx.fillStyle = grainPattern;
+        window.ctx.fillRect(0, 0, _ppW, _ppH);
+        window.ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // 4. LLUVIA MEJORADA — capas con profundidad
+    if (window.game.isRaining) {
+        const fc = window.game.frameCount;
+        // Capa lejana: fina, veloz, semitransparente
+        window.ctx.save();
+        window.ctx.strokeStyle = 'rgba(160,195,230,0.25)';
+        window.ctx.lineWidth = 0.8;
+        window.ctx.beginPath();
+        for (let i = 0; i < 180; i++) {
+            const rx = ((i * 173 + fc * 6) % _ppW + _ppW) % _ppW;
+            const ry = ((i * 97  + fc * 22) % _ppH + _ppH) % _ppH;
+            window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 2, ry + 18);
+        }
+        window.ctx.stroke();
+        // Capa cercana: gruesa, lenta, más visible
+        window.ctx.strokeStyle = 'rgba(180,210,245,0.5)';
+        window.ctx.lineWidth = 1.5;
+        window.ctx.beginPath();
+        for (let i = 0; i < 80; i++) {
+            const rx = ((i * 311 + fc * 4) % _ppW + _ppW) % _ppW;
+            const ry = ((i * 153 + fc * 16) % _ppH + _ppH) % _ppH;
+            window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 3, ry + 28);
+        }
+        window.ctx.stroke();
+        // Salpicaduras en el suelo
+        window.ctx.globalAlpha = 0.15;
+        const _gY_rain = window.camera.y ? ((window.game.groundLevel - window.camera.y - _ppH/2) * (window.game.zoom||1) + _ppH/2) : _ppH * 0.72;
+        for (let i = 0; i < 30; i++) {
+            const sx = ((i * 457 + fc * 3) % _ppW + _ppW) % _ppW;
+            const sa = (fc * 0.3 + i * 0.4) % (Math.PI);
+            window.ctx.fillStyle = 'rgba(200,225,255,0.8)';
+            window.ctx.beginPath();
+            window.ctx.ellipse(sx, _gY_rain, 4 + Math.sin(sa)*2, 1.5, 0, 0, Math.PI*2);
+            window.ctx.fill();
+        }
+        window.ctx.globalAlpha = 1;
+        window.ctx.restore();
+        // Tinte azul-gris en pantalla
+        window.ctx.fillStyle = 'rgba(60,80,110,0.06)';
+        window.ctx.fillRect(0, 0, _ppW, _ppH);
+    }
+
+    // 5. BORDE NEGRO SUTIL — marco de cuadro para sensación cinemática
+    {
+        window.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        window.ctx.lineWidth = 3;
+        window.ctx.strokeRect(1, 1, _ppW - 2, _ppH - 2);
+    }
+}; // end window.draw

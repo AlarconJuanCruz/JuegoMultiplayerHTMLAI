@@ -480,6 +480,9 @@ window.updateUI = function() {
 
     checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
     checkBtn('req-barricade', 'btn-craft-barricade', 8, 4, 0, 0, null);
+    // Escalera - req-ladder solo muestra si no tienes materiales
+    ['btn-craft-ladder1','btn-craft-ladder5'].forEach((id,i)=>{ let c=[6,30][i]; let b=window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
+    let lReq = window.getEl('req-ladder'); if(lReq) lReq.innerHTML = window.player.inventory.wood < 6 ? `<span style="color:var(--red)">6 Mad.</span>` : `<span style="color:var(--green)">✓</span>`;
     checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
 };
@@ -508,7 +511,7 @@ window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
         else if(item) { 
             if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
             window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
-            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
+            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
         }
         window.updateUI(); if(typeof window.renderToolbar === 'function') window.renderToolbar();
     }
@@ -528,6 +531,8 @@ window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, '
 window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
 window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
 window.bindCraft('btn-craft-barricade', () => window.craftItem(8, 4, 0, 0, null, 'barricade_item', 1));
+window.bindCraft('btn-craft-ladder1', () => window.craftItem(6, 0, 0, 0, null, 'ladder_item', 1));
+window.bindCraft('btn-craft-ladder5', () => window.craftItem(30, 0, 0, 0, null, 'ladder_item', 5));
 
 // === SISTEMA GLOBAL DE TOOLTIPS (CON ESTILOS INYECTADOS) ===
 document.addEventListener('DOMContentLoaded', () => {
