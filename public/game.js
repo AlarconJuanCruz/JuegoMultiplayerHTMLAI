@@ -61,6 +61,33 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
     if (window.game.isMultiplayer && window.otherPlayers) { for (let id in window.otherPlayers) { let op = window.otherPlayers[id]; if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width||24, op.height||48)) return false; } }
     
     let isItem = !isStructure; let isDoor = isStructure && h > bs;
+
+    // ── VALIDACIÓN EXTRA PARA PUERTAS ─────────────────────────────────────────
+    if (isDoor) {
+        // 1. La columna donde va la puerta debe tener terreno plano a ambos lados:
+        //    si el suelo sube justo al lado, la puerta quedaría semi-enterrada.
+        const gyLeft  = window.getGroundY ? window.getGroundY(x - bs / 2)  : localGY;
+        const gyRight = window.getGroundY ? window.getGroundY(x + bs + bs / 2) : localGY;
+        // Si hay terreno más alto que el pie de la puerta a cualquier lado → inválido
+        if (gyLeft < y + h || gyRight < y + h) return false;
+
+        // 2. La puerta debe tener exactamente 2 bloques de alto libres en su columna:
+        //    no puede haber bloques de tierra/suelo dentro de su área vertical.
+        //    (el chequeo y+h > localGY ya cubre que no se meta en el suelo,
+        //     pero con terreno irregular puede haber un escalón a mitad de la puerta)
+        const gyMid = window.getGroundY ? window.getGroundY(x + w / 2) : localGY;
+        // Si el suelo está dentro del area de la puerta (entre y y y+h) → inválido
+        if (gyMid < y + h) return false;
+
+        // 3. Verificar ambas columnas adyacentes: si hay bloque de terreno que bloquee
+        //    el movimiento de apertura/cierre → inválido
+        const leftBlocked  = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x - bs)) < 1 && b.y < y + h && b.y + bs > y);
+        const rightBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x + bs)) < 1 && b.y < y + h && b.y + bs > y);
+        // Ambos lados bloqueados = la puerta no puede abrirse
+        if (leftBlocked && rightBlocked) return false;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (isItem || isDoor) {
         let supported = false;
         // Soportado si el fondo toca el suelo (con tolerancia de 1px por snapping)
@@ -175,7 +202,7 @@ window.checkEntityCollisions = function(ent, axis) {
 
 window.generateWorldSector = function(startX, endX) {
     if (startX < window.game.shoreX + 50) startX = window.game.shoreX + 50; 
-    let seed = Math.floor(startX) + 12345; function sRandom() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    let seed = (Math.floor(startX) + 12345) ^ ((window.worldSeed || 12345) & 0xFFFF); function sRandom() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
     
     if (!window.removedTrees) window.removedTrees = []; if (!window.treeState) window.treeState = {}; if (!window.removedRocks) window.removedRocks = []; if (!window.killedEntities) window.killedEntities = [];
 
@@ -236,14 +263,26 @@ window.generateWorldSector = function(startX, endX) {
         }
     }
     
-    let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; let newId = 'e_' + cx;
+    let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); let distToShore = Math.abs(cx - window.game.shoreX); 
+    // Nivel escala cada 4000px (≈400m), mínimo 1 — mucho más suave que antes (era /1000)
+    let lvl = Math.max(1, Math.floor(distToShore / 4000)) + Math.max(0, window.game.days - 1);
+    let newId = 'e_' + cx;
     let cGroundY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
     if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
-        if (distToShore > 2000) {
-            if (distToShore > 3000 && sRandom() < 0.4) { let aMaxHp = 30 + (lvl * 20); window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: cGroundY - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); } 
-            else if (sRandom() < 0.6) { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: lvl, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25 + (lvl*5), maxHp: 25 + (lvl*5), isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); } 
-            else { let spiderMaxHp = 20 + (lvl * 15); let sWidth = 14 + (lvl * 2), sHeight = 8 + (lvl * 1.5); window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: cGroundY - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); }
-        } else { window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); }
+        // Pollos en zona cercana (<5000px). Arañas/arqueros en zona peligrosa (>7000px)
+        if (distToShore > 5000) {
+            if (distToShore > 7000 && sRandom() < 0.35) { 
+                let aMaxHp = 20 + (lvl * 12); 
+                window.entities.push({ id: newId, type: 'archer', name: 'Cazador', level: lvl, x: cx, y: cGroundY - 40, width: 20, height: 40, vx: (sRandom() > 0.5 ? 0.8 : -0.8), vy: 0, hp: aMaxHp, maxHp: aMaxHp, damage: 5 + (lvl * 2), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); 
+            } else if (sRandom() < 0.55) { 
+                window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); 
+            } else { 
+                let spiderMaxHp = 15 + (lvl * 10); let sWidth = 14 + (lvl * 1), sHeight = 8 + (lvl * 1); 
+                window.entities.push({ id: newId, type: 'spider', name: 'Araña', level: lvl, x: cx, y: cGroundY - sHeight, width: sWidth, height: sHeight, vx: (sRandom() > 0.5 ? 0.6 : -0.6), vy: 0, hp: spiderMaxHp, maxHp: spiderMaxHp, damage: 5 + (lvl * 2), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }); 
+            }
+        } else { 
+            window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: cGroundY - 20, width: 20, height: 20, vx: (sRandom() > 0.5 ? 0.3 : -0.3), vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx }); 
+        }
     }
 };
 
@@ -254,7 +293,15 @@ window.startGame = function(multiplayer, ip = null) {
 
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
-    if (window.initRenderCaches) window.initRenderCaches(); 
+    if (window.initRenderCaches) window.initRenderCaches();
+    // Aplicar semilla antes de generar el mundo
+    if (!window.worldSeed || window.worldSeed === 0) {
+        // Intentar cargar semilla guardada
+        const savedSeed = localStorage.getItem('worldSeedCode');
+        if (savedSeed && window.setSeedFromCode) window.setSeedFromCode(savedSeed);
+        else if (window.generateSeed) window.generateSeed();
+    }
+    if (window.applySeed) window.applySeed();
     window.generateWorldSector(window.game.shoreX, window.game.exploredRight);
 
     if (multiplayer && typeof io !== 'undefined') {
@@ -281,6 +328,52 @@ window.startGame = function(multiplayer, ip = null) {
             });
             
             window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
+
+            // Recibir semilla del servidor (autoritativa en multiplayer)
+            window.socket.on('worldSeed', (data) => {
+                if (data && data.seed && window.setSeedFromCode) {
+                    window.setSeedFromCode(data.seed);
+                    localStorage.setItem('worldSeedCode', window.seedCode);
+                    // Actualizar display si está visible
+                    const el = document.getElementById('seed-display');
+                    if (el) el.textContent = window.seedCode;
+                    console.log('[SEED] Semilla del servidor:', window.seedCode);
+                }
+            });
+
+            // Servidor lleno
+            window.socket.on('serverFull', () => {
+                alert('⚠️ El servidor está lleno. Inténtalo más tarde.');
+                window.location.reload();
+            });
+
+            // El servidor fue reseteado: limpiar mundo local y aplicar nueva semilla
+            window.socket.on('worldReset', (data) => {
+                if (data && data.seed && window.setSeedFromCode) {
+                    window.setSeedFromCode(data.seed);
+                    localStorage.setItem('worldSeedCode', window.seedCode);
+                }
+                // Limpiar todo el estado del mundo
+                window.blocks         = [];
+                window.droppedItems   = [];
+                window.removedTrees   = [];
+                window.removedRocks   = [];
+                window.treeState      = {};
+                window.killedEntities = [];
+                window.stuckArrows    = [];
+                window.trees          = [];
+                window.rocks          = [];
+                window.entities       = [];
+                window.game.exploredRight = window.game.shoreX;
+                // Regenerar sector inicial con la nueva semilla
+                if (window.applySeed) window.applySeed();
+                window.generateWorldSector(window.game.shoreX, window.game.shoreX + window.game.chunkSize);
+                window.game.exploredRight = window.game.shoreX + window.game.chunkSize;
+                // Actualizar display
+                const el = document.getElementById('seed-display');
+                if (el) el.textContent = window.seedCode || '-----';
+                if (window.addGlobalMessage) window.addGlobalMessage('🌍 Mundo reseteado — nueva semilla: ' + (window.seedCode || '?'), '#3ddc84');
+            });
             
             window.socket.on('initWorldState', (state) => {
                 window.blocks = state.blocks; window.removedTrees = state.removedTrees; window.removedRocks = state.removedRocks; window.treeState = state.treeState || {}; window.killedEntities = state.killedEntities || [];
@@ -1188,10 +1281,16 @@ function update() {
         let spawnRate = Math.max(150, 600 - (window.game.days * 20) - Math.floor(window.player.x / 50));
         if (isNight && window.game.frameCount % spawnRate === 0 && isMasterClient) { 
             let cx = window.player.x + 800; if (Math.random() > 0.5 && window.player.x - 800 > window.game.shoreX + 2000) cx = window.player.x - 800; 
-            let distToShore = Math.abs(cx - window.game.shoreX); let lvl = Math.floor(distToShore / 1000) + window.game.days; 
+            let distToShore = Math.abs(cx - window.game.shoreX); 
+            // Nivel suave: escala cada 4000px + días de bonificación (muy gradual)
+            let lvl = Math.max(1, Math.floor(distToShore / 4000)) + Math.max(0, window.game.days - 1);
             if (distToShore > 2000) { 
                 let newEnt = null; let _spawnGY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
-                if (distToShore > 3000 && Math.random() < 0.4 && window.entities.filter(e => e.type === 'archer').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: _spawnGY - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: 30 + (lvl * 20), maxHp: 30 + (lvl * 20), damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; } else if (window.entities.filter(e => e.type === 'zombie').length < 3) { newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: _spawnGY - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: 60 + (lvl * 30), maxHp: 60 + (lvl * 30), damage: 15 + (lvl * 4), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; }
+                if (distToShore > 5000 && Math.random() < 0.35 && window.entities.filter(e => e.type === 'archer').length < 3) { 
+                    newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'archer', name: 'Cazador', level: lvl, x: cx, y: _spawnGY - 40, width: 20, height: 40, vx: (window.player.x > cx ? 0.8 : -0.8), vy: 0, hp: 20 + (lvl * 12), maxHp: 20 + (lvl * 12), damage: 5 + (lvl * 2), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; 
+                } else if (window.entities.filter(e => e.type === 'zombie').length < 3) { 
+                    newEnt = { id: 'en_'+Math.random().toString(36).substr(2,9), type: 'zombie', name: 'Mutante', level: lvl, x: cx, y: _spawnGY - 44, width: 24, height: 44, vx: (window.player.x > cx ? 0.4 : -0.4), vy: 0, hp: 35 + (lvl * 15), maxHp: 35 + (lvl * 15), damage: 8 + (lvl * 3), isHit: false, attackCooldown: 0, stuckFrames: 0, ignorePlayer: 0, lastX: cx }; 
+                }
                 if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity', { entity: newEnt }); }
             }
         }
@@ -1318,16 +1417,18 @@ function update() {
         const _H = window._canvasLogicH || 720;
         // Cámara X: directa, sin lag
         window.camera.x = window.player.x + window.player.width/2 - _W/2;
-        // Cámara Y estilo Terraria: jugador en el ~38% superior → más suelo visible abajo
+        // Cámara Y: snap inmediato al estar en suelo, lerp suave solo en aire
         let idealCamY = window.player.y + window.player.height - _H * 0.62;
         if (window.camera._targetY === undefined) window.camera._targetY = idealCamY;
-        // Lerp más rápido (0.18) para que la cámara no parezca trabada.
-        // Si la diferencia es mayor a 200px (cambio brusco de terreno) → snap directo.
         const camDiff = idealCamY - window.camera._targetY;
-        if (Math.abs(camDiff) > 200) {
+        if (window.player.isGrounded && !window.player.isJumping) {
+            // En suelo: snap directo — elimina el jitter de escalones de terreno
+            window.camera._targetY = idealCamY;
+        } else if (Math.abs(camDiff) > 200) {
             window.camera._targetY = idealCamY;
         } else {
-            window.camera._targetY += camDiff * 0.18;
+            // En aire: lerp suave para movimiento fluido de salto/caída
+            window.camera._targetY += camDiff * 0.14;
         }
         window.camera.y = window.camera._targetY;
         // Límite izquierdo

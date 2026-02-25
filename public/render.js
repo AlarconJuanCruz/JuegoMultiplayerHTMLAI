@@ -192,24 +192,6 @@ window.draw = function() {
     window.ctx.fillStyle = skyGrad;
     window.ctx.fillRect(0, 0, W, H);
 
-    // Línea de horizonte con brillo atmosférico
-    {
-        const horizonY = window.game.groundLevel ? 
-            ((window.game.groundLevel - window.camera.y - H/2)*(window.game.zoom||1)+H/2) : H*0.72;
-        const hazeAlpha = darkness < 0.4 ? 0.06 : (darkness < 0.7 ? 0.04 : 0.02);
-        const hazeGrad = window.ctx.createLinearGradient(0, horizonY-60, 0, horizonY+30);
-        if (darkness < 0.4) {
-            hazeGrad.addColorStop(0, 'rgba(255,255,255,0)');
-            hazeGrad.addColorStop(0.5, `rgba(255,240,200,${hazeAlpha})`);
-            hazeGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        } else {
-            hazeGrad.addColorStop(0, 'rgba(0,0,0,0)');
-            hazeGrad.addColorStop(0.5, `rgba(30,50,80,${hazeAlpha})`);
-            hazeGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        }
-        window.ctx.fillStyle = hazeGrad;
-        window.ctx.fillRect(0, horizonY-60, W, 90);
-    }
 
     window.ctx.save(); 
     if (window.game.screenShake > 0) {
@@ -363,11 +345,12 @@ window.draw = function() {
         const colCenterX = px + bs / 2;
         const gY = window.getGroundY ? window.getGroundY(colCenterX) : window.game.groundLevel;
 
-        // Bioma: desierto a partir de 2600px
-        // desertAlpha = cuánto de DESIERTO se muestra encima del pasto base
+        // Bioma: desierto — posición y ancho controlados por semilla
+        const _dStart = (window.game.desertStart || 2600) + window.game.shoreX;
+        const _dWidth = window.game.desertWidth || 800;
         let desertAlpha = 0;
-        if (colCenterX > 3400) desertAlpha = 1;
-        else if (colCenterX > 2600) desertAlpha = (colCenterX - 2600) / 800;
+        if (colCenterX > _dStart + _dWidth) desertAlpha = 1;
+        else if (colCenterX > _dStart) desertAlpha = (colCenterX - _dStart) / _dWidth;
 
         // ── CAPA BASE (pasto/tierra) a alpha COMPLETO ──────────────────────────
         // Se dibuja SIEMPRE a opacidad 1 para que no haya huecos transparentes.
@@ -661,13 +644,42 @@ window.draw = function() {
             C.fillStyle='rgba(0,0,0,0.3)'; C.fillRect(bx+w*0.42,y+h*0.215,2,2); C.fillRect(bx+6,y+h*0.24,w-12,1.5);
         }
 
-        if (ent.hp < ent.maxHp && (Date.now()-(ent.lastHitTime||0)<3000)) {
-            const pct=Math.max(0,ent.hp/ent.maxHp);
-            C.fillStyle='rgba(0,0,0,0.55)'; C.fillRect(ent.x,ent.y-9,ent.width,4);
-            const hc = pct>0.6?'#44dd44':(pct>0.3?'#f0a020':'#ee3333');
-            C.fillStyle=hc; C.fillRect(ent.x,ent.y-9,ent.width*pct,4);
-            C.strokeStyle='rgba(0,0,0,0.4)'; C.lineWidth=0.5;
-            C.strokeRect(ent.x,ent.y-9,ent.width,4);
+        // Barra de vida: visible siempre para enemigos hostiles, fade en pollos/sanos
+        {
+            const isHostile = ent.type !== 'chicken';
+            const timeSinceHit = Date.now() - (ent.lastHitTime || 0);
+            // Pollos: solo al golpear (3s). Hostiles: siempre visible, fade a 0.35 alfa si full hp
+            const pct = Math.max(0, ent.hp / ent.maxHp);
+            const showBar = isHostile || (ent.hp < ent.maxHp && timeSinceHit < 3000);
+            if (showBar) {
+                // Opacidad: plena si dañado reciente, reducida si HP llena y sin golpes
+                let barAlpha = 1.0;
+                if (pct >= 1 && timeSinceHit > 1500) barAlpha = Math.max(0.35, 1 - (timeSinceHit - 1500) / 3000);
+                const barW = Math.max(ent.width, 20);
+                const barX = ent.x + (ent.width - barW) / 2;
+                const barY = ent.y - 10;
+                C.save();
+                C.globalAlpha = barAlpha;
+                // Fondo
+                C.fillStyle = 'rgba(0,0,0,0.6)';
+                C.fillRect(barX - 1, barY - 1, barW + 2, 6);
+                // Relleno coloreado
+                const hc = pct > 0.6 ? '#44dd44' : (pct > 0.3 ? '#f0a020' : '#ee3333');
+                C.fillStyle = hc;
+                C.fillRect(barX, barY, barW * pct, 4);
+                // Borde
+                C.strokeStyle = 'rgba(0,0,0,0.5)';
+                C.lineWidth = 0.5;
+                C.strokeRect(barX, barY, barW, 4);
+                // Nombre del enemigo (solo hostiles, solo cuando no tiene vida completa o recién golpeado)
+                if (isHostile && (pct < 1 || timeSinceHit < 2000)) {
+                    C.font = '7px monospace';
+                    C.fillStyle = 'rgba(255,255,255,0.85)';
+                    C.textAlign = 'center';
+                    C.fillText(ent.name || ent.type, barX + barW / 2, barY - 2);
+                }
+                C.restore();
+            }
         }
 
         C.restore();
@@ -802,29 +814,8 @@ window.draw = function() {
     window.ctx.textAlign = 'left';
     window.ctx.globalAlpha = 1.0; 
 
-    if (window.game.isRaining) {
-        window.ctx.save(); window.ctx.strokeStyle = 'rgba(150, 180, 220, 0.5)'; window.ctx.lineWidth = 1; window.ctx.beginPath();
-        for(let i=0; i<300; i++) { let rx = (i * 137 + window.game.frameCount * 8) % window._canvasLogicW; let ry = (i * 93 + window.game.frameCount * 25) % window._canvasLogicH; window.ctx.moveTo(window.camera.x + rx, window.camera.y + ry); window.ctx.lineTo(window.camera.x + rx - 3, window.camera.y + ry + 25); }
-        window.ctx.stroke(); window.ctx.restore();
-        if (Math.random() < 0.005) { window.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; window.ctx.fillRect(window.camera.x, window.camera.y, window._canvasLogicW, window._canvasLogicH); }
-    }
 
-    // AMBIENT OCCLUSION: sombra en la base de objetos y bloques sobre el suelo
-    {
-        const _lGY_ao = window.getGroundY ? window.getGroundY(window.player.x) : window.game.groundLevel;
-        const _aoZ = window.game.zoom || 1;
-        const _aoW = window._canvasLogicW || 1280;
-        const _aoH = window._canvasLogicH || 720;
-        window.ctx.save();
-        window.ctx.translate(_aoW/2, _aoH/2); window.ctx.scale(_aoZ, _aoZ); window.ctx.translate(-_aoW/2, -_aoH/2); window.ctx.translate(-window.camera.x, -window.camera.y);
-        // Sombra suave debajo del suelo principal
-        const shadowGrad = window.ctx.createLinearGradient(0, _lGY_ao - 8, 0, _lGY_ao + 20);
-        shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
-        shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        window.ctx.fillStyle = shadowGrad;
-        window.ctx.fillRect(window.camera.x - 100, _lGY_ao - 8, _aoW / _aoZ + 200, 28);
-        window.ctx.restore();
-    }
+
 
     window.ctx.restore(); 
 
@@ -1132,45 +1123,35 @@ window.draw = function() {
         window.ctx.globalCompositeOperation = 'source-over';
     }
 
-    // 4. LLUVIA MEJORADA — capas con profundidad
+    // 4. LLUVIA — gotas diagonales simples y limpias
     if (window.game.isRaining) {
         const fc = window.game.frameCount;
-        // Capa lejana: fina, veloz, semitransparente
         window.ctx.save();
-        window.ctx.strokeStyle = 'rgba(160,195,230,0.25)';
-        window.ctx.lineWidth = 0.8;
+        // Gotas finas, diagonales, dos capas de velocidad
+        window.ctx.lineWidth = 1;
         window.ctx.beginPath();
-        for (let i = 0; i < 180; i++) {
-            const rx = ((i * 173 + fc * 6) % _ppW + _ppW) % _ppW;
-            const ry = ((i * 97  + fc * 22) % _ppH + _ppH) % _ppH;
-            window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 2, ry + 18);
+        window.ctx.strokeStyle = 'rgba(180,210,240,0.35)';
+        for (let i = 0; i < 200; i++) {
+            const rx = ((i * 173 + fc * 9) % (_ppW + 60)) - 30;
+            const ry = ((i * 97  + fc * 20) % _ppH);
+            window.ctx.moveTo(rx, ry);
+            window.ctx.lineTo(rx - 4, ry + 22);
         }
         window.ctx.stroke();
-        // Capa cercana: gruesa, lenta, más visible
-        window.ctx.strokeStyle = 'rgba(180,210,245,0.5)';
+        // Segunda capa más cercana / más visible
         window.ctx.lineWidth = 1.5;
+        window.ctx.strokeStyle = 'rgba(200,225,255,0.22)';
         window.ctx.beginPath();
         for (let i = 0; i < 80; i++) {
-            const rx = ((i * 311 + fc * 4) % _ppW + _ppW) % _ppW;
-            const ry = ((i * 153 + fc * 16) % _ppH + _ppH) % _ppH;
-            window.ctx.moveTo(rx, ry); window.ctx.lineTo(rx - 3, ry + 28);
+            const rx = ((i * 311 + fc * 5) % (_ppW + 60)) - 30;
+            const ry = ((i * 153 + fc * 14) % _ppH);
+            window.ctx.moveTo(rx, ry);
+            window.ctx.lineTo(rx - 5, ry + 30);
         }
         window.ctx.stroke();
-        // Salpicaduras en el suelo
-        window.ctx.globalAlpha = 0.15;
-        const _gY_rain = window.camera.y ? ((window.game.groundLevel - window.camera.y - _ppH/2) * (window.game.zoom||1) + _ppH/2) : _ppH * 0.72;
-        for (let i = 0; i < 30; i++) {
-            const sx = ((i * 457 + fc * 3) % _ppW + _ppW) % _ppW;
-            const sa = (fc * 0.3 + i * 0.4) % (Math.PI);
-            window.ctx.fillStyle = 'rgba(200,225,255,0.8)';
-            window.ctx.beginPath();
-            window.ctx.ellipse(sx, _gY_rain, 4 + Math.sin(sa)*2, 1.5, 0, 0, Math.PI*2);
-            window.ctx.fill();
-        }
-        window.ctx.globalAlpha = 1;
         window.ctx.restore();
-        // Tinte azul-gris en pantalla
-        window.ctx.fillStyle = 'rgba(60,80,110,0.06)';
+        // Tinte azul muy suave
+        window.ctx.fillStyle = 'rgba(40,60,90,0.04)';
         window.ctx.fillRect(0, 0, _ppW, _ppH);
     }
 

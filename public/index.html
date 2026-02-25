@@ -65,6 +65,55 @@
                 <h1 class="menu-title">SURVIVAL RPG</h1>
                 <p class="menu-subtitle">Alpha Multijugador</p>
 
+                <!-- ── SEMILLA DEL MUNDO ─────────────────────────── -->
+                <div id="seed-section" style="
+                    background: rgba(61,220,132,0.05);
+                    border: 1px solid rgba(61,220,132,0.18);
+                    border-radius: 8px;
+                    padding: 10px 14px;
+                    margin-bottom: 14px;
+                    font-family: var(--font-ui);
+                ">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:7px;">
+                        <span style="font-size:11px; color:#5a6475; letter-spacing:0.06em; text-transform:uppercase;">🌍 Semilla del Mundo</span>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <div style="
+                            flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(61,220,132,0.25);
+                            border-radius:6px; padding:7px 10px; display:flex; align-items:center; gap:6px;
+                        ">
+                            <span style="font-size:11px; color:#5a6475;">Código:</span>
+                            <span id="seed-display" style="
+                                font-family: monospace; font-size:17px; font-weight:700;
+                                letter-spacing:0.15em; color:#3ddc84;
+                            ">-----</span>
+                        </div>
+                        <button id="btn-copy-seed" onclick="window.copySeedCode()" style="
+                            background:rgba(61,220,132,0.08); border:1px solid rgba(61,220,132,0.25);
+                            color:#3ddc84; border-radius:6px; padding:7px 10px; cursor:pointer;
+                            font-size:12px; font-family:var(--font-ui);
+                        " title="Copiar código">📋</button>
+                        <button id="btn-new-seed" onclick="window.resetSeed()" style="
+                            background:rgba(240,160,48,0.08); border:1px solid rgba(240,160,48,0.25);
+                            color:#f0a030; border-radius:6px; padding:7px 10px; cursor:pointer;
+                            font-size:12px; font-family:var(--font-ui);
+                        " id="btn-new-seed" title="Nueva semilla (solo sin jugadores)">🔄</button>
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:7px;">
+                        <input type="text" id="seed-input" class="menu-input" 
+                               style="margin-bottom:0; flex:1; padding:7px 10px; font-family:monospace; 
+                                      letter-spacing:0.1em; text-transform:uppercase; font-size:13px;"
+                               placeholder="Ingresar código de semilla…" maxlength="8">
+                        <button onclick="window.loadSeedCode()" style="
+                            background:rgba(91,180,245,0.08); border:1px solid rgba(91,180,245,0.25);
+                            color:#5bb4f5; border-radius:6px; padding:7px 12px; cursor:pointer;
+                            font-size:12px; font-family:var(--font-ui); white-space:nowrap;
+                        ">Aplicar</button>
+                    </div>
+                    <div id="seed-status" style="font-size:10px; color:#5a6475; margin-top:4px; min-height:14px; font-family:var(--font-ui);"></div>
+                </div>
+                <!-- ─────────────────────────────────────────────── -->
+
                 <input type="text" id="player-name" class="menu-input"
                        placeholder="Tu nombre de superviviente…" maxlength="15">
 
