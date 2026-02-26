@@ -38,7 +38,6 @@
             setTimeout(() => { status.textContent = ''; }, ms);
         };
 
-        // Si hay un servidor online activo, usar la API
         if (window.game && window.game.isMultiplayer && window.socket) {
             setStatus('⏳ Contactando servidor…', '#f0a030', 8000);
             try {
@@ -53,7 +52,6 @@
                     setStatus(`⚠️ ${json.error || 'Error del servidor'}`, '#f0a030');
                     return;
                 }
-                // Aplicar la semilla devuelta por el servidor
                 if (window.setSeedFromCode) window.setSeedFromCode(json.seed);
                 localStorage.setItem('worldSeedCode', window.seedCode);
                 updateSeedDisplay();
@@ -64,7 +62,6 @@
             return;
         }
 
-        // Modo local / antes de conectar
         if (specificCode && window.setSeedFromCode && window.setSeedFromCode(specificCode)) {
             localStorage.setItem('worldSeedCode', window.seedCode);
         } else if (window.generateSeed) {
@@ -75,13 +72,11 @@
         setStatus(`🌍 Nueva semilla: ${window.seedCode}`, '#3ddc84');
     };
 
-    // Cargar/generar semilla al cargar la página
     const saved = localStorage.getItem('worldSeedCode');
     if (saved && window.setSeedFromCode) window.setSeedFromCode(saved);
     else if (window.generateSeed) { window.generateSeed(); localStorage.setItem('worldSeedCode', window.seedCode); }
     updateSeedDisplay();
 
-    // Enter en seed-input
     document.getElementById('seed-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') window.loadSeedCode(); });
 })();
 // ────────────────────────────────────────────────────────────
@@ -206,7 +201,6 @@ window.toggleMenu = function(mName) {
     }); 
     window.updateUI();
     
-    // FIX: Esconder el tooltip fantasma siempre que cambie la UI
     let gt = document.getElementById('global-tooltip');
     if (gt) gt.style.display = 'none';
 };
@@ -219,7 +213,8 @@ window.eatFood = function(hpG, hunG) {
 window.invItemClick = function(type) {
     if (type === 'meat') window.eatFood(15, 30); 
     else if (type === 'cooked_meat') window.eatFood(30, 60);
-    else if (['boxes', 'campfire_item', 'bed_item'].includes(type) || window.toolDefs[type]) { 
+    // --- CORRECCIÓN ESCALERA Y BARRICADA (Añadidas a la lista interactiva) ---
+    else if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(type) || window.toolDefs[type]) { 
         if (typeof window.autoEquip === 'function') window.autoEquip(type); window.toggleMenu('inventory'); 
     }
 };
@@ -568,7 +563,11 @@ window.updateUI = function() {
 
     checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
     checkBtn('req-barricade', 'btn-craft-barricade', 8, 4, 0, 0, null);
-    checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null);
+    checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null); 
+    // --- CORRECCIÓN BOTÓN ESCALERA (Enlazando ambos IDs posibles) ---
+    checkBtn('req-ladder', 'btn-craft-ladder', 6, 0, 0, 0, null);
+    checkBtn('req-ladder', 'btn-craft-ladder1', 6, 0, 0, 0, null);
+    
     ['btn-craft-arrow','btn-craft-arrow2','btn-craft-arrow5','btn-craft-arrow10'].forEach((id,i)=>{ let c=[5,10,25,50][i]; let b = window.getEl(id); if(b) b.disabled = window.player.inventory.wood < c; });
 };
 
@@ -596,7 +595,8 @@ window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
         else if(item) { 
             if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
             window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
-            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
+            // --- CORRECCIÓN ESCALERA Y BARRICADA AL FABRICAR (Equipado automático) ---
+            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
         }
         window.updateUI(); if(typeof window.renderToolbar === 'function') window.renderToolbar();
     }
@@ -616,13 +616,16 @@ window.bindCraft('btn-craft-arrow2', () => window.craftItem(10, 0, 0, 0, null, '
 window.bindCraft('btn-craft-arrow5', () => window.craftItem(25, 0, 0, 0, null, 'arrows', 5)); 
 window.bindCraft('btn-craft-arrow10', () => window.craftItem(50, 0, 0, 0, null, 'arrows', 10));
 window.bindCraft('btn-craft-barricade', () => window.craftItem(8, 4, 0, 0, null, 'barricade_item', 1));
+// --- CORRECCIÓN EVENTOS DE BOTÓN (Mapeamos los dos posibles IDs del HTML) ---
+window.bindCraft('btn-craft-ladder', () => window.craftItem(6, 0, 0, 0, null, 'ladder_item', 1));
+window.bindCraft('btn-craft-ladder1', () => window.craftItem(6, 0, 0, 0, null, 'ladder_item', 1));
+window.bindCraft('btn-craft-ladder5', () => window.craftItem(30, 0, 0, 0, null, 'ladder_item', 5));
 
 // === SISTEMA GLOBAL DE TOOLTIPS (CON ESTILOS INYECTADOS) ===
 document.addEventListener('DOMContentLoaded', () => {
     let gt = document.createElement('div');
     gt.id = 'global-tooltip';
     
-    // INYECTAMOS TODOS LOS ESTILOS POR DEFECTO PARA ASEGURARNOS QUE SE VEAN BIEN
     gt.style.position = 'fixed'; 
     gt.style.pointerEvents = 'none';
     gt.style.display = 'none';
@@ -653,7 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gt.style.display === 'block') {
             gt.style.left = e.clientX + 'px';
             gt.style.top = (e.clientY + 20) + 'px'; 
-            gt.style.transform = 'translateX(-50%)'; // Esto lo centra horizontalmente
+            gt.style.transform = 'translateX(-50%)'; 
         }
     });
     

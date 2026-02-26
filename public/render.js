@@ -1,6 +1,6 @@
 // === render.js - LÓGICA DE DIBUJADO Y RIGGING ===
 
-window.initRenderCaches = function() {}; // Desactivado ya que usamos sprites
+window.initRenderCaches = function() {}; 
 
 window.roundRect = function(ctx, x, y, width, height, radius) {
     ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius); ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius); ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath(); ctx.fill();
@@ -9,12 +9,10 @@ window.roundRect = function(ctx, x, y, width, height, radius) {
 window.drawCharacter = function(charData, isLocal) {
     if (!window.ctx) return;
 
-    // === ANIMACIÓN DE MUERTE ===
     if (charData.isDead) {
-        // Solo mostrar si tiene frames de animación activos (o siempre para otros jugadores)
         const daf = charData.deathAnimFrame !== undefined ? charData.deathAnimFrame : 0;
-        if (daf <= 0 && !isLocal) return; // otros jugadores muertos no se ven
-        if (isLocal && daf <= 0) return;  // jugador local: solo durante animación
+        if (daf <= 0 && !isLocal) return; 
+        if (isLocal && daf <= 0) return;  
 
         window.ctx.save();
         const pCX = charData.x + (charData.width || 24) / 2;
@@ -22,37 +20,25 @@ window.drawCharacter = function(charData, isLocal) {
         window.ctx.translate(pCX, pCY);
         if (!charData.facingRight) window.ctx.scale(-1, 1);
 
-        // Rotación caída: empieza en 0, llega a -PI/2 (tumbado) en 40 frames
         const maxFrames = 40;
         const t = Math.max(0, Math.min(1, 1 - daf / maxFrames));
         const fallAngle = t * (-Math.PI / 2);
-        const fallY = t * 20; // cuerpo baja mientras cae
+        const fallY = t * 20; 
 
         window.ctx.translate(0, fallY);
         window.ctx.rotate(fallAngle);
 
-        // Dibujar cuerpo simple tumbado (versión reducida)
         window.ctx.globalAlpha = Math.max(0.4, 1 - t * 0.4);
         const skin = '#cc8855'; const shirt = isLocal ? '#1a5c8a' : '#404040';
-        // Piernas
-        window.ctx.fillStyle = '#1a252f';
-        window.roundRect(window.ctx, -12, -10, 24, 10, 3);
-        // Torso
-        window.ctx.fillStyle = shirt;
-        window.roundRect(window.ctx, -10, -30, 20, 22, 5);
-        // Cabeza
-        window.ctx.fillStyle = skin;
-        window.roundRect(window.ctx, -9, -48, 18, 18, 7);
-        // X en los ojos
+        window.ctx.fillStyle = '#1a252f'; window.roundRect(window.ctx, -12, -10, 24, 10, 3);
+        window.ctx.fillStyle = shirt; window.roundRect(window.ctx, -10, -30, 20, 22, 5);
+        window.ctx.fillStyle = skin; window.roundRect(window.ctx, -9, -48, 18, 18, 7);
         window.ctx.strokeStyle = '#333'; window.ctx.lineWidth = 1.5;
         window.ctx.beginPath();
-        window.ctx.moveTo(-3, -42); window.ctx.lineTo(-1, -40);
-        window.ctx.moveTo(-1, -42); window.ctx.lineTo(-3, -40);
-        window.ctx.moveTo(3, -42); window.ctx.lineTo(5, -40);
-        window.ctx.moveTo(5, -42); window.ctx.lineTo(3, -40);
+        window.ctx.moveTo(-3, -42); window.ctx.lineTo(-1, -40); window.ctx.moveTo(-1, -42); window.ctx.lineTo(-3, -40);
+        window.ctx.moveTo(3, -42); window.ctx.lineTo(5, -40); window.ctx.moveTo(5, -42); window.ctx.lineTo(3, -40);
         window.ctx.stroke();
-        window.ctx.globalAlpha = 1;
-        window.ctx.restore();
+        window.ctx.globalAlpha = 1; window.ctx.restore();
         return;
     }
     window.ctx.save();
@@ -100,21 +86,13 @@ window.drawCharacter = function(charData, isLocal) {
     }
 
     let aimAngle = 0;
-    // === BAILE (/dance) ===
     if (charData.isDancing) {
         const dt = (window.game.frameCount - (charData.danceStart || 0)) * 0.07;
-        // Cumbia / shuffle gracioso: brazos asimétricos, rodillas levantadas, cuerpo ladeado
-        legR   =  Math.sin(dt * 2.1) * 1.2;
-        kneeR  =  Math.max(0, Math.sin(dt * 2.1 - 0.8) * 1.8);
-        legL   =  Math.sin(dt * 2.1 + Math.PI) * 1.2;
-        kneeL  =  Math.max(0, Math.sin(dt * 2.1 + Math.PI - 0.8) * 1.8);
-        armR   = -Math.PI * 0.5 + Math.sin(dt * 1.7) * 0.9;
-        elbowR =  Math.cos(dt * 2.3) * 0.7 - 0.3;
-        armL   = -Math.PI * 0.3 + Math.sin(dt * 1.7 + Math.PI) * 0.9;
-        elbowL =  Math.cos(dt * 2.3 + Math.PI) * 0.7 - 0.3;
-        torsoR =  Math.sin(dt * 1.4) * 0.25;
-        headR  =  Math.sin(dt * 0.9 + 0.5) * 0.18;
-        bob    =  Math.abs(Math.sin(dt * 2.1)) * 6;
+        legR   =  Math.sin(dt * 2.1) * 1.2; kneeR  =  Math.max(0, Math.sin(dt * 2.1 - 0.8) * 1.8);
+        legL   =  Math.sin(dt * 2.1 + Math.PI) * 1.2; kneeL  =  Math.max(0, Math.sin(dt * 2.1 + Math.PI - 0.8) * 1.8);
+        armR   = -Math.PI * 0.5 + Math.sin(dt * 1.7) * 0.9; elbowR =  Math.cos(dt * 2.3) * 0.7 - 0.3;
+        armL   = -Math.PI * 0.3 + Math.sin(dt * 1.7 + Math.PI) * 0.9; elbowL =  Math.cos(dt * 2.3 + Math.PI) * 0.7 - 0.3;
+        torsoR =  Math.sin(dt * 1.4) * 0.25; headR  =  Math.sin(dt * 0.9 + 0.5) * 0.18; bob    =  Math.abs(Math.sin(dt * 2.1)) * 6;
     } else if (charData.activeTool === 'torch') {
         armR = -Math.PI / 2.5; elbowR = -0.3; 
     } else if (charData.activeTool === 'bow' && charData.isAiming) {
@@ -143,9 +121,7 @@ window.drawCharacter = function(charData, isLocal) {
         let pull = charData.isAiming ? ((charData.chargeLevel || 0) / 100) * 15 : 0; window.ctx.strokeStyle = '#eee'; window.ctx.lineWidth = 1; window.ctx.beginPath(); window.ctx.moveTo(4.6, -14.2); window.ctx.lineTo(4.6 - pull, 0); window.ctx.lineTo(4.6, 14.2); window.ctx.stroke();
         if (charData.isCharging && (isLocal ? charData.inventory.arrows > 0 : true)) { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(4.6 - pull, -1, 20 + pull, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(4.6 - pull + 20 + pull, -2, 4, 4); }
     } else if (charData.activeTool === 'torch') {
-        window.ctx.rotate(Math.PI/2); 
-        window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 25);
-        let fSize = 5 + Math.random() * 3;
+        window.ctx.rotate(Math.PI/2); window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 25); let fSize = 5 + Math.random() * 3;
         window.ctx.fillStyle = charData.inBackground ? '#888' : '#e67e22'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize, 0, Math.PI*2); window.ctx.fill();
         window.ctx.fillStyle = charData.inBackground ? '#aaa' : '#f1c40f'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize*0.6, 0, Math.PI*2); window.ctx.fill();
     } else if (charData.activeTool && charData.activeTool !== 'hand') {
@@ -169,14 +145,15 @@ window.draw = function() {
     let currentUptime = window.game.serverStartTime ? (Date.now() - window.game.serverStartTime) : (window.game.frameCount * (1000/60));
     let totalFrames = Math.floor(currentUptime / (1000 / 60)) + 28800; 
     let hourFloat = (totalFrames / 3600) % 24; 
-    let darkness = (Math.cos((hourFloat / 24) * Math.PI * 2) + 1) / 2;
+    
+    // El día brillante (Darkness en 0 la mayor parte del día)
+    let rawDarkness = (Math.cos((hourFloat / 24) * Math.PI * 2) + 1) / 2;
+    let darkness = Math.max(0, (rawDarkness - 0.25) * 1.4); 
 
-    // Cielo: día más brillante (base más alta), noche menos oscura (mínimo elevado)
-    // darkness: 0=mediodía, 1=medianoche
-    let r = Math.floor(165 - (148 * darkness));   // día: 165, noche: 17
-    let g = Math.floor(220 - (202 * darkness));   // día: 220, noche: 18
-    let b = Math.floor(255 - (225 * darkness));   // día: 255, noche: 30
-    // Noche: añadir tinte azul marino suave (no negro puro)
+    let r = Math.floor(165 - (148 * darkness));
+    let g = Math.floor(220 - (202 * darkness));
+    let b = Math.floor(255 - (225 * darkness));
+    
     if (darkness > 0.6) {
         const nightBlend = (darkness - 0.6) / 0.4;
         r = Math.max(r, Math.floor(8  + 22 * (1-nightBlend)));
@@ -187,429 +164,119 @@ window.draw = function() {
 
     let skyGrad = window.ctx.createLinearGradient(0, 0, 0, window.game.groundLevel);
     if (darkness < 0.3) {
-        // Día claro: cielo azul brillante con horizonte más cálido
-        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(0.5, `rgb(${Math.min(255,r+18)},${Math.min(255,g+12)},${Math.min(255,b+5)})`);
-        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+50)},${Math.min(255,g+38)},${Math.min(255,b+18)})`);
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`); skyGrad.addColorStop(0.5, `rgb(${Math.min(255,r+18)},${Math.min(255,g+12)},${Math.min(255,b+5)})`); skyGrad.addColorStop(1, `rgb(${Math.min(255,r+50)},${Math.min(255,g+38)},${Math.min(255,b+18)})`);
     } else if (darkness < 0.6) {
-        // Amanecer/atardecer: tonos cálidos en horizonte
-        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(0.4, `rgb(${Math.min(255,r+50)},${Math.min(255,g+30)},${Math.min(255,b-15)})`);
-        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+100)},${Math.min(255,g+55)},${Math.min(255,b-10)})`);
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`); skyGrad.addColorStop(0.4, `rgb(${Math.min(255,r+50)},${Math.min(255,g+30)},${Math.min(255,b-15)})`); skyGrad.addColorStop(1, `rgb(${Math.min(255,r+100)},${Math.min(255,g+55)},${Math.min(255,b-10)})`);
     } else {
-        // Noche: gradiente sutil azul oscuro→ azul marino
-        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(0.5, `rgb(${Math.max(0,r+8)},${Math.max(0,g+8)},${Math.max(0,b+18)})`);
-        skyGrad.addColorStop(1, `rgb(${Math.max(0,r+14)},${Math.max(0,g+12)},${Math.max(0,b+28)})`);
+        skyGrad.addColorStop(0, `rgb(${r},${g},${b})`); skyGrad.addColorStop(0.5, `rgb(${Math.max(0,r+8)},${Math.max(0,g+8)},${Math.max(0,b+18)})`); skyGrad.addColorStop(1, `rgb(${Math.max(0,r+14)},${Math.max(0,g+12)},${Math.max(0,b+28)})`);
     }
-    window.ctx.fillStyle = skyGrad;
-    window.ctx.fillRect(0, 0, W, H);
-
+    window.ctx.fillStyle = skyGrad; window.ctx.fillRect(0, 0, W, H);
 
     window.ctx.save(); 
-    if (window.game.screenShake > 0) {
-        let dx = (Math.random() - 0.5) * window.game.screenShake;
-        let dy = (Math.random() - 0.5) * window.game.screenShake;
-        window.ctx.translate(dx, dy);
-    }
+    if (window.game.screenShake > 0) { let dx = (Math.random() - 0.5) * window.game.screenShake; let dy = (Math.random() - 0.5) * window.game.screenShake; window.ctx.translate(dx, dy); }
     
     if (darkness > 0.45 && !window.game.isRaining) {
         let starAlpha = Math.min(1, (darkness - 0.45) * 3);
-        window.stars.forEach(st => {
-            let twinkle = 0.5 + 0.5 * Math.sin(window.game.frameCount * 0.05 + st.x * 0.1);
-            window.ctx.globalAlpha = starAlpha * (0.6 + 0.4 * twinkle);
-            window.ctx.fillStyle = '#fff';
-            window.ctx.fillRect(st.x, st.y, st.s * 0.8, st.s * 0.8);
-        });
+        window.stars.forEach(st => { let twinkle = 0.5 + 0.5 * Math.sin(window.game.frameCount * 0.05 + st.x * 0.1); window.ctx.globalAlpha = starAlpha * (0.6 + 0.4 * twinkle); window.ctx.fillStyle = '#fff'; window.ctx.fillRect(st.x, st.y, st.s * 0.8, st.s * 0.8); });
         window.ctx.globalAlpha = 1;
     }
 
-    // --- NUEVO SISTEMA DE SOL CON SPRITES + BLOOM ---
     if (hourFloat > 5 && hourFloat < 19) {
-        let dayProgress = (hourFloat - 5) / 14;
-        let sunX = W * dayProgress;
-        let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7);
-        
-        // Bloom: halo radial multicapa
-        const sunPulse = 1 + Math.sin(window.game.frameCount * 0.02) * 0.04;
-        for (let r = 140; r >= 20; r -= 20) {
-            const a = 0.03 * (1 - r/160) * sunPulse;
-            const glowGrad = window.ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, r * 2.5);
-            glowGrad.addColorStop(0, `rgba(255,240,100,${a * 3})`);
-            glowGrad.addColorStop(0.4, `rgba(255,200,50,${a})`);
-            glowGrad.addColorStop(1, 'rgba(255,180,0,0)');
-            window.ctx.fillStyle = glowGrad;
-            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, r * 2.5, 0, Math.PI*2); window.ctx.fill();
-        }
-
+        let dayProgress = (hourFloat - 5) / 14; let sunX = W * dayProgress; let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7); const sunPulse = 1 + Math.sin(window.game.frameCount * 0.02) * 0.04;
+        for (let r = 140; r >= 20; r -= 20) { const a = 0.03 * (1 - r/160) * sunPulse; const glowGrad = window.ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, r * 2.5); glowGrad.addColorStop(0, `rgba(255,240,100,${a * 3})`); glowGrad.addColorStop(0.4, `rgba(255,200,50,${a})`); glowGrad.addColorStop(1, 'rgba(255,180,0,0)'); window.ctx.fillStyle = glowGrad; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, r * 2.5, 0, Math.PI*2); window.ctx.fill(); }
         let sunSize = 140;
-        if (window.sprites.sprite_sun && window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) {
-            window.ctx.drawImage(window.sprites.sprite_sun, sunX - sunSize/2, sunY - sunSize/2, sunSize, sunSize);
-        } else {
-            window.ctx.fillStyle = '#FFE566';
-            window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill();
-        }
+        if (window.sprites.sprite_sun && window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) { window.ctx.drawImage(window.sprites.sprite_sun, sunX - sunSize/2, sunY - sunSize/2, sunSize, sunSize); } 
+        else { window.ctx.fillStyle = '#FFE566'; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill(); }
     }
 
-    // --- NUEVO SISTEMA DE LUNA CON SPRITES + BLOOM ---
     if (hourFloat >= 17 || hourFloat <= 7) {
-        let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14;
-        let moonX = W * nightProgress;
-        let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7);
-        
-        // Bloom suave plateado para la luna
-        const moonPulse = 1 + Math.sin(window.game.frameCount * 0.015 + 1.5) * 0.05;
-        for (let r = 100; r >= 15; r -= 15) {
-            const a = 0.025 * (1 - r/110) * moonPulse;
-            const moonGrad = window.ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, r * 2.8);
-            moonGrad.addColorStop(0, `rgba(200,220,255,${a * 4})`);
-            moonGrad.addColorStop(0.4, `rgba(170,200,240,${a})`);
-            moonGrad.addColorStop(1, 'rgba(140,170,220,0)');
-            window.ctx.fillStyle = moonGrad;
-            window.ctx.beginPath(); window.ctx.arc(moonX, moonY, r * 2.8, 0, Math.PI*2); window.ctx.fill();
-        }
-
+        let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14; let moonX = W * nightProgress; let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7); const moonPulse = 1 + Math.sin(window.game.frameCount * 0.015 + 1.5) * 0.05;
+        for (let r = 100; r >= 15; r -= 15) { const a = 0.025 * (1 - r/110) * moonPulse; const moonGrad = window.ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, r * 2.8); moonGrad.addColorStop(0, `rgba(200,220,255,${a * 4})`); moonGrad.addColorStop(0.4, `rgba(170,200,240,${a})`); moonGrad.addColorStop(1, 'rgba(140,170,220,0)'); window.ctx.fillStyle = moonGrad; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, r * 2.8, 0, Math.PI*2); window.ctx.fill(); }
         let moonSize = 120;
-        if (window.sprites.sprite_moon && window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) {
-            window.ctx.drawImage(window.sprites.sprite_moon, moonX - moonSize/2, moonY - moonSize/2, moonSize, moonSize);
-        } else {
-            window.ctx.fillStyle = '#E8EEE0';
-            window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill();
-        }
+        if (window.sprites.sprite_moon && window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) { window.ctx.drawImage(window.sprites.sprite_moon, moonX - moonSize/2, moonY - moonSize/2, moonSize, moonSize); } 
+        else { window.ctx.fillStyle = '#E8EEE0'; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill(); }
     }
 
-    // --- NUEVO SISTEMA DE NUBES CON SPRITES ---
     window.clouds.forEach(c => {
-        c.x += c.v; if (c.x > W + 150) c.x = -150;
-        let cloudAlpha = window.game.isRaining ? 0.75 : Math.max(0, 0.7 * (1 - darkness * 1.2));
-        if (cloudAlpha <= 0) return;
-        
-        window.ctx.save();
-        window.ctx.globalAlpha = cloudAlpha;
-        
-        // Si llueve, oscurecemos la textura de la nube nativamente
-        if (window.game.isRaining) {
-            window.ctx.filter = 'brightness(45%)';
-        }
-
-        if (window.sprites.sprite_cloud.complete && window.sprites.sprite_cloud.naturalWidth > 0) {
-            // Escalamos la textura usando c.s (el factor de tamaño aleatorio que ya tenías)
-            let cW = 200 * c.s; 
-            let cH = 100 * c.s;
-            window.ctx.drawImage(window.sprites.sprite_cloud, c.x, c.y - cH/2, cW, cH);
-        } else {
-            // Fallback si no hay sprite
-            window.ctx.fillStyle = 'rgba(255,255,255,0.8)';
-            window.ctx.beginPath(); window.ctx.arc(c.x, c.y, 28*c.s, 0, Math.PI*2); window.ctx.fill();
-        }
+        c.x += c.v; if (c.x > W + 150) c.x = -150; let cloudAlpha = window.game.isRaining ? 0.75 : Math.max(0, 0.7 * (1 - darkness * 1.2)); if (cloudAlpha <= 0) return;
+        window.ctx.save(); window.ctx.globalAlpha = cloudAlpha;
+        if (window.game.isRaining) { window.ctx.filter = 'brightness(45%)'; }
+        if (window.sprites.sprite_cloud.complete && window.sprites.sprite_cloud.naturalWidth > 0) { let cW = 200 * c.s; let cH = 100 * c.s; window.ctx.drawImage(window.sprites.sprite_cloud, c.x, c.y - cH/2, cW, cH); } 
+        else { window.ctx.fillStyle = 'rgba(255,255,255,0.8)'; window.ctx.beginPath(); window.ctx.arc(c.x, c.y, 28*c.s, 0, Math.PI*2); window.ctx.fill(); }
         window.ctx.restore();
     });
 
-    // --- FONDOS DE MONTAÑAS CON SPRITES (PARALLAX HORIZONTAL + VERTICAL) ---
-    const bgW = 1280;
-    const bgBackH = 500;
-    const bgMidH  = 350;
-
-    // Parallax horizontal: capas lentas según profundidad
-    let backX = -(window.camera.x * 0.05) % bgW;
-    if (backX > 0) backX -= bgW;
-    let midX = -(window.camera.x * 0.15) % bgW;
-    if (midX > 0) midX -= bgW;
-
-    // Parallax vertical: la cámara Y mueve las montañas en dirección opuesta
+    const bgW = 1280; const bgBackH = 500; const bgMidH  = 350;
+    let backX = -(window.camera.x * 0.05) % bgW; if (backX > 0) backX -= bgW;
+    let midX = -(window.camera.x * 0.15) % bgW; if (midX > 0) midX -= bgW;
     const camYOffset = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
     const backY = window.game.groundLevel - bgBackH + 80 + camYOffset * 0.06;
     const midY  = window.game.groundLevel - bgMidH  + 30 + camYOffset * 0.12;
 
-    // Tintado nocturno: oscurecer montañas según darkness
     const bgDimAlpha = darkness * 0.55;
 
-    // Capa Lejana
-    if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
-        for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
-            window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), backY, bgW, bgBackH);
-        }
-    }
-    // Overlay nocturno capa lejana
-    if (bgDimAlpha > 0.04) {
-        window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`;
-        window.ctx.fillRect(0, backY, W, bgBackH);
-    }
+    if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) { for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) { window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), backY, bgW, bgBackH); } }
+    if (bgDimAlpha > 0.04) { window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`; window.ctx.fillRect(0, backY, W, bgBackH); }
 
-    // Capa Intermedia
-    if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
-        for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
-            window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), midY, bgW, bgMidH);
-        }
-    }
-    // Overlay nocturno capa intermedia
-    if (bgDimAlpha > 0.04) {
-        window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`;
-        window.ctx.fillRect(0, midY, W, bgMidH);
-    }
-    // -------------------------------------------------------------------------
+    if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) { for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) { window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), midY, bgW, bgMidH); } }
+    if (bgDimAlpha > 0.04) { window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`; window.ctx.fillRect(0, midY, W, bgMidH); }
 
-    // --- ZOOM: aplicar transformación centrada en canvas ---
+
     const z = window.game.zoom || 1;
     window.ctx.save();
-    window.ctx.translate(W / 2, H / 2);
-    window.ctx.scale(z, z);
-    window.ctx.translate(-W / 2, -H / 2);
-    window.ctx.translate(-window.camera.x, -window.camera.y);
+    window.ctx.translate(W / 2, H / 2); window.ctx.scale(z, z); window.ctx.translate(-W / 2, -H / 2); window.ctx.translate(-window.camera.x, -window.camera.y);
 
-    const bs = window.game.blockSize; // 30px — granularidad del terreno
-    const _visHalfW = (W / 2) / z;  // mitad del ancho visible en coords de mundo
+    const step = 15; 
+    const _visHalfW = (W / 2) / z;  
     const _visCenterX = window.camera.x + W / 2;
     const _visLeft  = _visCenterX - _visHalfW;
     const _visRight = _visCenterX + _visHalfW;
-    const _visHalfH = (H / 2) / z;
-    const startX = Math.max(Math.floor((_visLeft - 60) / bs) * bs, Math.floor(window.game.shoreX / bs) * bs);
-    const endX   = Math.ceil((_visRight + 60) / bs) * bs + bs;
-    const bottomY = window.camera.y + H / z + 60;
+    
+    const startX = Math.floor((_visLeft - 100) / step) * step;
+    const endX   = Math.ceil((_visRight + 100) / step) * step;
+    const bottomY = window.camera.y + H / z + 200;
 
-    // === TERRENO DINÁMICO POR COLUMNAS CON SISTEMA DE SLOPES ===
-    for (let px = startX; px < endX; px += bs) {
-        const colCenterX = px + bs / 2;
-        const gY = window.getGroundY ? window.getGroundY(px) : window.game.groundLevel;
-        // Revisar la altura del SIGUIENTE bloque para decidir si dibujamos una rampa
-        const gY_next = window.getGroundY ? window.getGroundY(px + bs) : gY;
+    if (!window.hitCanvas) { window.hitCanvas = document.createElement('canvas'); window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true }); }
 
-        // Bioma: desierto — posición y ancho controlados por semilla
-        const _dStart = (window.game.desertStart || 2600) + window.game.shoreX;
-        const _dWidth = window.game.desertWidth || 800;
-        let desertAlpha = 0;
-        if (colCenterX > _dStart + _dWidth) desertAlpha = 1;
-        else if (colCenterX > _dStart) desertAlpha = (colCenterX - _dStart) / _dWidth;
+    // =========================================================================
+    // DIBUJAR BLOQUES, ROCAS Y ÁRBOLES ANTES DEL TERRENO (Z-INDEX TRICK)
+    // Así el pasto curvo tapa la parte plana y cuadrada de abajo.
+    // =========================================================================
 
-        // Determinamos si es plano, subida o bajada
-        let slopeType = 'flat';
-        if (gY_next < gY) slopeType = 'up';        // Sube /
-        else if (gY_next > gY) slopeType = 'down'; // Baja \
-
-        // ── CAPA BASE (pasto/tierra o slopes) a alpha COMPLETO ──────────────────
-        window.ctx.globalAlpha = 1;
-
-        if (slopeType === 'up') {
-             const slopeImg = desertAlpha > 0.5 ? window.sprites.tile_sand_slope_up : window.sprites.tile_grass_slope_up;
-             if (slopeImg && slopeImg.complete && slopeImg.naturalWidth > 0) {
-                 window.ctx.drawImage(slopeImg, px, gY_next, bs + 1, gY - gY_next + 30);
-             } else {
-                 // Fallback si no hay textura
-                 window.ctx.fillStyle = desertAlpha > 0.5 ? '#e6c280' : '#528c2a';
-                 window.ctx.beginPath(); window.ctx.moveTo(px, gY); window.ctx.lineTo(px + bs, gY_next); window.ctx.lineTo(px + bs, gY + 30); window.ctx.lineTo(px, gY + 30); window.ctx.fill();
-             }
-        } else if (slopeType === 'down') {
-             const slopeImg = desertAlpha > 0.5 ? window.sprites.tile_sand_slope_down : window.sprites.tile_grass_slope_down;
-             if (slopeImg && slopeImg.complete && slopeImg.naturalWidth > 0) {
-                 window.ctx.drawImage(slopeImg, px, gY, bs + 1, gY_next - gY + 30);
-             } else {
-                 window.ctx.fillStyle = desertAlpha > 0.5 ? '#e6c280' : '#528c2a';
-                 window.ctx.beginPath(); window.ctx.moveTo(px, gY); window.ctx.lineTo(px + bs, gY_next); window.ctx.lineTo(px + bs, gY_next + 30); window.ctx.lineTo(px, gY + 30); window.ctx.fill();
-             }
-        } else {
-            const fImg = window.sprites.tile_grass_top;
-            if (fImg && fImg.complete && fImg.naturalWidth > 0) {
-                window.ctx.drawImage(fImg, px, gY, bs + 1, 64);
-            } else {
-                window.ctx.fillStyle = '#528c2a';
-                window.ctx.fillRect(px, gY, bs + 1, 20);
+    window.blocks.forEach(b => {
+        if (b.x + window.game.blockSize > _visLeft && b.x < _visRight + 120) {
+            if (b.type === 'block') {
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
+                if (!b.isHit) { window.ctx.fillStyle = 'rgba(255,255,255,0.12)'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, 4); window.ctx.fillStyle = 'rgba(0,0,0,0.22)'; window.ctx.fillRect(b.x, b.y + window.game.blockSize - 5, window.game.blockSize, 5); window.ctx.fillStyle = 'rgba(0,0,0,0.1)'; window.ctx.fillRect(b.x + window.game.blockSize - 4, b.y, 4, window.game.blockSize); }
+                window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
+            } else if (b.type === 'door') {
+                if (b.open) { window.ctx.fillStyle = '#3a2518'; window.ctx.fillRect(b.x + 12, b.y, 6, window.game.blockSize * 2); } 
+                else { window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x + 4, b.y, 22, window.game.blockSize * 2); window.ctx.fillStyle = '#FFD700'; window.ctx.fillRect(b.x + 20, b.y + window.game.blockSize, 4, 4); }
+            } else if (b.type === 'box') {
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x + 2, b.y + 10, window.game.blockSize - 4, window.game.blockSize - 10); window.ctx.fillStyle = '#C19A6B'; window.ctx.fillRect(b.x, b.y + 10, window.game.blockSize, 4); window.ctx.fillStyle = '#333'; window.ctx.fillRect(b.x + window.game.blockSize/2 - 2, b.y + 12, 4, 6);
+            } else if (b.type === 'campfire') {
+                window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(b.x + 2, b.y + 20, 26, 10); window.ctx.fillStyle = '#3e2723'; window.ctx.fillRect(b.x + 10, b.y + 15, 10, 15);
+                if (b.isBurning) { window.ctx.fillStyle = '#e67e22'; window.ctx.beginPath(); window.ctx.moveTo(b.x+5, b.y+20); window.ctx.lineTo(b.x+15, b.y+Math.random()*10); window.ctx.lineTo(b.x+25, b.y+20); window.ctx.fill(); window.ctx.fillStyle = '#f1c40f'; window.ctx.beginPath(); window.ctx.moveTo(b.x+10, b.y+20); window.ctx.lineTo(b.x+15, b.y+10+Math.random()*5); window.ctx.lineTo(b.x+20, b.y+20); window.ctx.fill(); }
+            } else if (b.type === 'bed') {
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x, b.y + 20, 30, 10); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x, b.y + 20, 4, 10); window.ctx.fillRect(b.x + 26, b.y + 20, 4, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(b.x + 2, b.y + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(b.x + 12, b.y + 16, 18, 4);
+            } else if (b.type === 'grave') {
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
+            } else if (b.type === 'barricade') {
+                window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#bdc3c7'; window.ctx.beginPath(); window.ctx.moveTo(b.x + 5, b.y + 24); window.ctx.lineTo(b.x + 2, b.y + 5); window.ctx.lineTo(b.x + 10, b.y + 24); window.ctx.moveTo(b.x + 12, b.y + 24); window.ctx.lineTo(b.x + 15, b.y + 2); window.ctx.lineTo(b.x + 18, b.y + 24); window.ctx.moveTo(b.x + 20, b.y + 24); window.ctx.lineTo(b.x + 28, b.y + 8); window.ctx.lineTo(b.x + 25, b.y + 24); window.ctx.fill();
+            } else if (b.type === 'ladder') {
+                const lc = b.isHit ? '#ff9966' : '#c8a86a'; const lsd = b.isHit ? '#cc6633' : '#8B6230';
+                window.ctx.fillStyle = lsd; window.ctx.fillRect(b.x + 5, b.y, 5, 30); window.ctx.fillRect(b.x + 20, b.y, 5, 30);
+                window.ctx.fillStyle = lc; for (let rung = 0; rung < 3; rung++) { window.ctx.fillRect(b.x + 5, b.y + 4 + rung * 9, 20, 3); }
             }
-        }
-
-        // TIERRA RELLENO (debajo de la superficie)
-        let fillY = slopeType === 'down' ? gY_next : gY;
-        fillY += (slopeType === 'flat' ? 64 : 0); 
-        
-        for (let py = fillY; py < bottomY; py += 64) {
-            const dImg = window.sprites.tile_dirt;
-            if (dImg && dImg.complete && dImg.naturalWidth > 0) {
-                window.ctx.drawImage(dImg, px, py, bs + 1, 64);
-            } else {
-                window.ctx.fillStyle = '#3d2412';
-                window.ctx.fillRect(px, py, bs + 1, 64);
-            }
-        }
-
-        // ── CAPA DE ARENA encima, a alpha = desertAlpha ────────────────────────
-        if (desertAlpha > 0 && slopeType === 'flat') {
-            window.ctx.globalAlpha = desertAlpha;
-            const sImg = window.sprites.tile_sand_top;
-            if (sImg && sImg.complete && sImg.naturalWidth > 0) {
-                window.ctx.drawImage(sImg, px, gY, bs + 1, 64);
-            } else {
-                window.ctx.fillStyle = '#e6c280';
-                window.ctx.fillRect(px, gY, bs + 1, 20);
-            }
-            for (let py = gY + 64; py < bottomY; py += 64) {
-                const sBaseImg = window.sprites.tile_sand_base;
-                if (sBaseImg && sBaseImg.complete && sBaseImg.naturalWidth > 0) {
-                    window.ctx.drawImage(sBaseImg, px, py, bs + 1, 64);
-                } else {
-                    window.ctx.fillStyle = '#d4a853';
-                    window.ctx.fillRect(px, py, bs + 1, 64);
-                }
-            }
-            window.ctx.globalAlpha = 1;
-        }
-
-        // ── Hierba decorativa encima de la superficie (solo zona verde plana) ──
-        if (desertAlpha < 1 && slopeType === 'flat' && darkness < 0.8) {
-            window.ctx.globalAlpha = (1 - desertAlpha) * 0.75;
-            window.ctx.fillStyle = 'rgba(70,110,30,0.8)';
-            const seed = Math.sin(px * 0.0173) * 0.5 + 0.5;
-            const grassH = 5 + seed * 7;
-            window.ctx.fillRect(px + seed * (bs - 4), gY - grassH, 2, grassH);
-            if (seed > 0.3) window.ctx.fillRect(px + seed * (bs - 10) + 4, gY - grassH * 0.65, 2, grassH * 0.65);
-            window.ctx.globalAlpha = 1;
-        }
-    }
-    // =================================================
-
-    if (window.camera.x < window.game.shoreX) {
-        const gL = window.game.baseGroundLevel || window.game.groundLevel;
-        window.ctx.fillStyle = '#C8B878';
-        window.ctx.fillRect(window.game.shoreX - 70, gL, 70, (window.camera.y + H / (window.game.zoom||1)) - gL);
-        let waveOffset = Math.sin(window.game.frameCount * 0.04) * 6;
-        let waterGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 60);
-        waterGrad.addColorStop(0, '#1a8fc0');
-        waterGrad.addColorStop(1, '#0a5c8a');
-        window.ctx.fillStyle = waterGrad;
-        window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H);
-        window.ctx.fillStyle = 'rgba(100,200,255,0.4)';
-        window.ctx.fillRect(window.camera.x, gL + 6 + waveOffset, window.game.shoreX - 70 - window.camera.x, 12);
-        window.ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
-    }
-
-    if (!window.hitCanvas) {
-        window.hitCanvas = document.createElement('canvas');
-        window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true });
-    }
-
-    window.trees.forEach(t => {
-        if (t.x + t.width > _visLeft - 200 && t.x < _visRight + 200) {
-            window.ctx.save();
-            
-            // Anclar el pie del árbol al suelo real en tiempo de render
-            const tFootX = t.x + t.width / 2;
-            const tFootY = window.getGroundY ? window.getGroundY(tFootX) : (t.groundY || t.y + t.height);
-            window.ctx.translate(tFootX, tFootY);
-            
-            let hw = t.width / 2; 
-            let img = null;
-            
-            if (t.isStump) img = window.sprites.tree_stump;
-            else if (t.type === 0) img = window.sprites.tree_oak;
-            else if (t.type === 1) img = window.sprites.tree_pine;
-            else if (t.type === 2) img = window.sprites.tree_birch;
-            // type 3 = cactus: siempre procedural, no usa sprite
-
-            let drawH = 256; 
-            let drawW = 128;    
-            let drawX = -drawW / 2;
-            let drawY = -drawH;
-
-            if (t.type === 3 && !t.isStump) {
-                // ── CACTUS procedural ─────────────────────────────────────────
-                const C2 = window.ctx;
-                const hit = t.isHit;
-                const ch  = t.height * 0.9;          // altura tronco central
-                const cw  = 10;                       // ancho tronco
-                const rad = 4;                        // esquinas redondeadas
-                // Colores — verde cactus con variación leve por posición
-                const varSeed = (Math.sin(t.x * 0.047) * 0.5 + 0.5);
-                const green1 = hit ? '#ff5555' : `hsl(${108 + varSeed*16},${52+varSeed*12}%,${28+varSeed*8}%)`;
-                const green2 = hit ? '#cc2222' : `hsl(${110 + varSeed*14},${45+varSeed*10}%,${20+varSeed*6}%)`;
-                const spine  = hit ? '#ffaaaa' : '#c8d6a0';
-
-                C2.save();
-
-                // ── Tronco central con esquinas redondeadas ───────────────────
-                C2.fillStyle = green1;
-                C2.beginPath();
-                C2.roundRect(-cw/2, -ch, cw, ch, rad);
-                C2.fill();
-                // Línea central vertical (textura)
-                C2.strokeStyle = green2; C2.lineWidth = 1.5;
-                C2.beginPath(); C2.moveTo(0, -ch + 4); C2.lineTo(0, -4); C2.stroke();
-
-                // ── Brazo izquierdo (posición y tamaño variable por seed) ─────
-                const armLY = -ch * (0.48 + varSeed * 0.14); // altura donde sale el brazo
-                const armLH = ch * (0.28 + varSeed * 0.08);
-                const armW  = 8;
-                const armLX = -cw/2 - armW;
-                C2.fillStyle = green1;
-                // Tramo horizontal
-                C2.beginPath(); C2.roundRect(armLX, armLY - armW*0.6, armW + cw/2, armW*0.65, 2); C2.fill();
-                C2.strokeStyle = green2; C2.lineWidth = 0.8;
-                C2.stroke();
-                // Tramo vertical hacia arriba
-                C2.beginPath(); C2.roundRect(armLX, armLY - armLH, armW, armLH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
-
-                // ── Brazo derecho (asimétrico) ────────────────────────────────
-                const armRY = -ch * (0.60 + varSeed * 0.10);
-                const armRH = ch * (0.22 + varSeed * 0.06);
-                const armRX = cw/2;
-                C2.fillStyle = green1;
-                C2.beginPath(); C2.roundRect(armRX - 2, armRY - armW*0.6, armW + 2, armW*0.65, 2); C2.fill();
-                C2.strokeStyle = green2; C2.lineWidth = 0.8; C2.stroke();
-                C2.beginPath(); C2.roundRect(armRX + armW - 2, armRY - armRH, armW, armRH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
-
-                // ── Espinas ───────────────────────────────────────────────────
-                C2.strokeStyle = spine; C2.lineWidth = 0.8;
-                for (let sy = -ch + 10; sy < -8; sy += 12) {
-                    C2.beginPath(); C2.moveTo(-cw/2, sy);     C2.lineTo(-cw/2 - 5, sy - 2); C2.stroke();
-                    C2.beginPath(); C2.moveTo(cw/2,  sy + 4); C2.lineTo(cw/2  + 5, sy + 2); C2.stroke();
-                }
-
-                // ── Flor en la punta (aleatoria según posición) ───────────────
-                if (varSeed > 0.35) {
-                    const petals = 5;
-                    const pr = 4.5;
-                    C2.fillStyle = varSeed > 0.65 ? '#f06090' : '#f0b040';
-                    for (let pi = 0; pi < petals; pi++) {
-                        const angle = (pi / petals) * Math.PI * 2 - Math.PI / 2;
-                        C2.beginPath();
-                        C2.ellipse(Math.cos(angle) * pr, -ch - Math.sin(angle) * pr, 2.5, 4, angle, 0, Math.PI * 2);
-                        C2.fill();
-                    }
-                    C2.fillStyle = '#ffe066';
-                    C2.beginPath(); C2.arc(0, -ch, 3, 0, Math.PI * 2); C2.fill();
-                }
-
-                C2.restore();
-                // ─────────────────────────────────────────────────────────────
-            } else if (img && img.complete && img.naturalWidth > 0) {
-                if (t.isHit) {
-                    window.hitCanvas.width = drawW; window.hitCanvas.height = drawH;
-                    window.hitCtx.clearRect(0, 0, drawW, drawH); window.hitCtx.drawImage(img, 0, 0, drawW, drawH);
-                    window.hitCtx.globalCompositeOperation = 'source-atop'; window.hitCtx.fillStyle = 'rgba(255, 68, 68, 0.65)';
-                    window.hitCtx.fillRect(0, 0, drawW, drawH); window.hitCtx.globalCompositeOperation = 'source-over'; 
-                    window.ctx.drawImage(window.hitCanvas, drawX, drawY);
-                } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
-            } else if (t.type !== 3) {
-                window.ctx.fillStyle = t.isHit ? '#ff4444' : (t.isStump ? '#5D4037' : '#2E7D32');
-                window.ctx.fillRect(-hw, -t.height, t.width, t.isStump ? 15 : t.height);
-            }
-
-            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) {
-                let barY = t.isStump ? -25 : drawY - 12;
-                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, barY, t.width + 10, 7);
-                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, barY + 1, (t.hp / t.maxHp) * (t.width + 8), 5);
-            }
-            window.ctx.restore();
         }
     });
 
     window.rocks.forEach(r => {
         if (r.x + r.width > _visLeft - 100 && r.x < _visRight + 100) {
             window.ctx.save();
-            const rFootY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
-            window.ctx.translate(r.x + r.width/2, rFootY);
+            window.ctx.translate(r.x + r.width/2, r.y + r.height);
             let hw = r.width / 2;
-            
             let img = (r.hp <= r.maxHp / 2) ? window.sprites.rock_damaged : window.sprites.rock_full;
-            
             let drawW = 80; let drawH = 80; let drawX = -drawW / 2; let drawY = -drawH;
 
             if (img && img.complete && img.naturalWidth > 0) {
@@ -621,74 +288,130 @@ window.draw = function() {
                     window.ctx.drawImage(window.hitCanvas, drawX, drawY);
                 } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
             } else {
-                window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath();
-                window.ctx.moveTo(-hw, 0); window.ctx.lineTo(-hw + r.width * 0.2, -r.height);
-                window.ctx.lineTo(-hw + r.width * 0.8, -r.height + 5); window.ctx.lineTo(hw, 0); window.ctx.fill();
+                window.ctx.fillStyle = r.isHit ? '#ff4444' : '#666'; window.ctx.beginPath(); window.ctx.moveTo(-hw, 0); window.ctx.lineTo(-hw + r.width * 0.2, -r.height); window.ctx.lineTo(-hw + r.width * 0.8, -r.height + 5); window.ctx.lineTo(hw, 0); window.ctx.fill();
             }
 
             if (r.hp < r.maxHp && (Date.now() - (r.lastHitTime || 0) < 3000)) {
-                let barY = drawY - 12;
-                window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw, barY, r.width, 6);
-                window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw + 1, barY + 1, (r.hp / r.maxHp) * (r.width - 2), 4);
+                let barY = drawY - 12; window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw, barY, r.width, 6); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw + 1, barY + 1, (r.hp / r.maxHp) * (r.width - 2), 4);
             }
             window.ctx.restore();
         }
     });
 
-    window.blocks.forEach(b => {
-        if (b.x + window.game.blockSize > _visLeft && b.x < _visRight + 120) {
-            if (b.type === 'block') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#C19A6B'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
-                // Depth shading: top highlight + bottom shadow
-                if (!b.isHit) {
-                    window.ctx.fillStyle = 'rgba(255,255,255,0.12)'; window.ctx.fillRect(b.x, b.y, window.game.blockSize, 4);
-                    window.ctx.fillStyle = 'rgba(0,0,0,0.22)'; window.ctx.fillRect(b.x, b.y + window.game.blockSize - 5, window.game.blockSize, 5);
-                    window.ctx.fillStyle = 'rgba(0,0,0,0.1)'; window.ctx.fillRect(b.x + window.game.blockSize - 4, b.y, 4, window.game.blockSize);
-                }
-                window.ctx.strokeStyle = '#8B5A2B'; window.ctx.lineWidth = 2; window.ctx.strokeRect(b.x, b.y, window.game.blockSize, window.game.blockSize);
-            } else if (b.type === 'door') {
-                if (b.open) { window.ctx.fillStyle = '#3a2518'; window.ctx.fillRect(b.x + 12, b.y, 6, window.game.blockSize * 2); } 
-                else { window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x + 4, b.y, 22, window.game.blockSize * 2); window.ctx.fillStyle = '#FFD700'; window.ctx.fillRect(b.x + 20, b.y + window.game.blockSize, 4, 4); }
-            } else if (b.type === 'box') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x + 2, b.y + 10, window.game.blockSize - 4, window.game.blockSize - 10);
-                window.ctx.fillStyle = '#C19A6B'; window.ctx.fillRect(b.x, b.y + 10, window.game.blockSize, 4); window.ctx.fillStyle = '#333'; window.ctx.fillRect(b.x + window.game.blockSize/2 - 2, b.y + 12, 4, 6);
-            } else if (b.type === 'campfire') {
-                window.ctx.fillStyle = '#5c4033'; window.ctx.fillRect(b.x + 2, b.y + 20, 26, 10); window.ctx.fillStyle = '#3e2723'; window.ctx.fillRect(b.x + 10, b.y + 15, 10, 15);
-                if (b.isBurning) {
-                    window.ctx.fillStyle = '#e67e22'; window.ctx.beginPath(); window.ctx.moveTo(b.x+5, b.y+20); window.ctx.lineTo(b.x+15, b.y+Math.random()*10); window.ctx.lineTo(b.x+25, b.y+20); window.ctx.fill();
-                    window.ctx.fillStyle = '#f1c40f'; window.ctx.beginPath(); window.ctx.moveTo(b.x+10, b.y+20); window.ctx.lineTo(b.x+15, b.y+10+Math.random()*5); window.ctx.lineTo(b.x+20, b.y+20); window.ctx.fill();
-                }
-            } else if (b.type === 'bed') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x, b.y + 20, 30, 10);
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x, b.y + 20, 4, 10); window.ctx.fillRect(b.x + 26, b.y + 20, 4, 10);
-                window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(b.x + 2, b.y + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(b.x + 12, b.y + 16, 18, 4);
-            } else if (b.type === 'grave') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); 
-                window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
-            } else if (b.type === 'barricade') {
-                window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); 
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#bdc3c7'; 
-                window.ctx.beginPath();
-                window.ctx.moveTo(b.x + 5, b.y + 24); window.ctx.lineTo(b.x + 2, b.y + 5); window.ctx.lineTo(b.x + 10, b.y + 24);
-                window.ctx.moveTo(b.x + 12, b.y + 24); window.ctx.lineTo(b.x + 15, b.y + 2); window.ctx.lineTo(b.x + 18, b.y + 24);
-                window.ctx.moveTo(b.x + 20, b.y + 24); window.ctx.lineTo(b.x + 28, b.y + 8); window.ctx.lineTo(b.x + 25, b.y + 24);
-                window.ctx.fill();
-            } else if (b.type === 'ladder') {
-                const lc = b.isHit ? '#ff9966' : '#c8a86a';
-                const lsd = b.isHit ? '#cc6633' : '#8B6230';
-                // Postes laterales
-                window.ctx.fillStyle = lsd;
-                window.ctx.fillRect(b.x + 5, b.y, 5, 30);
-                window.ctx.fillRect(b.x + 20, b.y, 5, 30);
-                // Peldaños (3 peldaños por tile)
-                window.ctx.fillStyle = lc;
-                for (let rung = 0; rung < 3; rung++) {
-                    const ry = b.y + 4 + rung * 9;
-                    window.ctx.fillRect(b.x + 5, ry, 20, 3);
-                }
-            }
+    window.trees.forEach(t => {
+        if (t.x + t.width > _visLeft - 200 && t.x < _visRight + 200) {
+            window.ctx.save();
+            window.ctx.translate(t.x + t.width / 2, t.y + t.height);
+            let hw = t.width / 2; let img = null;
+            if (t.isStump) img = window.sprites.tree_stump; else if (t.type === 0) img = window.sprites.tree_oak; else if (t.type === 1) img = window.sprites.tree_pine; else if (t.type === 2) img = window.sprites.tree_birch;
+
+            let drawH = 256; let drawW = 128; let drawX = -drawW / 2; let drawY = -drawH;
+
+            if (t.type === 3 && !t.isStump) {
+                const C2 = window.ctx; const hit = t.isHit; const ch  = t.height * 0.9; const cw  = 10; const rad = 4;
+                const varSeed = (Math.sin(t.x * 0.047) * 0.5 + 0.5);
+                const green1 = hit ? '#ff5555' : `hsl(${108 + varSeed*16},${52+varSeed*12}%,${28+varSeed*8}%)`;
+                const green2 = hit ? '#cc2222' : `hsl(${110 + varSeed*14},${45+varSeed*10}%,${20+varSeed*6}%)`;
+                const spine  = hit ? '#ffaaaa' : '#c8d6a0';
+
+                C2.save(); C2.fillStyle = green1; C2.beginPath(); C2.roundRect(-cw/2, -ch, cw, ch, rad); C2.fill(); C2.strokeStyle = green2; C2.lineWidth = 1.5; C2.beginPath(); C2.moveTo(0, -ch + 4); C2.lineTo(0, -4); C2.stroke();
+                const armLY = -ch * (0.48 + varSeed * 0.14); const armLH = ch * (0.28 + varSeed * 0.08); const armW  = 8; const armLX = -cw/2 - armW;
+                C2.fillStyle = green1; C2.beginPath(); C2.roundRect(armLX, armLY - armW*0.6, armW + cw/2, armW*0.65, 2); C2.fill(); C2.strokeStyle = green2; C2.lineWidth = 0.8; C2.stroke(); C2.beginPath(); C2.roundRect(armLX, armLY - armLH, armW, armLH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
+                const armRY = -ch * (0.60 + varSeed * 0.10); const armRH = ch * (0.22 + varSeed * 0.06); const armRX = cw/2;
+                C2.fillStyle = green1; C2.beginPath(); C2.roundRect(armRX - 2, armRY - armW*0.6, armW + 2, armW*0.65, 2); C2.fill(); C2.strokeStyle = green2; C2.lineWidth = 0.8; C2.stroke(); C2.beginPath(); C2.roundRect(armRX + armW - 2, armRY - armRH, armW, armRH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
+                C2.strokeStyle = spine; C2.lineWidth = 0.8;
+                for (let sy = -ch + 10; sy < -8; sy += 12) { C2.beginPath(); C2.moveTo(-cw/2, sy); C2.lineTo(-cw/2 - 5, sy - 2); C2.stroke(); C2.beginPath(); C2.moveTo(cw/2,  sy + 4); C2.lineTo(cw/2  + 5, sy + 2); C2.stroke(); }
+                if (varSeed > 0.35) { const petals = 5; const pr = 4.5; C2.fillStyle = varSeed > 0.65 ? '#f06090' : '#f0b040'; for (let pi = 0; pi < petals; pi++) { const angle = (pi / petals) * Math.PI * 2 - Math.PI / 2; C2.beginPath(); C2.ellipse(Math.cos(angle) * pr, -ch - Math.sin(angle) * pr, 2.5, 4, angle, 0, Math.PI * 2); C2.fill(); } C2.fillStyle = '#ffe066'; C2.beginPath(); C2.arc(0, -ch, 3, 0, Math.PI * 2); C2.fill(); }
+                C2.restore();
+            } else if (img && img.complete && img.naturalWidth > 0) {
+                if (t.isHit) {
+                    window.hitCanvas.width = drawW; window.hitCanvas.height = drawH; window.hitCtx.clearRect(0, 0, drawW, drawH); window.hitCtx.drawImage(img, 0, 0, drawW, drawH);
+                    window.hitCtx.globalCompositeOperation = 'source-atop'; window.hitCtx.fillStyle = 'rgba(255, 68, 68, 0.65)'; window.hitCtx.fillRect(0, 0, drawW, drawH); window.hitCtx.globalCompositeOperation = 'source-over'; 
+                    window.ctx.drawImage(window.hitCanvas, drawX, drawY);
+                } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
+            } else if (t.type !== 3) { window.ctx.fillStyle = t.isHit ? '#ff4444' : (t.isStump ? '#5D4037' : '#2E7D32'); window.ctx.fillRect(-hw, -t.height, t.width, t.isStump ? 15 : t.height); }
+
+            if (t.hp < t.maxHp && (Date.now() - (t.lastHitTime || 0) < 3000)) { let barY = t.isStump ? -25 : drawY - 12; window.ctx.fillStyle = 'rgba(0,0,0,0.6)'; window.ctx.fillRect(-hw-5, barY, t.width + 10, 7); window.ctx.fillStyle = '#4CAF50'; window.ctx.fillRect(-hw-4, barY + 1, (t.hp / t.maxHp) * (t.width + 8), 5); }
+            window.ctx.restore();
         }
     });
+
+    // =========================================================================
+    // CREAR LA MÁSCARA DEL TERRENO CURVO (Cubre lo de arriba)
+    // =========================================================================
+    window.ctx.save();
+    window.ctx.beginPath();
+    window.ctx.moveTo(startX, bottomY);
+    for (let px = startX; px <= endX; px += step) {
+        window.ctx.lineTo(px, window.getGroundY(px));
+    }
+    window.ctx.lineTo(endX, bottomY);
+    window.ctx.closePath();
+    window.ctx.clip(); // ✂️ Recortamos el pincel a la forma del suelo
+
+    if (!window._dirtPattern && window.sprites.tile_dirt.complete && window.sprites.tile_dirt.naturalWidth > 0) { const tc = document.createElement('canvas'); tc.width=64; tc.height=64; tc.getContext('2d').drawImage(window.sprites.tile_dirt, 0, 0); window._dirtPattern = window.ctx.createPattern(tc, 'repeat'); }
+    if (window._dirtPattern) { window.ctx.fillStyle = window._dirtPattern; window.ctx.fillRect(startX, window.camera.y - 300, endX - startX, bottomY - window.camera.y + 300); } 
+    else { window.ctx.fillStyle = '#3d2412'; window.ctx.fillRect(startX, window.camera.y - 300, endX - startX, bottomY - window.camera.y + 300); }
+
+    if (!window._sandPattern && window.sprites.tile_sand_base.complete && window.sprites.tile_sand_base.naturalWidth > 0) { const sc = document.createElement('canvas'); sc.width=64; sc.height=64; sc.getContext('2d').drawImage(window.sprites.tile_sand_base, 0, 0); window._sandPattern = window.ctx.createPattern(sc, 'repeat'); }
+
+    for (let px = startX; px < endX; px += step) {
+        const gY = window.getGroundY(px); const colCenterX = px + step / 2;
+        const _dStart = (window.game.desertStart || 2600) + window.game.shoreX; const _dWidth = window.game.desertWidth || 800;
+        let desertAlpha = 0; if (colCenterX > _dStart + _dWidth) desertAlpha = 1; else if (colCenterX > _dStart) desertAlpha = (colCenterX - _dStart) / _dWidth;
+
+        if (desertAlpha > 0) { window.ctx.globalAlpha = desertAlpha; window.ctx.fillStyle = window._sandPattern || '#d4a853'; window.ctx.fillRect(px, window.camera.y - 300, step + 1, bottomY - window.camera.y + 300); window.ctx.globalAlpha = 1; }
+
+        const texX = (px % 64 + 64) % 64; const drawW = Math.min(step + 0.5, 64 - texX);
+
+        if (desertAlpha < 1) {
+            window.ctx.globalAlpha = 1 - desertAlpha;
+            const fImg = window.sprites.tile_grass_top;
+            if (fImg && fImg.complete && fImg.naturalWidth > 0) { window.ctx.drawImage(fImg, texX, 0, drawW, 64, px, gY - 1, drawW, 64); if (drawW < step) window.ctx.drawImage(fImg, 0, 0, step - drawW + 0.5, 64, px + drawW, gY - 1, step - drawW + 0.5, 64); } 
+            else { window.ctx.fillStyle = '#528c2a'; window.ctx.fillRect(px, gY - 1, step + 1, 24); }
+            window.ctx.globalAlpha = 1;
+        }
+
+        if (desertAlpha > 0) {
+            window.ctx.globalAlpha = desertAlpha;
+            const sImg = window.sprites.tile_sand_top;
+            if (sImg && sImg.complete && sImg.naturalWidth > 0) { window.ctx.drawImage(sImg, texX, 0, drawW, 64, px, gY - 1, drawW, 64); if (drawW < step) window.ctx.drawImage(sImg, 0, 0, step - drawW + 0.5, 64, px + drawW, gY - 1, step - drawW + 0.5, 64); } 
+            else { window.ctx.fillStyle = '#e6c280'; window.ctx.fillRect(px, gY - 1, step + 1, 24); }
+            window.ctx.globalAlpha = 1;
+        }
+    }
+    
+    window.ctx.restore();
+
+    window.ctx.save();
+    window.ctx.beginPath();
+    window.ctx.moveTo(startX, window.getGroundY(startX));
+    for (let px = startX; px <= endX; px += step) { window.ctx.lineTo(px, window.getGroundY(px)); }
+    window.ctx.lineWidth = 1.5; window.ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)'; window.ctx.stroke();
+    window.ctx.restore();
+
+    for (let px = startX; px < endX; px += step) {
+        const gY = window.getGroundY(px); const colCenterX = px + step / 2;
+        const _dStart = (window.game.desertStart || 2600) + window.game.shoreX; const _dWidth = window.game.desertWidth || 800;
+        let desertAlpha = colCenterX > _dStart + _dWidth ? 1 : (colCenterX > _dStart ? (colCenterX - _dStart) / _dWidth : 0);
+
+        if (desertAlpha < 1 && darkness < 0.8) {
+            window.ctx.globalAlpha = (1 - desertAlpha) * 0.75; window.ctx.fillStyle = 'rgba(70,110,30,0.8)';
+            const seed = Math.sin(px * 0.0173) * 0.5 + 0.5; const grassH = 5 + seed * 7;
+            window.ctx.fillRect(px + seed * (step - 4), gY - grassH, 2, grassH);
+            if (seed > 0.3) window.ctx.fillRect(px + seed * (step - 10) + 4, gY - grassH * 0.65, 2, grassH * 0.65);
+            window.ctx.globalAlpha = 1;
+        }
+    }
+
+    if (window.camera.x < window.game.shoreX) {
+        const gL = window.game.baseGroundLevel || window.game.groundLevel;
+        window.ctx.fillStyle = '#C8B878'; window.ctx.fillRect(window.game.shoreX - 70, gL, 70, (window.camera.y + H / (window.game.zoom||1)) - gL);
+        let waveOffset = Math.sin(window.game.frameCount * 0.04) * 6; let waterGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 60); waterGrad.addColorStop(0, '#1a8fc0'); waterGrad.addColorStop(1, '#0a5c8a');
+        window.ctx.fillStyle = waterGrad; window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H);
+        window.ctx.fillStyle = 'rgba(100,200,255,0.4)'; window.ctx.fillRect(window.camera.x, gL + 6 + waveOffset, window.game.shoreX - 70 - window.camera.x, 12);
+        window.ctx.fillStyle = 'rgba(255,255,255,0.6)'; window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
+    }
 
     window.droppedItems.forEach(item => {
         if (item.x + 20 > _visLeft && item.x < _visRight + 60) {
@@ -696,11 +419,7 @@ window.draw = function() {
         }
     });
 
-    if (window.game.isMultiplayer) {
-        Object.values(window.otherPlayers).forEach(p => { 
-            if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); }
-        });
-    }
+    if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
 
     if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
@@ -711,8 +430,7 @@ window.draw = function() {
         C.save();
         if (ent.type === 'chicken') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height; const moving = Math.abs(ent.vx) > 0.05; const bob = moving ? Math.sin(T*0.28)*2.5 : 0; const headBob = moving ? Math.sin(T*0.28+0.5)*3 : 0; 
-            if (!FR) { C.translate(x+w, 0); C.scale(-1,1); }
-            const bx = FR ? x : 0;
+            if (!FR) { C.translate(x+w, 0); C.scale(-1,1); } const bx = FR ? x : 0;
             C.globalAlpha=0.18; C.fillStyle='#000'; C.beginPath(); C.ellipse(bx+w/2, y+h+1, w*0.45, 2.5, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
             const legColor = H ? '#ff6644' : '#e07820'; const lw1 = moving ? Math.sin(T*0.28)*5 : 0; const lw2 = moving ? -Math.sin(T*0.28)*5 : 0; C.strokeStyle=legColor; C.lineWidth=2; C.beginPath(); C.moveTo(bx+7,y+h-4+bob); C.lineTo(bx+7+lw1,y+h+1); C.lineTo(bx+5+lw1,y+h+3); C.stroke(); C.beginPath(); C.moveTo(bx+13,y+h-4+bob); C.lineTo(bx+13+lw2,y+h+1); C.lineTo(bx+15+lw2,y+h+3); C.stroke();
             C.fillStyle = H ? '#ffaaaa' : '#f0d080'; C.beginPath(); C.moveTo(bx+2,y+h*0.55+bob); C.quadraticCurveTo(bx-6,y+h*0.4+bob, bx-3,y+h*0.3+bob); C.quadraticCurveTo(bx+0,y+h*0.45+bob, bx+2,y+h*0.55+bob); C.fill();
@@ -767,15 +485,12 @@ window.draw = function() {
             C.fillStyle='rgba(0,0,0,0.3)'; C.fillRect(bx+w*0.42,y+h*0.215,2,2); C.fillRect(bx+6,y+h*0.24,w-12,1.5);
         }
 
-        // Barra de vida: visible siempre para enemigos hostiles, fade en pollos/sanos
         {
             const isHostile = ent.type !== 'chicken';
             const timeSinceHit = Date.now() - (ent.lastHitTime || 0);
-            // Pollos: solo al golpear (3s). Hostiles: siempre visible, fade a 0.35 alfa si full hp
             const pct = Math.max(0, ent.hp / ent.maxHp);
             const showBar = isHostile || (ent.hp < ent.maxHp && timeSinceHit < 3000);
             if (showBar) {
-                // Opacidad: plena si dañado reciente, reducida si HP llena y sin golpes
                 let barAlpha = 1.0;
                 if (pct >= 1 && timeSinceHit > 1500) barAlpha = Math.max(0.35, 1 - (timeSinceHit - 1500) / 3000);
                 const barW = Math.max(ent.width, 20);
@@ -783,18 +498,14 @@ window.draw = function() {
                 const barY = ent.y - 10;
                 C.save();
                 C.globalAlpha = barAlpha;
-                // Fondo
                 C.fillStyle = 'rgba(0,0,0,0.6)';
                 C.fillRect(barX - 1, barY - 1, barW + 2, 6);
-                // Relleno coloreado
                 const hc = pct > 0.6 ? '#44dd44' : (pct > 0.3 ? '#f0a020' : '#ee3333');
                 C.fillStyle = hc;
                 C.fillRect(barX, barY, barW * pct, 4);
-                // Borde
                 C.strokeStyle = 'rgba(0,0,0,0.5)';
                 C.lineWidth = 0.5;
                 C.strokeRect(barX, barY, barW, 4);
-                // Nombre del enemigo (solo hostiles, solo cuando no tiene vida completa o recién golpeado)
                 if (isHostile && (pct < 1 || timeSinceHit < 2000)) {
                     C.font = '7px monospace';
                     C.fillStyle = 'rgba(255,255,255,0.85)';
@@ -804,7 +515,6 @@ window.draw = function() {
                 C.restore();
             }
         }
-
         C.restore();
     });
 
@@ -941,11 +651,12 @@ window.draw = function() {
 
     if (window.lightCtx) {
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
-        // Noche menos oscura: máximo 0.62 en lugar de 0.95; y el piso diurno es solo 0.05
-        let ambientDarkness = 0.05 + (0.57 * darkness); 
-        window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window._canvasLogicW, window._canvasLogicH);
+        
+        let ambientDarkness = darkness * 0.65; 
+        window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; 
+        window.lightCtx.fillRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         window.lightCtx.globalCompositeOperation = 'destination-out';
-        // Helper: world position → lightCanvas screen position (accounting for zoom)
+        
         const _lz = window.game.zoom || 1;
         const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
         function _wts(wx, wy) { return [(wx - window.camera.x - _lW/2)*_lz + _lW/2, (wy - window.camera.y - _lH/2)*_lz + _lH/2]; }
@@ -983,7 +694,6 @@ window.draw = function() {
         window.ctx.drawImage(window.lightCanvas, 0, 0, window._canvasLogicW, window._canvasLogicH);
     }
 
-    // Nombres y chat: aplicar el mismo zoom para alinear con los personajes renderizados
     const _ncz = window.game.zoom || 1;
     const _ncW = window._canvasLogicW, _ncH = window._canvasLogicH;
     window.ctx.save(); window.ctx.translate(_ncW/2, _ncH/2); window.ctx.scale(_ncz, _ncz); window.ctx.translate(-_ncW/2, -_ncH/2); window.ctx.translate(-window.camera.x, -window.camera.y);
@@ -1106,10 +816,9 @@ window.draw = function() {
     
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id) drawNameAndChat(p, false); }); }
     if (!window.player.inBackground) drawNameAndChat(window.player, true);
-    window.ctx.restore(); // fin zoom/name-chat
-    window.ctx.restore(); // fin screen-shake
+    window.ctx.restore(); 
+    window.ctx.restore(); 
 
-    // === PVP: flecha de dirección al rival (HUD en coordenadas de pantalla) ===
     if (window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer) {
         const rival = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
         if (rival && !rival.isDead) {
@@ -1118,7 +827,6 @@ window.draw = function() {
             const pWorldX = window.player.x + window.player.width/2;
             const pWorldY = window.player.y + window.player.height/2;
 
-            // Convertir rival a coordenadas de pantalla
             const _z2 = window.game.zoom || 1;
             const rSX = (rWorldX - window.camera.x - W/2) * _z2 + W/2;
             const rSY = (rWorldY - window.camera.y - H/2) * _z2 + H/2;
@@ -1128,7 +836,6 @@ window.draw = function() {
 
             window.ctx.save();
             if (offScreen) {
-                // Calcular ángulo y posición del indicador en el borde de la pantalla
                 const angle = Math.atan2(rWorldY - pWorldY, rWorldX - pWorldX);
                 const margin = 50;
                 const cx2 = W / 2, cy2 = H / 2;
@@ -1140,19 +847,16 @@ window.draw = function() {
                 window.ctx.translate(clampedX, clampedY);
                 window.ctx.rotate(angle);
 
-                // Fondo del indicador
                 window.ctx.fillStyle = 'rgba(180,20,20,0.85)';
                 window.ctx.beginPath();
                 window.ctx.roundRect(-32, -14, 64, 28, 6);
                 window.ctx.fill();
 
-                // Flecha
                 window.ctx.fillStyle = '#ff6666';
                 window.ctx.beginPath();
                 window.ctx.moveTo(22, 0); window.ctx.lineTo(10, -8); window.ctx.lineTo(10, 8);
                 window.ctx.closePath(); window.ctx.fill();
 
-                // Texto distancia
                 window.ctx.rotate(-angle);
                 window.ctx.fillStyle = '#fff';
                 window.ctx.font = 'bold 11px Inter, sans-serif';
@@ -1161,7 +865,6 @@ window.draw = function() {
                 const rivalName = rival.name ? rival.name.substring(0,8) : '?';
                 window.ctx.fillText(`${rivalName} ${dist}m`, 0, 0);
             } else {
-                // Rival visible en pantalla: mostrar solo tag flotante sobre su cabeza, sin caja roja
                 const pulse = Math.sin(window.game.frameCount * 0.12) * 0.3 + 0.85;
                 const rivalH = (rival.height||48) * _z2;
                 window.ctx.globalAlpha = pulse;
@@ -1179,36 +882,26 @@ window.draw = function() {
             }
             window.ctx.restore();
 
-            // Actualizar lista de jugadores periódicamente
             if (window.game.frameCount % 60 === 0 && window.updatePlayerList) window.updatePlayerList();
         } else if (rival && rival.isDead) {
-            // Rival murió → fin del pvp
             window.pvp.activeOpponent = null;
             if(window.addGlobalMessage) window.addGlobalMessage('🏆 ¡Tu rival cayó! Ganaste el duelo.', '#f1c40f');
             if(window.updatePlayerList) window.updatePlayerList();
         }
     }
-    // ═══════════════════════════════════════════════════════════
-    // POST-PROCESSING: Viñeta + Film Grain + Aberración + Lluvia
-    // ═══════════════════════════════════════════════════════════
+    
     const _ppW = window._canvasLogicW || 1280;
     const _ppH = window._canvasLogicH || 720;
 
-    // 1. VIÑETA — adaptativa: oscura de noche, roja con poca vida
     {
-        // HP del jugador para el tinte rojo
         const hp = (window.player && window.player.hp != null) ? window.player.hp : 100;
         const maxHp = (window.player && window.player.maxHp) ? window.player.maxHp : 100;
-        const hpRatio = hp / maxHp;                    // 0=muerto, 1=lleno
-        const dangerLevel = hpRatio < 0.4 ? Math.pow(1 - hpRatio / 0.4, 1.5) : 0; // 0–1 cuando hp<40%
+        const hpRatio = hp / maxHp;                    
+        const dangerLevel = hpRatio < 0.4 ? Math.pow(1 - hpRatio / 0.4, 1.5) : 0; 
 
-        // Pulso del peligro — parpadeo lento cuando HP muy baja
-        const dangerPulse = dangerLevel > 0.4 
-            ? 0.7 + 0.3 * Math.sin(window.game.frameCount * 0.08) 
-            : 1.0;
+        const dangerPulse = dangerLevel > 0.4 ? 0.7 + 0.3 * Math.sin(window.game.frameCount * 0.08) : 1.0;
 
-        // Viñeta base: día=sutil, noche=más intensa
-        const vigBase = 0.18 + darkness * 0.22;
+        const vigBase = darkness * 0.40;
         const vigOuter = vigBase + dangerLevel * 0.45 * dangerPulse;
 
         const vigGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.28, _ppW/2, _ppH/2, _ppH * 0.9);
@@ -1218,7 +911,6 @@ window.draw = function() {
         window.ctx.fillStyle = vigGrad;
         window.ctx.fillRect(0, 0, _ppW, _ppH);
 
-        // Viñeta roja superpuesta cuando HP baja (<40%)
         if (dangerLevel > 0.01) {
             const redAlpha = dangerLevel * 0.38 * dangerPulse;
             const redGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.22, _ppW/2, _ppH/2, _ppH * 0.88);
@@ -1230,35 +922,34 @@ window.draw = function() {
         }
     }
 
-    // 2. ABERRACIÓN CROMÁTICA — tinte rojo/azul en bordes, pulsante en combate
     if (window.game.screenShake > 0 || (window.player && (window.player.pvpHitFlash||0) > 0)) {
         const aberAmt = window.game.screenShake > 0 ? Math.min(window.game.screenShake * 0.3, 4) : 3;
         window.ctx.globalAlpha = 0.08;
         window.ctx.globalCompositeOperation = 'screen';
-        // Canal rojo desplazado
         window.ctx.fillStyle = '#ff0000';
         window.ctx.fillRect(-aberAmt, 0, _ppW, _ppH);
-        // Canal azul desplazado
         window.ctx.fillStyle = '#0000ff';
         window.ctx.fillRect(aberAmt, 0, _ppW, _ppH);
         window.ctx.globalCompositeOperation = 'source-over';
         window.ctx.globalAlpha = 1;
     }
 
-    // 3. FILM GRAIN — ruido sutil frame a frame
     {
-        const grainAmt = darkness > 0.5 ? 0.045 : 0.025;
+        const grainAmt = darkness > 0.5 ? 0.045 : 0.015;
         const grainSeed = window.game.frameCount * 7919;
         const gCanvas = window._grainCanvas || (window._grainCanvas = document.createElement('canvas'));
         gCanvas.width = 256; gCanvas.height = 256;
         const gCtx = gCanvas.getContext('2d');
         const imgData = gCtx.createImageData(256, 256);
         const data = imgData.data;
+        
+        let baseGrainAlpha = Math.floor(darkness * 35);
+        
         for (let i = 0; i < data.length; i += 4) {
             const n = ((Math.sin(i * 0.0137 + grainSeed) * 43758.5453) % 1 + 1) % 1;
             const v = (n - 0.5) * 255 * grainAmt * 4;
             data[i] = data[i+1] = data[i+2] = 128 + v;
-            data[i+3] = 18 + Math.floor(darkness * 12);
+            data[i+3] = baseGrainAlpha; 
         }
         gCtx.putImageData(imgData, 0, 0);
         const grainPattern = window.ctx.createPattern(gCanvas, 'repeat');
@@ -1269,11 +960,9 @@ window.draw = function() {
         window.ctx.globalCompositeOperation = 'source-over';
     }
 
-    // 4. LLUVIA — gotas diagonales simples y limpias
     if (window.game.isRaining) {
         const fc = window.game.frameCount;
         window.ctx.save();
-        // Gotas finas, diagonales, dos capas de velocidad
         window.ctx.lineWidth = 1;
         window.ctx.beginPath();
         window.ctx.strokeStyle = 'rgba(180,210,240,0.35)';
@@ -1284,7 +973,6 @@ window.draw = function() {
             window.ctx.lineTo(rx - 4, ry + 22);
         }
         window.ctx.stroke();
-        // Segunda capa más cercana / más visible
         window.ctx.lineWidth = 1.5;
         window.ctx.strokeStyle = 'rgba(200,225,255,0.22)';
         window.ctx.beginPath();
@@ -1296,15 +984,13 @@ window.draw = function() {
         }
         window.ctx.stroke();
         window.ctx.restore();
-        // Tinte azul muy suave
         window.ctx.fillStyle = 'rgba(40,60,90,0.04)';
         window.ctx.fillRect(0, 0, _ppW, _ppH);
     }
 
-    // 5. BORDE NEGRO SUTIL — marco de cuadro para sensación cinemática
     {
         window.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         window.ctx.lineWidth = 3;
         window.ctx.strokeRect(1, 1, _ppW - 2, _ppH - 2);
     }
-}; // end window.draw
+};
