@@ -52,17 +52,11 @@ window.destroyBlockLocally = function(b) {
     for (let obj of toBreak) { window.destroyBlockLocally(obj); }
 };
 
-// =========================================================================
-// CORRECCIÓN: ANCLAJE PERFECTO A LA TIERRA (Cero bloques flotantes)
-// Utilizamos Math.ceil para asegurar que la cuadrícula siempre quede
-// enterrada respecto a la curva de la tierra.
-// =========================================================================
 window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStructure = false) {
     const bs = window.game.blockSize;
     let smoothY = window.getGroundY ? window.getGroundY(x + w/2) : window.game.groundLevel;
     let groundGridY = Math.ceil(smoothY / bs) * bs;
     
-    // No permitir poner bloques totalmente debajo de la tierra sin conectar a nada
     if (y > groundGridY) return false; 
     
     if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
@@ -82,7 +76,7 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
 
     if (isItem || isDoor) {
         let supported = false;
-        if (y + h >= groundGridY) supported = true; // Forzamos a que toque el suelo calculado
+        if (y + h >= groundGridY) supported = true; 
         if (!supported) { for (let b of window.blocks) { if ((b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < bs / 2) { supported = true; break; } } }
         if (!supported) return false; 
     }
@@ -126,7 +120,7 @@ window.isOverlappingSolidBlock = function() {
 window.isAdjacentToBlockOrGround = function(x, y, w, h) {
     const bs = window.game.blockSize;
     let smoothY = window.getGroundY ? window.getGroundY(x + w/2) : window.game.groundLevel;
-    let groundGridY = Math.ceil(smoothY / bs) * bs; // Mismo anclaje estricto
+    let groundGridY = Math.ceil(smoothY / bs) * bs; 
 
     if (y + h >= groundGridY) return true; 
     const expX = x - 2, expY = y - 2, expW = w + 4, expH = h + 4;
@@ -143,10 +137,6 @@ window.isOnLadder = function() {
     return false;
 };
 
-// =========================================================
-// CORRECCIÓN: FÍSICAS AABB DE BLOQUES Y JUGADOR
-// Se arregló el bug donde caminar causaba enganches con las esquinas
-// =========================================================
 window.checkBlockCollisions = function(axis) {
     if (window.player.inBackground) return;
     const p = window.player;
@@ -158,7 +148,6 @@ window.checkBlockCollisions = function(axis) {
 
         if (window.checkRectIntersection(p.x, p.y, p.width, p.height, b.x, b.y, bs, itemHeight)) {
             if (axis === 'x') { 
-                // Margen de suavidad: Si los pies están casi arriba del bloque, ignorar colisión X para no trabarse
                 if (p.y + p.height <= b.y + 12) continue;
 
                 if (p.vx > 0) p.x = b.x - p.width; 
@@ -181,7 +170,7 @@ window.checkEntityCollisions = function(ent, axis) {
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') {
-                if (ent.y + ent.height <= b.y + 12) continue; // Mismo margen de pies
+                if (ent.y + ent.height <= b.y + 12) continue;
 
                 if (ent.vx > 0) { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; } 
                 else if (ent.vx < 0) { ent.x = b.x + window.game.blockSize; ent.vx *= -1; hitWall = true; }
@@ -318,7 +307,9 @@ window.startGame = function(multiplayer, ip = null) {
             let sInfo = window.getEl('server-info'); if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = ip ? ip : 'Servidor Web'; }
             if (ip && ip !== window.location.hostname && ip !== 'localhost' && ip !== '127.0.0.1') { let list = JSON.parse(localStorage.getItem('savedServers') || '[]'); if (!list.includes(ip)) { list.push(ip); localStorage.setItem('savedServers', JSON.stringify(list)); if(window.refreshServerList) window.refreshServerList(); } }
             
-            window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level }); });
+            // Enviamos la semilla del host por si es el primer jugador en entrar
+            window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level, seedCode: window.seedCode }); });
+            
             window.socket.on('disconnect', () => { alert("⚠ Se perdió la conexión con el Servidor. La partida se reiniciará."); window.location.reload(); });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
             
@@ -328,13 +319,29 @@ window.startGame = function(multiplayer, ip = null) {
                     op.targetX = pInfo.x; op.targetY = pInfo.y; op.vx = pInfo.vx; op.vy = pInfo.vy;
                     op.facingRight = pInfo.facingRight; op.activeTool = pInfo.activeTool; op.animTime = pInfo.animTime;
                     op.attackFrame = pInfo.attackFrame; op.isAiming = pInfo.isAiming; op.isCharging = pInfo.isCharging;
-                    op.chargeLevel = pInfo.chargeLevel; op.isDead = pInfo.isDead; op.level = pInfo.level;
+                    op.chargeLevel = pInfo.chargeLevel; op.level = pInfo.level;
                     op.mouseX = pInfo.mouseX; op.mouseY = pInfo.mouseY;
                     op.isDancing = pInfo.isDancing || false; op.danceStart = pInfo.danceStart || 0;
-                    if (pInfo.isDead && pInfo.deathAnimFrame > 0) op.deathAnimFrame = pInfo.deathAnimFrame;
+                    
+                    // --- DISPARAR ANIMACIÓN DE MUERTE REMOTA ---
+                    if (pInfo.isDead && !op.isDead) {
+                        op.deathAnimFrame = 40; 
+                    }
+                    op.isDead = pInfo.isDead;
                 } 
             });
             
+            // --- DETECTAR SI UN JUGADOR SE FUE PARA CANCELAR PVP ---
+            window.socket.on('playerDisconnected', (id) => {
+                if (window.pvp && window.pvp.activeOpponent === id) {
+                    window.pvp.activeOpponent = null;
+                    if(window.addGlobalMessage) window.addGlobalMessage('🛑 Tu rival se ha desconectado. PVP finalizado.', '#aaa');
+                    if(window.updatePlayerList) window.updatePlayerList();
+                }
+                delete window.otherPlayers[id];
+                if(window.updatePlayerList) window.updatePlayerList();
+            });
+
             window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
 
             window.socket.on('worldSeed', (data) => {
@@ -451,6 +458,9 @@ window.startGame = function(multiplayer, ip = null) {
     window.recalculateStats(); if(window.updateUI) window.updateUI(); if(window.renderToolbar) window.renderToolbar(); 
 };
 
+// ============================================================
+// === SISTEMA PVP ===
+// ============================================================
 window.pvp = { activeOpponent: null, pendingChallenge: null };
 
 window.showPvpNotification = function(fromName, fromId) {
@@ -858,7 +868,7 @@ window.addEventListener('mousedown', (e) => {
                 let validPlace;
                 if (type === 'ladder') {
                     const bs_l = window.game.blockSize;
-                    const lGY = window.getGroundY ? window.getGroundY(gridX + bs_l/2) : window.game.groundLevel;
+                    const lGY = window.getGridGroundY ? window.getGridGroundY(gridX + bs_l/2) : window.game.groundLevel;
                     const noOverlapPlayer = !window.checkRectIntersection(gridX, gridY, bs_l, bs_l, window.player.x, window.player.y, window.player.width, window.player.height);
                     const alreadyHere = window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - gridY) < 1);
                     const onGround = (gridY + bs_l) >= Math.floor(lGY/bs_l)*bs_l;
@@ -1050,7 +1060,15 @@ function update() {
                 window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping || false, isDancing: window.player.isDancing || false, danceStart: window.player.danceStart || 0, deathAnimFrame: window.player.deathAnimFrame || 0 });
                 window.player._lastTypingState = window.player.isTyping;
             }
-            if (window.otherPlayers) { Object.values(window.otherPlayers).forEach(op => { if (op.targetX !== undefined) { op.x += (op.targetX - op.x) * 0.35; op.y += (op.targetY - op.y) * 0.35; } if ((op.pvpHitFlash || 0) > 0) op.pvpHitFlash--; }); }
+            if (window.otherPlayers) { 
+                Object.values(window.otherPlayers).forEach(op => { 
+                    if (op.targetX !== undefined) { op.x += (op.targetX - op.x) * 0.35; op.y += (op.targetY - op.y) * 0.35; } 
+                    if ((op.pvpHitFlash || 0) > 0) op.pvpHitFlash--; 
+                    
+                    // --- CORRECCIÓN ANIMACIÓN DE MUERTE MULTIJUGADOR ---
+                    if (op.isDead && (op.deathAnimFrame || 0) > 0) op.deathAnimFrame--;
+                }); 
+            }
         }
 
         window.blocks = window.blocks.filter(b => { if (b.type === 'grave' && Date.now() - b.createdAt > 300000) { window.spawnParticles(b.x + 15, b.y + 15, '#7f8c8d', 15); window.sendWorldUpdate('destroy_grave', { id: b.id }); return false; } return true; });

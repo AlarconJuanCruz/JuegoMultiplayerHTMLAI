@@ -49,7 +49,8 @@
                 });
                 const json = await res.json();
                 if (!res.ok) {
-                    setStatus(`⚠️ ${json.error || 'Error del servidor'}`, '#f0a030');
+                    // Muestra el error de que el server está ocupado
+                    setStatus(`⚠️ ${json.error || 'Error del servidor'}`, '#e74c3c', 4000);
                     return;
                 }
                 if (window.setSeedFromCode) window.setSeedFromCode(json.seed);
@@ -79,7 +80,7 @@
 
     document.getElementById('seed-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') window.loadSeedCode(); });
 })();
-// ────────────────────────────────────────────────────────────
+//  ------------------------
 
 // === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
 
