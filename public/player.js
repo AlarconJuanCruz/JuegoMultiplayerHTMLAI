@@ -79,8 +79,8 @@ window.damagePlayer = function(amount, source = 'Causas Misteriosas') {
             if(window.updatePlayerList) window.updatePlayerList();
         }
 
-        window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; window.keys.mouseLeft = false;
-        window.player.isCharging = false; window.player.isAiming = false;
+        if(window.keys) { window.keys.a = false; window.keys.d = false; window.keys.w = false; window.keys.s = false; window.keys.shift = false; window.keys.y = false; window.keys.jumpPressed = false; window.keys.mouseLeft = false; }
+        window.player.isCharging = false; window.player.isAiming = false; window.player.isClimbing = false;
         
         let graveId = 'g_' + Math.random().toString(36).substr(2, 9);
         let graveX = Math.floor((window.player.x + window.player.width/2) / window.game.blockSize) * window.game.blockSize;

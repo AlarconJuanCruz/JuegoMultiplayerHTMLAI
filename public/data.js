@@ -103,7 +103,7 @@ window.itemDefs = {
 window.toolMaxDurability = { torch: 300, axe: 40, hammer: 50, pickaxe: 40, bow: 30, sword: 60 };
 
 window.player = {
-    name: "Invitado", x: 250, y: 100, width: 24, height: 48, vx: 0, vy: 0, 
+    name: "Invitado", x: 250, y: 100, width: 24, height: 40, vx: 0, vy: 0, 
     baseSpeed: 2.8, baseJump: -7.2, baseHp: 100, baseHunger: 100, speed: 2.8, jumpPower: -7.2, hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 }, level: 1, xp: 0, maxXp: 100, statPoints: 0, stats: { str: 0, agi: 0, vit: 0, sta: 0, int: 0 },
     isGrounded: false, coyoteTime: 0, isJumping: false, animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,

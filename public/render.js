@@ -16,8 +16,9 @@ window.drawCharacter = function(charData, isLocal) {
 
         window.ctx.save();
         const pCX = charData.x + (charData.width || 24) / 2;
-        const pCY = charData.y + (charData.height || 48);
+        const pCY = charData.y + (charData.height || 40);
         window.ctx.translate(pCX, pCY);
+        window.ctx.scale(0.78, 0.78);
         if (!charData.facingRight) window.ctx.scale(-1, 1);
 
         const maxFrames = 40;
@@ -44,9 +45,12 @@ window.drawCharacter = function(charData, isLocal) {
     window.ctx.save();
     
     const pCX = charData.x + (charData.width || 24) / 2;
-    const pCY = charData.y + (charData.height || 48); 
+    const pCY = charData.y + (charData.height || 40); 
     window.ctx.translate(pCX, pCY);
     
+    // Escala visual del personaje: sprite dibujado es ~50px, lo reducimos para que sea proporcional
+    window.ctx.scale(0.78, 0.78);
+
     if (isLocal && charData.isStealth) { window.ctx.globalAlpha = 0.3; } 
     else if (charData.inBackground) { window.ctx.globalAlpha = 0.5; window.ctx.scale(0.9, 0.9); }
 
@@ -56,19 +60,21 @@ window.drawCharacter = function(charData, isLocal) {
     if (charData.activeTool === 'bow' && charData.isAiming) isFacingR = targetX >= pCX;
     if (!isFacingR) window.ctx.scale(-1, 1); 
     
-    let isJumping = false; let isRunning = false;
+    let isJumping = false; let isRunning = false; let isClimbing = false;
     
     if (isLocal) {
-        isJumping = !charData.isGrounded;
-        isRunning = Math.abs(charData.vx || 0) > 0.1 && !isJumping;
+        isClimbing = charData.isClimbing && !charData.isGrounded;
+        isJumping = !charData.isGrounded && !isClimbing;
+        isRunning = Math.abs(charData.vx || 0) > 0.1 && !isJumping && !isClimbing;
         charData.renderAnimTime = charData.animTime; 
     } else {
+        isClimbing = charData.isClimbing || false;
         let dx = Math.abs(charData.x - (charData.lastX || charData.x)); charData.lastX = charData.x;
         if (dx > 0.1) charData.isMovingFrames = 10; else if (charData.isMovingFrames > 0) charData.isMovingFrames--;
         let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
-        if (Math.abs(dy) > 0.5) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
-        isJumping = charData.isJumpingFrames > 0; isRunning = charData.isMovingFrames > 0 && !isJumping;
-        if (isRunning) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
+        if (Math.abs(dy) > 0.5 && !isClimbing) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
+        isJumping = charData.isJumpingFrames > 0 && !isClimbing; isRunning = charData.isMovingFrames > 0 && !isJumping && !isClimbing;
+        if (isRunning || isClimbing) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
         else charData.renderAnimTime = 0;
     }
 
@@ -93,7 +99,34 @@ window.drawCharacter = function(charData, isLocal) {
         armR   = -Math.PI * 0.5 + Math.sin(dt * 1.7) * 0.9; elbowR =  Math.cos(dt * 2.3) * 0.7 - 0.3;
         armL   = -Math.PI * 0.3 + Math.sin(dt * 1.7 + Math.PI) * 0.9; elbowL =  Math.cos(dt * 2.3 + Math.PI) * 0.7 - 0.3;
         torsoR =  Math.sin(dt * 1.4) * 0.25; headR  =  Math.sin(dt * 0.9 + 0.5) * 0.18; bob    =  Math.abs(Math.sin(dt * 2.1)) * 6;
-    } else if (charData.activeTool === 'torch') {
+    }
+
+    // --- ANIMACIÓN DE ESCALADA (sobrescribe todo lo anterior si aplica) ---
+    if (isClimbing) {
+        // Avanzar timer solo si se está moviendo verticalmente
+        const isMovingOnLadder = isLocal 
+            ? Math.abs(charData.vy || 0) > 0.5
+            : Math.abs((charData.y || 0) - (charData._climbLastY || charData.y)) > 0.15;
+        if (!isLocal) charData._climbLastY = charData.y;
+        
+        if (isMovingOnLadder) {
+            charData._climbAnim = ((charData._climbAnim || 0) + 0.07) % (Math.PI * 2);
+        }
+        const ct = charData._climbAnim || 0;
+        
+        // Brazos: alternando hacia arriba como si agarraran peldaños
+        armR = -Math.PI * 0.55 + Math.sin(ct) * 0.4;
+        armL = -Math.PI * 0.55 + Math.sin(ct + Math.PI) * 0.4;
+        elbowR = 0.5 + Math.sin(ct) * 0.2;
+        elbowL = 0.5 + Math.sin(ct + Math.PI) * 0.2;
+        // Piernas: ligera flexión alterna, movimiento sutil
+        legR = Math.sin(ct + Math.PI) * 0.25; kneeR = Math.max(0, Math.sin(ct + Math.PI) * 0.45);
+        legL = Math.sin(ct) * 0.25;           kneeL = Math.max(0, Math.sin(ct) * 0.45);
+        torsoR = 0; headR = 0.05; bob = 0;
+    }
+
+    if (!isClimbing) {
+    if (charData.activeTool === 'torch') {
         armR = -Math.PI / 2.5; elbowR = -0.3; 
     } else if (charData.activeTool === 'bow' && charData.isAiming) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
@@ -101,6 +134,7 @@ window.drawCharacter = function(charData, isLocal) {
     } else if (charData.attackFrame > 0) {
         let progress = charData.attackFrame / 30; armR = -Math.PI * 0.9 * progress + (1 - progress) * 0.8; elbowR = -0.2; torsoR += 0.3 * progress; 
     }
+    } // end !isClimbing
 
     let skin = charData.isHit ? '#ff4444' : (charData.pvpHitFlash ? '#ff6600' : '#f1c27d');
     let shirt = charData.isHit ? '#ff4444' : (charData.pvpHitFlash ? '#ff6600' : (isLocal ? '#3498db' : '#686868'));
@@ -111,20 +145,28 @@ window.drawCharacter = function(charData, isLocal) {
     window.ctx.translate(0, -bob);
 
     window.ctx.save(); window.ctx.translate(-3, -24); window.ctx.rotate(legL); window.ctx.fillStyle = pantsDark; window.roundRect(window.ctx, -4.5, 0, 9, 14, 4); window.ctx.translate(0, 12); window.ctx.rotate(kneeL); window.ctx.fillStyle = pantsDark; window.roundRect(window.ctx, -3.5, 0, 7, 14, 3); window.ctx.fillStyle = shoesDark; window.roundRect(window.ctx, -4.5, 12, 11, 5, 2); window.ctx.restore();
-    window.ctx.save(); window.ctx.translate(0, -24); window.ctx.rotate(torsoR); window.ctx.save(); window.ctx.translate(2, -20); window.ctx.rotate(armL); window.ctx.fillStyle = shirtDark; window.roundRect(window.ctx, -3.5, 0, 7, 12, 3); window.ctx.translate(0, 10); window.ctx.rotate(elbowL); window.ctx.fillStyle = skin; window.roundRect(window.ctx, -2.5, 0, 5, 10, 2); window.ctx.restore(); window.ctx.fillStyle = shirt; window.roundRect(window.ctx, -9, -22, 18, 24, 6); window.ctx.save(); window.ctx.translate(0, -24); window.ctx.rotate(headR); window.ctx.fillStyle = skin; window.roundRect(window.ctx, -10, -18, 20, 20, 8); window.ctx.fillStyle = '#333'; window.ctx.fillRect(4, -10, 3, 4); window.ctx.fillStyle = '#3E2723'; window.ctx.beginPath(); window.ctx.arc(0, -14, 11, Math.PI, 0); window.ctx.fill(); window.ctx.restore(); window.ctx.restore(); 
+    window.ctx.save(); window.ctx.translate(0, -24); window.ctx.rotate(torsoR); window.ctx.save(); window.ctx.translate(2, -20); window.ctx.rotate(armL); window.ctx.fillStyle = shirtDark; window.roundRect(window.ctx, -3.5, 0, 7, 12, 3); window.ctx.translate(0, 10); window.ctx.rotate(elbowL); window.ctx.fillStyle = skin; window.roundRect(window.ctx, -2.5, 0, 5, 10, 2); window.ctx.restore(); window.ctx.fillStyle = isClimbing ? shirtDark : shirt; window.roundRect(window.ctx, -9, -22, 18, 24, 6); window.ctx.save(); window.ctx.translate(0, -24); window.ctx.rotate(headR);
+    if (isClimbing) {
+        // Vista trasera (nuca) cuando escala
+        window.ctx.fillStyle = '#3E2723'; window.roundRect(window.ctx, -10, -18, 20, 18, 8); // cabello cubre toda la cabeza
+        window.ctx.fillStyle = skin; window.roundRect(window.ctx, -7, -4, 14, 4, 2); // pequeña franja de piel (nuca)
+    } else {
+        window.ctx.fillStyle = skin; window.roundRect(window.ctx, -10, -18, 20, 20, 8); window.ctx.fillStyle = '#333'; window.ctx.fillRect(4, -10, 3, 4); window.ctx.fillStyle = '#3E2723'; window.ctx.beginPath(); window.ctx.arc(0, -14, 11, Math.PI, 0); window.ctx.fill();
+    }
+    window.ctx.restore(); window.ctx.restore();
     window.ctx.save(); window.ctx.translate(3, -24); window.ctx.rotate(legR); window.ctx.fillStyle = pants; window.roundRect(window.ctx, -4.5, 0, 9, 14, 4); window.ctx.translate(0, 12); window.ctx.rotate(kneeR); window.ctx.fillStyle = pants; window.roundRect(window.ctx, -3.5, 0, 7, 14, 3); window.ctx.fillStyle = shoes; window.roundRect(window.ctx, -4.5, 12, 11, 5, 2); window.ctx.restore();
     window.ctx.save(); window.ctx.translate(0, -24); window.ctx.rotate(torsoR); window.ctx.translate(-3, -20); window.ctx.rotate(armR); window.ctx.fillStyle = shirt; window.roundRect(window.ctx, -3.5, 0, 7, 12, 3); window.ctx.translate(0, 10); window.ctx.rotate(elbowR); window.ctx.fillStyle = skin; window.roundRect(window.ctx, -2.5, 0, 5, 10, 2);
     
     window.ctx.translate(0, 8); 
-    if (charData.activeTool === 'bow') {
+    if (!isClimbing && charData.activeTool === 'bow') {
         window.ctx.rotate(Math.PI/2); window.ctx.strokeStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.lineWidth = 3; window.ctx.beginPath(); window.ctx.arc(0, 0, 15, -Math.PI/2.5, Math.PI/2.5); window.ctx.stroke();
         let pull = charData.isAiming ? ((charData.chargeLevel || 0) / 100) * 15 : 0; window.ctx.strokeStyle = '#eee'; window.ctx.lineWidth = 1; window.ctx.beginPath(); window.ctx.moveTo(4.6, -14.2); window.ctx.lineTo(4.6 - pull, 0); window.ctx.lineTo(4.6, 14.2); window.ctx.stroke();
         if (charData.isCharging && (isLocal ? charData.inventory.arrows > 0 : true)) { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(4.6 - pull, -1, 20 + pull, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(4.6 - pull + 20 + pull, -2, 4, 4); }
-    } else if (charData.activeTool === 'torch') {
+    } else if (!isClimbing && charData.activeTool === 'torch') {
         window.ctx.rotate(Math.PI/2); window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 25); let fSize = 5 + Math.random() * 3;
         window.ctx.fillStyle = charData.inBackground ? '#888' : '#e67e22'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize, 0, Math.PI*2); window.ctx.fill();
         window.ctx.fillStyle = charData.inBackground ? '#aaa' : '#f1c40f'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize*0.6, 0, Math.PI*2); window.ctx.fill();
-    } else if (charData.activeTool && charData.activeTool !== 'hand') {
+    } else if (!isClimbing && charData.activeTool && charData.activeTool !== 'hand') {
         window.ctx.rotate(Math.PI/2); 
         if (charData.activeTool === 'axe' || charData.activeTool === 'hammer' || charData.activeTool === 'pickaxe') {
             window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 28); window.ctx.fillStyle = charData.inBackground ? '#666' : '#444'; 
@@ -267,6 +309,26 @@ window.draw = function() {
                 const lc = b.isHit ? '#ff9966' : '#c8a86a'; const lsd = b.isHit ? '#cc6633' : '#8B6230';
                 window.ctx.fillStyle = lsd; window.ctx.fillRect(b.x + 5, b.y, 5, 30); window.ctx.fillRect(b.x + 20, b.y, 5, 30);
                 window.ctx.fillStyle = lc; for (let rung = 0; rung < 3; rung++) { window.ctx.fillRect(b.x + 5, b.y + 4 + rung * 9, 20, 3); }
+            } else if (b.type === 'stair') {
+                const bs = window.game.blockSize;
+                const wood  = b.isHit ? '#ff4444' : '#C19A6B';
+                const woodD = b.isHit ? '#cc2222' : '#8B5A2B';
+                window.ctx.fillStyle = wood;
+                // Dibuja 3 peldaños en forma de L (escalón)
+                // facingRight=true: escalón sube de izquierda a derecha
+                // facingRight=false: escalón sube de derecha a izquierda
+                const fr = b.facingRight !== false; // default true
+                const step = bs / 3; // cada peldaño = 10px
+                for (let i = 0; i < 3; i++) {
+                    const sx = fr ? b.x + i * step : b.x + (2 - i) * step;
+                    const sy = b.y + (2 - i) * step;
+                    window.ctx.fillStyle = wood;
+                    window.ctx.fillRect(sx, sy, step, bs - (2 - i) * step);
+                    // borde oscuro superior e izquierdo/derecho
+                    window.ctx.fillStyle = woodD;
+                    window.ctx.fillRect(sx, sy, step, 2); // borde top
+                    window.ctx.fillRect(fr ? sx : sx + step - 2, sy, 2, bs - (2 - i) * step); // borde lateral
+                }
             }
         }
     });
@@ -558,15 +620,49 @@ window.draw = function() {
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize; 
         const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
         
-        const isDoor = window.player.buildMode === 'door'; const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize;
+        const isDoor  = window.player.buildMode === 'door';
+        const isStair = window.player.buildMode === 'stair';
+        const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize;
+        const bs = window.game.blockSize;
         
-        let valid = window.isValidPlacement(gridX, gridY, window.game.blockSize, itemHeight, true, true);
-        let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
+        let valid = window.isValidPlacement(gridX, gridY, bs, itemHeight, true, true);
+        let validColor = valid ? '#00FF00' : '#FF0000';
+        let validFill  = valid ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.3)';
 
-        window.ctx.globalAlpha = 0.5; window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.setLineDash([4, 2]);
-        window.ctx.strokeRect(gridX, gridY, window.game.blockSize, itemHeight);
-        window.ctx.fillStyle = validFill; window.ctx.fillRect(gridX, gridY, window.game.blockSize, itemHeight);
-        window.ctx.setLineDash([]); window.ctx.globalAlpha = 1.0;
+        window.ctx.save();
+        window.ctx.globalAlpha = 0.6;
+        window.ctx.strokeStyle = validColor;
+        window.ctx.lineWidth = 2;
+        window.ctx.setLineDash([4, 2]);
+
+        if (isStair) {
+            // Ghost triangular: dibuja el perfil de la escalera como un triángulo relleno
+            const fr = !window.player.stairMirror; // facingRight
+            window.ctx.beginPath();
+            if (fr) {
+                // sube de izquierda a derecha: esquina inf-izq, inf-der, sup-der
+                window.ctx.moveTo(gridX,       gridY + bs);
+                window.ctx.lineTo(gridX + bs,  gridY + bs);
+                window.ctx.lineTo(gridX + bs,  gridY);
+            } else {
+                // sube de derecha a izquierda: esquina inf-izq, inf-der, sup-izq
+                window.ctx.moveTo(gridX,       gridY + bs);
+                window.ctx.lineTo(gridX + bs,  gridY + bs);
+                window.ctx.lineTo(gridX,       gridY);
+            }
+            window.ctx.closePath();
+            window.ctx.fillStyle = validFill;
+            window.ctx.fill();
+            window.ctx.stroke();
+        } else {
+            window.ctx.strokeRect(gridX, gridY, bs, itemHeight);
+            window.ctx.fillStyle = validFill;
+            window.ctx.fillRect(gridX, gridY, bs, itemHeight);
+        }
+
+        window.ctx.setLineDash([]);
+        window.ctx.globalAlpha = 1.0;
+        window.ctx.restore();
     }
 
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
@@ -672,7 +768,7 @@ window.draw = function() {
         if (window.game.isMultiplayer) {
             Object.values(window.otherPlayers).forEach(p => { 
                 if (p.id !== window.socket?.id && !p.isDead && p.activeTool === 'torch') {
-                    let [cx, cy] = _wts(p.x + (p.width||24)/2, p.y + (p.height||48)/2);
+                    let [cx, cy] = _wts(p.x + (p.width||24)/2, p.y + (p.height||40)/2);
                     let pGlowSize2 = (250 + Math.random()*20) * _lz;
                     let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, pGlowSize2);
                     pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.8)'); pGrad.addColorStop(1, 'rgba(255, 150, 50, 0)');
@@ -711,7 +807,7 @@ window.draw = function() {
         if (!isLocal) { let dist = Math.hypot(window.player.x - charData.x, window.player.y - charData.y); if (dist > 500) return; }
 
         const pCX = charData.x + (charData.width || 24) / 2;
-        const pCY = charData.y + (charData.height || 48); 
+        const pCY = charData.y + (charData.height || 40); 
         const bob = Math.abs(Math.sin((charData.renderAnimTime || 0) * 3)) * 3; 
         const nameY = pCY - 80 - bob;
 
@@ -819,11 +915,46 @@ window.draw = function() {
     window.ctx.restore(); 
     window.ctx.restore(); 
 
+    // --- TUTORIAL MODO CONSTRUIR (centrado en pantalla) ---
+    if (window.player.activeTool === 'hammer' && !window.player.isDead && !window.player.placementMode) {
+        const C = window.ctx;
+        const W = window._canvasLogicW || 1280;
+        const isStairMode = window.player.buildMode === 'stair';
+        const boxW = 300, boxH = isStairMode ? 92 : 72;
+        const tutX = (W - boxW) / 2, tutY = 60;
+        C.save();
+        C.globalAlpha = 0.82;
+        C.fillStyle = 'rgba(10,10,10,0.75)';
+        window.roundRect(C, tutX, tutY, boxW, boxH, 8);
+        C.fill();
+        C.globalAlpha = 1;
+        C.textAlign = 'center';
+        const cx = tutX + boxW / 2;
+        C.font = 'bold 12px Inter, sans-serif';
+        C.fillStyle = '#f0c040';
+        C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18);
+        C.font = '11px Inter, sans-serif';
+        C.fillStyle = '#ddd';
+        const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón' };
+        C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 🪵)`, cx, tutY + 36);
+        C.fillStyle = '#aaa';
+        if (isStairMode) {
+            C.fillStyle = '#88ccff';
+            C.fillText(`T → espejo  (${window.player.stairMirror ? '◀ sube a la izquierda' : '▶ sube a la derecha'})`, cx, tutY + 54);
+            C.fillStyle = '#888';
+            C.fillText('Caminar sobre el escalón para subir automáticamente', cx, tutY + 70);
+        } else {
+            C.fillStyle = '#888';
+            C.fillText('Puerta cuesta 4 madera · Bloque/Escalón 2 madera', cx, tutY + 52);
+        }
+        C.restore();
+    }
+
     if (window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer) {
         const rival = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
         if (rival && !rival.isDead) {
             const rWorldX = rival.x + (rival.width||24)/2;
-            const rWorldY = rival.y + (rival.height||48)/2;
+            const rWorldY = rival.y + (rival.height||40)/2;
             const pWorldX = window.player.x + window.player.width/2;
             const pWorldY = window.player.y + window.player.height/2;
 
@@ -866,7 +997,7 @@ window.draw = function() {
                 window.ctx.fillText(`${rivalName} ${dist}m`, 0, 0);
             } else {
                 const pulse = Math.sin(window.game.frameCount * 0.12) * 0.3 + 0.85;
-                const rivalH = (rival.height||48) * _z2;
+                const rivalH = (rival.height||40) * _z2;
                 window.ctx.globalAlpha = pulse;
                 window.ctx.fillStyle = 'rgba(160,10,10,0.82)';
                 window.ctx.beginPath();
