@@ -92,21 +92,21 @@ const currentUrlDisplay = window.getEl('current-url');
 const urlArea = window.getEl('online-url-area'); 
 const statusBadge = window.getEl('server-status-badge');
 
-if (!isLocalEnv) {
-    if (urlArea) urlArea.style.display = 'block';
-    if (currentUrlDisplay) currentUrlDisplay.innerText = window.location.origin;
-    if (statusBadge) {
-        statusBadge.innerHTML = 'Estado: <span style="color:#f39c12;">🟠 Despertando / Verificando...</span>';
-        fetch(window.location.origin).then(r => { 
-            if (r.ok) statusBadge.innerHTML = 'Estado: <span style="color:#4CAF50;">🟢 En Línea y Listo</span>'; 
-            else throw new Error(); 
-        }).catch(e => { 
-            statusBadge.innerHTML = 'Estado: <span style="color:#ff4444;">🔴 Error de Conexión</span>'; 
-        });
-    }
-} else {
-    if (urlArea) urlArea.style.display = 'none'; 
-    if (statusBadge) statusBadge.style.display = 'none'; 
+// Check global server status + stats
+if (!isLocalEnv && statusBadge) {
+    const t0 = Date.now();
+    fetch(window.location.origin + '/api/status').then(r => r.json()).then(data => {
+        const ping = Date.now() - t0;
+        statusBadge.innerHTML = `🟢 <span style="color:#3ddc84;">En Línea</span>`;
+        const ps = window.getEl('gstat-players'); if(ps) ps.textContent = data.players + '/' + data.maxPlayers;
+        const ss = window.getEl('gstat-seed'); if(ss) ss.textContent = data.seedCode || '?';
+        const pg = window.getEl('gstat-ping'); if(pg) pg.textContent = ping;
+        const gs = window.getEl('global-server-stats'); if(gs) gs.style.display = 'flex';
+    }).catch(() => {
+        if(statusBadge) statusBadge.innerHTML = '🔴 <span style="color:#ff4444;">Sin conexión</span>';
+    });
+} else if (isLocalEnv && statusBadge) {
+    statusBadge.innerHTML = '🟡 <span style="color:#f0a030;">Entorno local</span>';
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -166,6 +166,136 @@ window.getEl('btn-single')?.addEventListener('click', () => window.startGame(fal
 window.getEl('btn-host')?.addEventListener('click', () => window.startGame(true, window.location.hostname));
 window.getEl('btn-join')?.addEventListener('click', () => { const ip = window.getEl('server-ip').value; if(ip) window.startGame(true, ip); else alert("Ingresa una IP válida"); });
 window.getEl('btn-help')?.addEventListener('click', () => { const t = window.getEl('game-tips'); if(t) t.style.display = t.style.display === 'none' ? 'block' : 'none'; });
+
+// ── Tabs del menú principal ────────────────────────────
+window.showMenuTab = function(tab) {
+    const isSolo = tab === 'solo';
+    const tSolo = window.getEl('tab-solo'), tMulti = window.getEl('tab-multi');
+    const pSolo = window.getEl('panel-solo'), pMulti = window.getEl('panel-multi');
+    if (!tSolo || !tMulti || !pSolo || !pMulti) return;
+    pSolo.style.display  = isSolo ? 'block' : 'none';
+    pMulti.style.display = isSolo ? 'none'  : 'block';
+    // Tab activo
+    tSolo.style.background  = isSolo ? 'rgba(61,220,132,0.12)' : 'rgba(255,255,255,0.03)';
+    tSolo.style.borderColor = isSolo ? 'rgba(61,220,132,0.4)'  : 'rgba(255,255,255,0.08)';
+    tSolo.style.color       = isSolo ? '#3ddc84' : '#5a6475';
+    tMulti.style.background  = !isSolo ? 'rgba(91,180,245,0.1)'  : 'rgba(255,255,255,0.03)';
+    tMulti.style.borderColor = !isSolo ? 'rgba(91,180,245,0.35)' : 'rgba(255,255,255,0.08)';
+    tMulti.style.color       = !isSolo ? '#5bb4f5' : '#5a6475';
+    if (!isSolo) window.refreshServerList();
+};
+// Init tab
+window.showMenuTab('solo');
+
+// ── Lista de servidores guardados ────────────────────────
+window.refreshServerList = function() {
+    const list = window.getEl('server-list');
+    if (!list) return;
+    const saved = JSON.parse(localStorage.getItem('savedServers') || '[]');
+    const emptyMsg = window.getEl('server-list-empty');
+    if (emptyMsg) emptyMsg.style.display = saved.length ? 'none' : 'block';
+
+    // Remove old server rows (keep empty msg)
+    list.querySelectorAll('.srv-row').forEach(e => e.remove());
+
+    saved.forEach(ip => {
+        const row = document.createElement('div');
+        row.className = 'srv-row';
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:7px 9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:7px;font-family:var(--font-ui);';
+        row.innerHTML = `
+            <span style="font-size:10px;color:#5a6475;">🟡</span>
+            <span style="flex:1;font-size:12px;color:#d8dde6;font-family:monospace;">${ip}</span>
+            <span class="srv-ping" style="font-size:10px;color:#5a6475;min-width:40px;text-align:right;">…ms</span>
+            <button onclick="window.getEl('server-ip').value='${ip}';window.startGame(true,'${ip}')" style="background:rgba(91,180,245,0.12);border:1px solid rgba(91,180,245,0.3);color:#5bb4f5;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:10px;font-family:var(--font-ui);">Unirse</button>
+            <button onclick="window.removeSavedServer('${ip}')" style="background:transparent;border:none;color:#5a6475;cursor:pointer;font-size:13px;padding:0 2px;" title="Eliminar" onmouseover="this.style.color='#e07070'" onmouseout="this.style.color='#5a6475'">✕</button>
+        `;
+        list.appendChild(row);
+        // Ping check
+        const pingEl = row.querySelector('.srv-ping');
+        const t0 = Date.now();
+        fetch(`http://${ip}:3000/api/status`).then(r => r.json()).then(data => {
+            const ms = Date.now() - t0;
+            pingEl.innerHTML = `<span style="color:${ms<80?'#44dd44':ms<200?'#f0a030':'#ee3333'}">${ms}ms</span>`;
+            row.querySelector('span:nth-child(1)').textContent = '🟢';
+            row.querySelector('span:nth-child(2)').textContent = `${ip}  ·  👥${data.players}/${data.maxPlayers}  ·  🌍${data.seedCode}`;
+        }).catch(() => {
+            pingEl.textContent = 'offline';
+            row.querySelector('span:nth-child(1)').textContent = '🔴';
+        });
+    });
+};
+
+window.removeSavedServer = function(ip) {
+    let list = JSON.parse(localStorage.getItem('savedServers') || '[]');
+    list = list.filter(s => s !== ip);
+    localStorage.setItem('savedServers', JSON.stringify(list));
+    window.refreshServerList();
+};
+
+// ── Menú in-game ────────────────────────────────────────
+window.toggleServerMenu = function() {
+    const panel = window.getEl('server-menu-panel');
+    if (!panel) return;
+    const visible = panel.style.display !== 'none';
+    panel.style.display = visible ? 'none' : 'block';
+    if (!visible) {
+        // Fill info
+        const info = window.getEl('server-menu-info');
+        if (info && window.game) {
+            const isMulti = window.game.isMultiplayer;
+            const playerCount = isMulti && window.otherPlayers ? Object.keys(window.otherPlayers).length + 1 : 1;
+            const serverAddr = isMulti ? (window.socket?.io?.opts?.hostname || window.location.hostname) : 'Local';
+            info.innerHTML = `
+                <div>🖥️ Servidor: <span style="color:#d8dde6;">${serverAddr}</span></div>
+                <div>👥 Jugadores: <span style="color:#d8dde6;">${playerCount}</span></div>
+                <div>🌍 Semilla: <span style="color:#3ddc84;">${window.seedCode || '?'}</span></div>
+            `;
+        }
+    }
+};
+
+window.copyInviteLink = function() {
+    let link;
+    if (window.game && window.game.isMultiplayer && window.socket) {
+        const host = window.location.origin !== 'null' ? window.location.origin : 
+                     'http://' + (window.socket?.io?.opts?.hostname || window.location.hostname) + ':3000';
+        link = host;
+    } else {
+        link = window.location.href;
+    }
+    navigator.clipboard.writeText(link).then(() => {
+        const btn = document.querySelector('[onclick="window.copyInviteLink()"]');
+        if (btn) { const orig = btn.textContent; btn.textContent = '✅ ¡Copiado!'; setTimeout(() => btn.textContent = orig, 2000); }
+    }).catch(() => {
+        // fallback: show in div
+        const d = window.getEl('invite-link-display');
+        if (d) { d.style.display = 'block'; d.textContent = link; }
+    });
+    const d = window.getEl('invite-link-display');
+    if (d) { d.style.display = 'block'; d.textContent = link; }
+};
+
+window.leaveServer = function() {
+    if (confirm('¿Salir del servidor y volver al menú?')) {
+        if (window.socket) window.socket.disconnect();
+        window.location.reload();
+    }
+};
+
+// Mostrar botón de servidor en juego solo en multijugador
+window._origStartGame = window.startGame;
+window.startGame = function(multiplayer, ip) {
+    window._origStartGame(multiplayer, ip);
+    setTimeout(() => {
+        const btn = window.getEl('btn-server-menu');
+        if (btn) btn.style.display = multiplayer ? 'inline-block' : 'none';
+        // Guardar servidor al unirse
+        if (multiplayer && ip && ip !== window.location.hostname) {
+            let saved = JSON.parse(localStorage.getItem('savedServers') || '[]');
+            if (!saved.includes(ip)) { saved.unshift(ip); if(saved.length > 8) saved.pop(); localStorage.setItem('savedServers', JSON.stringify(saved)); }
+        }
+    }, 500);
+};
 
 window.getEl('craft-search')?.addEventListener('input', (e) => { 
     const term = (e.target.value || "").toLowerCase(); 

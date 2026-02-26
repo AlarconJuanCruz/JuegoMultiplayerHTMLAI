@@ -61,98 +61,90 @@
         <!--  MENÚ PRINCIPAL                             -->
         <!-- ═══════════════════════════════════════════ -->
         <div id="main-menu">
-            <div class="menu-box">
-                <h1 class="menu-title">SURVIVAL RPG</h1>
-                <p class="menu-subtitle">Alpha Multijugador</p>
+            <div class="menu-box" style="max-width:420px; padding:26px 26px 22px; overflow-y:auto; max-height:90vh;">
 
-                <!-- ── SEMILLA DEL MUNDO ─────────────────────────── -->
-                <div id="seed-section" style="
-                    background: rgba(61,220,132,0.05);
-                    border: 1px solid rgba(61,220,132,0.18);
-                    border-radius: 8px;
-                    padding: 10px 14px;
-                    margin-bottom: 14px;
-                    font-family: var(--font-ui);
-                ">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:7px;">
-                        <span style="font-size:11px; color:#5a6475; letter-spacing:0.06em; text-transform:uppercase;">🌍 Semilla del Mundo</span>
+                <!-- TÍTULO -->
+                <div style="text-align:center; margin-bottom:18px;">
+                    <h1 class="menu-title" style="font-size:2.1rem; margin-bottom:3px; letter-spacing:0.18em;">⚔️ SURVIVAL RPG</h1>
+                    <p class="menu-subtitle" style="margin:0; font-size:11px; letter-spacing:0.12em;">ALPHA MULTIJUGADOR</p>
+                </div>
+
+                <!-- SEMILLA -->
+                <div id="seed-section" style="background:rgba(61,220,132,0.05);border:1px solid rgba(61,220,132,0.18);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-family:var(--font-ui);">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+                        <span style="font-size:11px;color:#5a6475;letter-spacing:0.06em;text-transform:uppercase;">🌍 Semilla del Mundo</span>
                     </div>
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <div style="
-                            flex:1; background:rgba(0,0,0,0.4); border:1px solid rgba(61,220,132,0.25);
-                            border-radius:6px; padding:7px 10px; display:flex; align-items:center; gap:6px;
-                        ">
-                            <span style="font-size:11px; color:#5a6475;">Código:</span>
-                            <span id="seed-display" style="
-                                font-family: monospace; font-size:17px; font-weight:700;
-                                letter-spacing:0.15em; color:#3ddc84;
-                            ">-----</span>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <div style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(61,220,132,0.25);border-radius:6px;padding:7px 10px;display:flex;align-items:center;gap:6px;">
+                            <span style="font-size:11px;color:#5a6475;">Código:</span>
+                            <span id="seed-display" style="font-family:monospace;font-size:17px;font-weight:700;letter-spacing:0.15em;color:#3ddc84;">-----</span>
                         </div>
-                        <button id="btn-copy-seed" onclick="window.copySeedCode()" style="
-                            background:rgba(61,220,132,0.08); border:1px solid rgba(61,220,132,0.25);
-                            color:#3ddc84; border-radius:6px; padding:7px 10px; cursor:pointer;
-                            font-size:12px; font-family:var(--font-ui);
-                        " title="Copiar código">📋</button>
-                        <button id="btn-new-seed" onclick="window.resetSeed()" style="
-                            background:rgba(240,160,48,0.08); border:1px solid rgba(240,160,48,0.25);
-                            color:#f0a030; border-radius:6px; padding:7px 10px; cursor:pointer;
-                            font-size:12px; font-family:var(--font-ui);
-                        " id="btn-new-seed" title="Nueva semilla (solo sin jugadores)">🔄</button>
+                        <button id="btn-copy-seed" onclick="window.copySeedCode()" style="background:rgba(61,220,132,0.08);border:1px solid rgba(61,220,132,0.25);color:#3ddc84;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:12px;font-family:var(--font-ui);" title="Copiar código">📋</button>
+                        <button id="btn-new-seed" onclick="window.resetSeed()" style="background:rgba(240,160,48,0.08);border:1px solid rgba(240,160,48,0.25);color:#f0a030;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:12px;font-family:var(--font-ui);" title="Nueva semilla">🔄</button>
                     </div>
-                    <div style="display:flex; gap:6px; margin-top:7px;">
-                        <input type="text" id="seed-input" class="menu-input" 
-                               style="margin-bottom:0; flex:1; padding:7px 10px; font-family:monospace; 
-                                      letter-spacing:0.1em; text-transform:uppercase; font-size:13px;"
-                               placeholder="Ingresar código de semilla…" maxlength="8">
-                        <button onclick="window.loadSeedCode()" style="
-                            background:rgba(91,180,245,0.08); border:1px solid rgba(91,180,245,0.25);
-                            color:#5bb4f5; border-radius:6px; padding:7px 12px; cursor:pointer;
-                            font-size:12px; font-family:var(--font-ui); white-space:nowrap;
-                        ">Aplicar</button>
+                    <div style="display:flex;gap:6px;margin-top:7px;">
+                        <input type="text" id="seed-input" class="menu-input" style="margin-bottom:0;flex:1;padding:7px 10px;font-family:monospace;letter-spacing:0.1em;text-transform:uppercase;font-size:13px;" placeholder="Ingresar código de semilla…" maxlength="8">
+                        <button onclick="window.loadSeedCode()" style="background:rgba(91,180,245,0.08);border:1px solid rgba(91,180,245,0.25);color:#5bb4f5;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:12px;font-family:var(--font-ui);white-space:nowrap;">Aplicar</button>
                     </div>
-                    <div id="seed-status" style="font-size:10px; color:#5a6475; margin-top:4px; min-height:14px; font-family:var(--font-ui);"></div>
+                    <div id="seed-status" style="font-size:10px;color:#5a6475;margin-top:4px;min-height:14px;font-family:var(--font-ui);"></div>
                 </div>
-                <!-- ─────────────────────────────────────────────── -->
 
-                <input type="text" id="player-name" class="menu-input"
-                       placeholder="Tu nombre de superviviente…" maxlength="15">
+                <!-- NOMBRE -->
+                <input type="text" id="player-name" class="menu-input" placeholder="Tu nombre de superviviente…" maxlength="15">
 
-                <!-- Jugar solo -->
-                <button id="btn-single" class="action-btn">
-                    🕹️ Jugar Solo (Offline)
-                </button>
+                <!-- TABS -->
+                <div style="display:flex;gap:6px;margin-bottom:16px;">
+                    <button id="tab-solo" onclick="window.showMenuTab('solo')" style="flex:1;padding:10px;border-radius:7px;border:1px solid rgba(61,220,132,0.4);background:rgba(61,220,132,0.12);color:#3ddc84;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.04em;transition:all 0.2s;">🕹️ Solo</button>
+                    <button id="tab-multi" onclick="window.showMenuTab('multi')" style="flex:1;padding:10px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#5a6475;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.04em;transition:all 0.2s;">🌐 Multijugador</button>
+                </div>
 
-                <!-- Online -->
-                <div style="background: rgba(61,220,132,0.05); padding: 12px; border-radius: 8px; border: 1px solid rgba(61,220,132,0.15); margin-bottom: 12px;">
-                    <button id="btn-online" class="action-btn" style="margin-bottom: 6px;">
-                        🌐 Jugar Online (Global)
+                <!-- PANEL SOLO -->
+                <div id="panel-solo">
+                    <button id="btn-single" class="action-btn" style="font-size:14px; padding:13px;">🕹️ Jugar Solo (Offline)</button>
+                </div>
+
+                <!-- PANEL MULTIJUGADOR -->
+                <div id="panel-multi" style="display:none;">
+
+                    <!-- Servidor Global -->
+                    <div style="background:rgba(61,220,132,0.05);border:1px solid rgba(61,220,132,0.2);border-radius:9px;padding:12px 14px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <span style="font-family:var(--font-ui);font-size:11px;color:#5a6475;text-transform:uppercase;letter-spacing:0.06em;">🌐 Servidor Global</span>
+                            <div id="server-status-badge" style="font-size:11px;font-weight:600;color:#f0a030;font-family:var(--font-ui);">🟠 Verificando…</div>
+                        </div>
+                        <div id="global-server-stats" style="display:none;font-family:var(--font-ui);font-size:11px;color:#5a6475;margin-bottom:8px;display:flex;gap:12px;">
+                            <span>👥 <span id="gstat-players">?</span> jugadores</span>
+                            <span>🌍 Semilla: <span id="gstat-seed">?</span></span>
+                            <span>📶 <span id="gstat-ping">?</span>ms</span>
+                        </div>
+                        <button id="btn-online" class="action-btn" style="margin-bottom:0;">🌐 Unirse al Servidor Global</button>
+                    </div>
+
+                    <!-- Lista de servidores -->
+                    <div style="background:rgba(91,180,245,0.05);border:1px solid rgba(91,180,245,0.18);border-radius:9px;padding:12px 14px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <span style="font-family:var(--font-ui);font-size:11px;color:#5a6475;text-transform:uppercase;letter-spacing:0.06em;">🖥️ Servidores LAN / Directos</span>
+                            <button onclick="window.refreshServerList()" id="btn-refresh-servers" style="background:rgba(91,180,245,0.1);border:1px solid rgba(91,180,245,0.25);color:#5bb4f5;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:10px;font-family:var(--font-ui);">↺ Actualizar</button>
+                        </div>
+                        <div id="server-list" style="display:flex;flex-direction:column;gap:5px;min-height:40px;max-height:150px;overflow-y:auto;margin-bottom:9px;padding-right:2px;">
+                            <div id="server-list-empty" style="color:#5a6475;font-size:11px;font-family:var(--font-ui);text-align:center;padding:10px 0;">Ningún servidor encontrado. Ingresá una IP manualmente.</div>
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0;flex:2;padding:8px 10px;font-size:12px;" placeholder="IP del servidor (ej: 192.168.1.5)…">
+                            <button id="btn-join" class="action-btn" style="flex:1;margin:0;border-color:rgba(91,180,245,0.3);color:#5bb4f5;background:linear-gradient(180deg,rgba(4,14,28,0.92),rgba(2,8,18,0.96));">Unirse</button>
+                        </div>
+                    </div>
+
+                    <!-- Crear servidor -->
+                    <button id="btn-host" class="action-btn" style="border-color:rgba(240,160,48,0.3);color:#f0a030;text-shadow:0 0 12px rgba(240,160,48,0.2);background:linear-gradient(180deg,rgba(28,16,4,0.92),rgba(18,10,2,0.96));">
+                        🏠 Crear / Hostear Servidor Local
                     </button>
-                    <div id="online-url-area" style="display:none; font-size: 11px; color: #5a6475; margin-bottom: 4px; font-family: var(--font-ui);">
-                        🔗 <span id="current-url" style="color: #3ddc84;"></span>
-                    </div>
-                    <div id="server-status-badge" style="font-size: 11px; font-weight: 600; color: #f0a030; font-family: var(--font-ui); letter-spacing: 0.04em;">
-                        🟠 Comprobando servidor…
-                    </div>
+
+                    <!-- Hidden compat div -->
+                    <div id="saved-servers" style="display:none;"></div>
+                    <div id="online-url-area" style="display:none;"><span id="current-url"></span></div>
                 </div>
 
-                <hr class="menu-sep">
-
-                <!-- LAN -->
-                <button id="btn-host" class="action-btn" style="border-color: rgba(240,160,48,0.25); color: #f0a030; text-shadow: 0 0 12px rgba(240,160,48,0.25); background: linear-gradient(180deg, rgba(28,16,4,0.92), rgba(18,10,2,0.96)); margin-bottom: 8px;">
-                    🏠 Crear Servidor Local (LAN)
-                </button>
-                <div style="display: flex; gap: 8px; margin-bottom: 4px;">
-                    <input type="text" id="server-ip" class="menu-input"
-                           style="margin-bottom: 0; flex: 2; padding: 9px 12px;"
-                           placeholder="IP del servidor…">
-                    <button id="btn-join" class="action-btn"
-                            style="flex: 1; margin: 0; border-color: rgba(91,180,245,0.25); color: #5bb4f5; text-shadow: 0 0 12px rgba(91,180,245,0.25); background: linear-gradient(180deg, rgba(4,14,28,0.92), rgba(2,8,18,0.96));">
-                        Unirse
-                    </button>
-                </div>
-
-                <!-- Servidores guardados -->
-                <div id="saved-servers"></div>
             </div>
         </div>
 
@@ -249,6 +241,27 @@
             <!-- ── ARRIBA CENTRO (reloj) ──────────── -->
             <div id="clock-display">Día 1 — 08:00</div>
 
+            <!-- ── MENÚ SERVIDOR IN-GAME ─────────── -->
+            <div id="server-menu-panel" style="display:none;position:absolute;top:50px;right:18px;z-index:600;pointer-events:auto;
+                 background:rgba(8,12,20,0.97);backdrop-filter:blur(16px);
+                 border:1px solid rgba(240,160,48,0.3);border-top:2px solid #f0a030;border-radius:10px;
+                 min-width:270px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.85);">
+                <div style="padding:11px 16px 9px;border-bottom:1px solid rgba(240,160,48,0.12);display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-family:var(--font-display);font-size:12px;letter-spacing:0.12em;color:#f0a030;text-transform:uppercase;font-weight:700;">☰ Servidor</span>
+                    <button onclick="window.toggleServerMenu()" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:14px;padding:0 2px;pointer-events:auto;" onmouseover="this.style.color='#f0a030'" onmouseout="this.style.color='#555'">✕</button>
+                </div>
+                <div id="server-menu-info" style="padding:9px 16px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:var(--font-ui);font-size:11px;color:#5a6475;line-height:1.7;"></div>
+                <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px;">
+                    <button onclick="window.copyInviteLink()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(61,220,132,0.3);background:rgba(61,220,132,0.08);color:#3ddc84;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;pointer-events:auto;">
+                        🔗 Copiar Link de Invitación
+                    </button>
+                    <div id="invite-link-display" style="display:none;background:rgba(0,0,0,0.45);border:1px solid rgba(61,220,132,0.2);border-radius:6px;padding:8px 10px;font-family:monospace;font-size:10px;color:#3ddc84;word-break:break-all;line-height:1.5;"></div>
+                    <button onclick="window.leaveServer()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(220,60,60,0.3);background:rgba(220,60,60,0.07);color:#e07070;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;pointer-events:auto;">
+                        🚪 Salir del Servidor
+                    </button>
+                </div>
+            </div>
+
             <!-- ── ARRIBA DERECHA ─────────────────── -->
             <div style="position:absolute; top:18px; right:18px; display:flex; flex-direction:column; gap:10px; align-items:flex-end; pointer-events:none; z-index:200; width:290px;">
 
@@ -264,6 +277,7 @@
                     </div>
                     <button class="toggle-btn" onclick="window.toggleMenu('crafting')">⚒️ Crafteo</button>
                     <button id="btn-help" class="toggle-btn" style="padding: 5px 8px;">?</button>
+                    <button id="btn-server-menu" class="toggle-btn" style="display:none; color:#f0a030; border-color:rgba(240,160,48,0.3);" onclick="window.toggleServerMenu()">☰ Servidor</button>
                 </div>
 
                 <!-- Barras de estado -->

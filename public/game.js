@@ -182,10 +182,21 @@ window.checkBlockCollisions = function(axis) {
             if (axis === 'x') { 
                 // Ignorar colisión de pared si los pies están cerca de la cima (esquina)
                 if (p.y + p.height <= b.y + 18) continue;
-                // Ignorar si el jugador va hacia arriba O si está a punto de saltar (coyoteTime activo + jumpPressed)
+                // Ignorar si el jugador ya está subiendo
                 if (p.vy < 0) continue;
+
                 const wantsJump = window.keys && window.keys.jumpPressed && p.jumpKeyReleased && p.coyoteTime > 0;
-                if (wantsJump) continue;
+                if (wantsJump) {
+                    // Separar activamente del bloque para que el salto no quede trabado
+                    if (p.vx > 0) { p.x = b.x - p.width - 2; p.vx = 0; }
+                    else if (p.vx < 0) { p.x = b.x + bs + 2; p.vx = 0; }
+                    // Aplicar salto inmediatamente
+                    p.vy = p.jumpPower;
+                    p.isJumping = true;
+                    p.coyoteTime = 0;
+                    p.jumpKeyReleased = false;
+                    continue;
+                }
 
                 if (p.vx > 0) p.x = b.x - p.width - 0.1; 
                 else if (p.vx < 0) p.x = b.x + bs + 0.1; 
@@ -203,7 +214,7 @@ window.checkEntityCollisions = function(ent, axis) {
     let hitWall = false;
     for (let i = window.blocks.length - 1; i >= 0; i--) {
         let b = window.blocks[i];
-        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; 
+        if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'stair') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, window.game.blockSize, itemHeight)) {
             if (axis === 'x') {
@@ -368,7 +379,7 @@ window.startGame = function(multiplayer, ip = null) {
                     op.chargeLevel = pInfo.chargeLevel; op.level = pInfo.level;
                     op.mouseX = pInfo.mouseX; op.mouseY = pInfo.mouseY;
                     op.isDancing = pInfo.isDancing || false; op.danceStart = pInfo.danceStart || 0;
-                    op.isClimbing = pInfo.isClimbing || false;
+                    op.isClimbing = pInfo.isClimbing || false; op.isGrounded = pInfo.isGrounded || false;
                     
                     // --- DISPARAR ANIMACIÓN DE MUERTE REMOTA ---
                     if (pInfo.isDead && !op.isDead) {
@@ -725,10 +736,24 @@ document.addEventListener('drop', (e) => {
 
 window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
     const range = meleeRange || window.player.miningRange;
-    for (let i = window.entities.length - 1; i >= 0; i--) {
-        let ent = window.entities[i];
-        const dist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
-        if (dist <= range) {
+    // Priorizar entidad bajo el cursor, luego la más cercana al jugador
+    let target = null;
+    if (window.hoveredEntity && !window.hoveredEntity.isDead) {
+        const hd = Math.hypot(pCX - (window.hoveredEntity.x+window.hoveredEntity.width/2), pCY - (window.hoveredEntity.y+window.hoveredEntity.height/2));
+        if (hd <= range) target = window.hoveredEntity;
+    }
+    if (!target) {
+        let minD = Infinity;
+        for (let _e of window.entities) {
+            const d = Math.hypot(pCX - (_e.x+_e.width/2), pCY - (_e.y+_e.height/2));
+            if (d <= range && d < minD) { minD = d; target = _e; }
+        }
+    }
+    const _hitFn = (target) => {
+        let i = window.entities.indexOf(target);
+        if (i === -1) return false;
+        let ent = target;
+        {
                 ent.hp -= dmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
                 if (window.playSound) window.playSound('hit_entity');
                 window.spawnDamageText(ent.x+ent.width/2+(Math.random()-0.5)*16, ent.y-5-Math.random()*8, `-${dmg}`, 'melee');
@@ -742,9 +767,12 @@ window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
                     else if (ent.type === 'archer') { let ni1 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:-1, vy:-1, type:'arrows', amount:2+Math.floor(Math.random()*4), life:1.0}; window.droppedItems.push(ni1); window.sendWorldUpdate('drop_item', {item:ni1}); let ni2 = { id: Math.random().toString(36).substring(2,9), x:ent.x, y:ent.y, vx:1, vy:-1, type:'wood', amount:3, life:1.0}; window.droppedItems.push(ni2); window.sendWorldUpdate('drop_item', {item:ni2}); window.gainXP(40 * ent.level); }
                     window.entities.splice(i, 1); if(window.updateUI) window.updateUI(); 
                 } else { window.sendWorldUpdate('hit_entity', { id: ent.id, dmg: dmg }); if (ent.type === 'chicken') { ent.fleeTimer = 180; ent.fleeDir = (ent.x > pCX) ? 1 : -1; window.sendWorldUpdate('flee_entity', { id: ent.id, dir: ent.fleeDir }); } }
-                return true; 
+                return true;
         }
-    } return false;
+        return false;
+    };
+    if (target) return _hitFn(target);
+    return false;
 };
 
 window.tryHitBlock = function(pCX, pCY, dmg, meleeRange) {
@@ -1029,6 +1057,17 @@ function update() {
             const _W = window._canvasLogicW || 1280; const _H = window._canvasLogicH || 720;
             const _z = window.game.zoom || 1;
             window.mouseWorldX = (window.screenMouseX - _W/2) / _z + window.camera.x + _W/2;
+        window.mouseWorldY = (window.screenMouseY - _H/2) / _z + window.camera.y + _H/2;
+        // Calcular entidad bajo el cursor
+        window.hoveredEntity = null;
+        let _bestDist = Infinity;
+        for (let _he of window.entities) {
+            if (_he.x < window.mouseWorldX && _he.x + _he.width > window.mouseWorldX &&
+                _he.y < window.mouseWorldY && _he.y + _he.height > window.mouseWorldY) {
+                const _hd = Math.hypot(window.mouseWorldX - (_he.x+_he.width/2), window.mouseWorldY - (_he.y+_he.height/2));
+                if (_hd < _bestDist) { _bestDist = _hd; window.hoveredEntity = _he; }
+            }
+        }
             window.mouseWorldY = (window.screenMouseY - _H/2) / _z + window.camera.y + _H/2;
         }
 
@@ -1129,22 +1168,23 @@ function update() {
         
         window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
         
-        // --- FÍSICA DE ESCALONES: subir rampa sin saltar ---
-        if (!window.player.isDead && !window.player.inBackground && Math.abs(window.player.vx) > 0.1) {
+        // --- FÍSICA DE ESCALONES: rampa continua (incluso parado) ---
+        if (!window.player.isDead && !window.player.inBackground) {
             for (let b of window.blocks) {
                 if (b.type !== 'stair') continue;
                 const bs = window.game.blockSize;
-                // El escalón ocupa el cuadrado completo pero la rampa va de 0 altura en un lado a bs en el otro
-                // Calcular qué fracción horizontal del escalón pisamos
+                // Usar el centro horizontal del jugador para la posición en la rampa
                 const relX = (window.player.x + window.player.width / 2) - b.x;
                 if (relX < 0 || relX > bs) continue;
-                if (window.player.y + window.player.height < b.y - 2 || window.player.y + window.player.height > b.y + bs + 4) continue;
-                // Altura de la rampa en la posición X del jugador
+                // Detectar si el jugador está dentro o justo encima del escalón
+                if (window.player.y + window.player.height < b.y - 2) continue;
+                if (window.player.y > b.y + bs) continue;
+                // Altura de la rampa en esa posición X (interpolación lineal)
                 const frac = b.facingRight ? (relX / bs) : (1 - relX / bs);
-                const rampY = b.y + bs - frac * bs; // de bs (fondo) a 0 (cima) según dirección
+                const rampY = b.y + bs - frac * bs;
                 const footY2 = window.player.y + window.player.height;
-                if (footY2 >= rampY - 2 && footY2 <= rampY + bs * 0.8) {
-                    // No aplicar rampa si hay una puerta cerrada bloqueando en esa posición
+                // Aplicar solo si el pie está cerca o dentro de la rampa (evita snap desde arriba lejos)
+                if (footY2 >= rampY - 4 && footY2 <= rampY + bs * 0.85) {
                     const newPlayerY = rampY - window.player.height;
                     const blockedByDoor = window.blocks.some(d => d.type === 'door' && !d.open &&
                         window.checkRectIntersection(window.player.x, newPlayerY, window.player.width, window.player.height, d.x, d.y, bs, bs * 2));
@@ -1188,7 +1228,7 @@ function update() {
 
         if (window.game.isMultiplayer) {
             if (window.socket && (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState)) {
-                window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping || false, isDancing: window.player.isDancing || false, danceStart: window.player.danceStart || 0, deathAnimFrame: window.player.deathAnimFrame || 0, isClimbing: window.player.isClimbing || false });
+                window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, isGrounded: window.player.isGrounded, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping || false, isDancing: window.player.isDancing || false, danceStart: window.player.danceStart || 0, deathAnimFrame: window.player.deathAnimFrame || 0, isClimbing: window.player.isClimbing || false });
                 window.player._lastTypingState = window.player.isTyping;
             }
             if (window.otherPlayers) { 
@@ -1352,6 +1392,24 @@ function update() {
             let _entGroundY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
             
             if (ent.y + ent.height >= _entGroundY) { ent.y = _entGroundY - ent.height; ent.vy = 0; } else if (ent.vy >= 0 && ent.y + ent.height >= _entGroundY - 22) { ent.y = _entGroundY - ent.height; ent.vy = 0; }
+
+            // Rampa de escalones para entidades
+            if (Math.abs(ent.vx) > 0.05) {
+                for (let sb of window.blocks) {
+                    if (sb.type !== 'stair') continue;
+                    const _bs = window.game.blockSize;
+                    const relX = (ent.x + ent.width / 2) - sb.x;
+                    if (relX < 0 || relX > _bs) continue;
+                    if (ent.y + ent.height < sb.y - 2 || ent.y + ent.height > sb.y + _bs + 4) continue;
+                    const frac = sb.facingRight ? (relX / _bs) : (1 - relX / _bs);
+                    const rampY = sb.y + _bs - frac * _bs;
+                    const footY = ent.y + ent.height;
+                    if (footY >= rampY - 2 && footY <= rampY + _bs * 0.8) {
+                        ent.y = rampY - ent.height;
+                        ent.vy = 0;
+                    }
+                }
+            }
             
             let targetPlayer = window.player; let targetCX = pCX, targetCY = pCY; let minDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
             if (window.game.isMultiplayer && window.otherPlayers) { Object.values(window.otherPlayers).forEach(op => { if (op.isDead) return; let opCX = op.x + (op.width||24)/2; let opCY = op.y + (op.height||40)/2; let dist = Math.hypot(opCX - (ent.x + ent.width/2), opCY - (ent.y + ent.height/2)); if (dist < minDist) { minDist = dist; targetPlayer = op; targetCX = opCX; targetCY = opCY; } }); }
@@ -1377,7 +1435,7 @@ function update() {
                         const lookDist = window.game.blockSize * 1.5;
                         const groundHere  = window.getGroundY(ent.x + ent.width / 2);
                         const groundAhead = window.getGroundY(ent.x + ent.width / 2 + dirX * lookDist);
-                        if (groundAhead < groundHere - window.game.blockSize * 0.4) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
+                        if (groundAhead < groundHere - window.game.blockSize * 1.2) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
                     }
 
                     if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
@@ -1400,7 +1458,7 @@ function update() {
 
                     if (isGrounded && window.getGroundY && ent.vx !== 0) {
                         const mvDir = ent.vx > 0 ? 1 : -1; const groundHere  = window.getGroundY(ent.x + ent.width / 2); const groundAhead = window.getGroundY(ent.x + ent.width / 2 + mvDir * window.game.blockSize * 1.5);
-                        if (groundAhead < groundHere - window.game.blockSize * 0.4) { ent.vy = -7; ent.stuckFrames = 0; }
+                        if (groundAhead < groundHere - window.game.blockSize * 1.2) { ent.vy = -7; ent.stuckFrames = 0; }
                     }
 
                     if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) {

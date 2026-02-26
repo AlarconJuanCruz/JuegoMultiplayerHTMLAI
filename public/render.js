@@ -69,13 +69,15 @@ window.drawCharacter = function(charData, isLocal) {
         charData.renderAnimTime = charData.animTime; 
     } else {
         isClimbing = charData.isClimbing || false;
-        let dx = Math.abs(charData.x - (charData.lastX || charData.x)); charData.lastX = charData.x;
-        if (dx > 0.1) charData.isMovingFrames = 10; else if (charData.isMovingFrames > 0) charData.isMovingFrames--;
-        let dy = charData.y - (charData.lastY || charData.y); charData.lastY = charData.y;
-        if (Math.abs(dy) > 0.5 && !isClimbing) charData.isJumpingFrames = 10; else if (charData.isJumpingFrames > 0) charData.isJumpingFrames--;
-        isJumping = charData.isJumpingFrames > 0 && !isClimbing; isRunning = charData.isMovingFrames > 0 && !isJumping && !isClimbing;
-        if (isRunning || isClimbing) charData.renderAnimTime = (charData.renderAnimTime || 0) + 0.033; 
-        else charData.renderAnimTime = 0;
+        // Usar vx/vy/isGrounded recibidos por red en vez de calcular delta-Y localmente
+        // Así el terreno ondulado no confunde caminar con saltar
+        const remVx = charData.vx || 0;
+        const remVy = charData.vy || 0;
+        const remGrounded = charData.isGrounded || false;
+        isJumping = !remGrounded && Math.abs(remVy) > 1.5 && !isClimbing;
+        isRunning = Math.abs(remVx) > 0.1 && !isJumping && !isClimbing;
+        if (isRunning || isClimbing) charData.renderAnimTime = (charData.renderAnimTime || 0) + Math.abs(remVx) * 0.025;
+        else if (!isJumping) charData.renderAnimTime = 0;
     }
 
     let time = (charData.renderAnimTime || 0) * 1.0; 
@@ -251,9 +253,13 @@ window.draw = function() {
     const bgW = 1280; const bgBackH = 500; const bgMidH  = 350;
     let backX = -(window.camera.x * 0.05) % bgW; if (backX > 0) backX -= bgW;
     let midX = -(window.camera.x * 0.15) % bgW; if (midX > 0) midX -= bgW;
+    // Parallax vertical: cuando la cámara sube (camYOffset negativo), el fondo baja levemente
+    // Se invierte el signo y se limita el desplazamiento para que no se mueva demasiado
     const camYOffset = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
-    const backY = window.game.groundLevel - bgBackH + 80 + camYOffset * 0.06;
-    const midY  = window.game.groundLevel - bgMidH  + 30 + camYOffset * 0.12;
+    const backParallax = Math.max(-60, Math.min(60, -camYOffset * 0.03));
+    const midParallax  = Math.max(-90, Math.min(90, -camYOffset * 0.06));
+    const backY = window.game.groundLevel - bgBackH + 80 + backParallax;
+    const midY  = window.game.groundLevel - bgMidH  + 30 + midParallax;
 
     const bgDimAlpha = darkness * 0.55;
 
@@ -313,22 +319,39 @@ window.draw = function() {
                 const bs = window.game.blockSize;
                 const wood  = b.isHit ? '#ff4444' : '#C19A6B';
                 const woodD = b.isHit ? '#cc2222' : '#8B5A2B';
-                window.ctx.fillStyle = wood;
-                // Dibuja 3 peldaños en forma de L (escalón)
-                // facingRight=true: escalón sube de izquierda a derecha
-                // facingRight=false: escalón sube de derecha a izquierda
-                const fr = b.facingRight !== false; // default true
-                const step = bs / 3; // cada peldaño = 10px
-                for (let i = 0; i < 3; i++) {
-                    const sx = fr ? b.x + i * step : b.x + (2 - i) * step;
-                    const sy = b.y + (2 - i) * step;
-                    window.ctx.fillStyle = wood;
-                    window.ctx.fillRect(sx, sy, step, bs - (2 - i) * step);
-                    // borde oscuro superior e izquierdo/derecho
-                    window.ctx.fillStyle = woodD;
-                    window.ctx.fillRect(sx, sy, step, 2); // borde top
-                    window.ctx.fillRect(fr ? sx : sx + step - 2, sy, 2, bs - (2 - i) * step); // borde lateral
+                const fr = b.facingRight !== false;
+                const step = bs / 3;
+                const C = window.ctx;
+                // Dibujar forma sólida única (polígono de escalera) sin líneas internas
+                C.beginPath();
+                if (fr) {
+                    // Sube izq→der: esquina inf-izq, luego escalones subiendo
+                    C.moveTo(b.x,            b.y + bs);          // inf-izq
+                    C.lineTo(b.x + bs,       b.y + bs);          // inf-der
+                    C.lineTo(b.x + bs,       b.y);               // sup-der (peldaño 3 top)
+                    C.lineTo(b.x + 2*step,   b.y);               // peldaño 3 top-izq
+                    C.lineTo(b.x + 2*step,   b.y + step);        // peldaño 2 top-der
+                    C.lineTo(b.x + step,     b.y + step);        // peldaño 2 top-izq
+                    C.lineTo(b.x + step,     b.y + 2*step);      // peldaño 1 top-der
+                    C.lineTo(b.x,            b.y + 2*step);      // peldaño 1 top-izq
+                } else {
+                    // Sube der→izq
+                    C.moveTo(b.x,            b.y + bs);          // inf-izq
+                    C.lineTo(b.x + bs,       b.y + bs);          // inf-der
+                    C.lineTo(b.x + bs,       b.y + 2*step);      // peldaño 1 top-der
+                    C.lineTo(b.x + 2*step,   b.y + 2*step);      // peldaño 1 top-izq
+                    C.lineTo(b.x + 2*step,   b.y + step);        // peldaño 2 top-der
+                    C.lineTo(b.x + step,     b.y + step);        // peldaño 2 top-izq
+                    C.lineTo(b.x + step,     b.y);               // peldaño 3 top-der
+                    C.lineTo(b.x,            b.y);               // sup-izq
                 }
+                C.closePath();
+                C.fillStyle = wood;
+                C.fill();
+                // Borde exterior oscuro
+                C.strokeStyle = woodD;
+                C.lineWidth = 2;
+                C.stroke();
             }
         }
     });
@@ -936,7 +959,7 @@ window.draw = function() {
     window.ctx.restore(); 
     window.ctx.restore(); 
 
-    // --- TUTORIAL MODO CONSTRUIR (centrado en pantalla) ---
+                // --- TUTORIAL MODO CONSTRUIR (centrado en pantalla) ---
     if (window.player.activeTool === 'hammer' && !window.player.isDead && !window.player.placementMode) {
         const C = window.ctx;
         const dpr = window._dpr || 1;
