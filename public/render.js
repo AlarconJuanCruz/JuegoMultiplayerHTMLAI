@@ -725,6 +725,27 @@ window.draw = function() {
     });
 
     window.particles.forEach(p => { window.ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); window.ctx.fillStyle = p.color; window.ctx.fillRect(p.x, p.y, p.size, p.size); });
+
+    // --- PARTÍCULAS DE POLVO AL CORRER ---
+    if (window.dustParticles && window.dustParticles.length > 0) {
+        const C = window.ctx;
+        C.save();
+        window.dustParticles.forEach(d => {
+            const alpha = d.life * d.alpha;
+            if (alpha <= 0) return;
+            // Gradiente radial para aspecto nebuloso realista
+            const grad = C.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
+            const g = d.gray;
+            grad.addColorStop(0,   `rgba(${g},${g},${g},${alpha})`);
+            grad.addColorStop(0.5, `rgba(${g},${g},${g},${alpha * 0.5})`);
+            grad.addColorStop(1,   `rgba(${g},${g},${g},0)`);
+            C.fillStyle = grad;
+            C.beginPath();
+            C.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+            C.fill();
+        });
+        C.restore();
+    }
     window.damageTexts.forEach(dt => {
         window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life));
         window.ctx.font = 'bold 15px Inter, sans-serif';
@@ -918,34 +939,44 @@ window.draw = function() {
     // --- TUTORIAL MODO CONSTRUIR (centrado en pantalla) ---
     if (window.player.activeTool === 'hammer' && !window.player.isDead && !window.player.placementMode) {
         const C = window.ctx;
+        const dpr = window._dpr || 1;
         const W = window._canvasLogicW || 1280;
         const isStairMode = window.player.buildMode === 'stair';
-        const boxW = 300, boxH = isStairMode ? 92 : 72;
-        const tutX = (W - boxW) / 2, tutY = 60;
         C.save();
+        // Usar coordenadas de píxeles físicos del canvas para centrado perfecto
+        C.setTransform(1, 0, 0, 1, 0, 0);
+        const scale = dpr; // todo en píxeles físicos
+        const boxH = (isStairMode ? 92 : 72) * scale;
+        C.font = `${11 * scale}px Inter, sans-serif`;
+        const line1 = 'Modo: Escalón   |   R → cambiar   |   Clic → construir (2 madera)';
+        const line2 = 'Caminar sobre el escalón para subir automáticamente';
+        const measuredW = Math.max(C.measureText(line1).width, C.measureText(line2).width);
+        const boxW = Math.max(280 * scale, measuredW + 32 * scale);
+        const canvasW = window.canvas ? window.canvas.width : W * scale;
+        const tutX = Math.round((canvasW - boxW) / 2);
+        const tutY = 60 * scale;
         C.globalAlpha = 0.82;
         C.fillStyle = 'rgba(10,10,10,0.75)';
-        window.roundRect(C, tutX, tutY, boxW, boxH, 8);
+        window.roundRect(C, tutX, tutY, boxW, boxH, 8 * scale);
         C.fill();
         C.globalAlpha = 1;
         C.textAlign = 'center';
         const cx = tutX + boxW / 2;
-        C.font = 'bold 12px Inter, sans-serif';
+        C.font = `bold ${12 * scale}px Inter, sans-serif`;
         C.fillStyle = '#f0c040';
-        C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18);
-        C.font = '11px Inter, sans-serif';
+        C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18 * scale);
+        C.font = `${11 * scale}px Inter, sans-serif`;
         C.fillStyle = '#ddd';
         const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón' };
-        C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 🪵)`, cx, tutY + 36);
-        C.fillStyle = '#aaa';
+        C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 madera)`, cx, tutY + 36 * scale);
         if (isStairMode) {
             C.fillStyle = '#88ccff';
-            C.fillText(`T → espejo  (${window.player.stairMirror ? '◀ sube a la izquierda' : '▶ sube a la derecha'})`, cx, tutY + 54);
+            C.fillText(`T → espejo  (${window.player.stairMirror ? '◀ sube a la izquierda' : '▶ sube a la derecha'})`, cx, tutY + 54 * scale);
             C.fillStyle = '#888';
-            C.fillText('Caminar sobre el escalón para subir automáticamente', cx, tutY + 70);
+            C.fillText('Caminar sobre el escalón para subir automáticamente', cx, tutY + 70 * scale);
         } else {
             C.fillStyle = '#888';
-            C.fillText('Puerta cuesta 4 madera · Bloque/Escalón 2 madera', cx, tutY + 52);
+            C.fillText('Puerta cuesta 4 madera · Bloque/Escalón 2 madera', cx, tutY + 52 * scale);
         }
         C.restore();
     }

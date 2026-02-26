@@ -87,7 +87,7 @@ window.getGroundY = function(x) {
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
 
-window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = [];
+window.trees = []; window.rocks = []; window.blocks = []; window.particles = []; window.entities = []; window.damageTexts = []; window.droppedItems = []; window.projectiles = []; window.dustParticles = [];
 window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = []; window.stuckArrows = []; 
 window.currentOpenBox = null; window.currentCampfire = null;
 

@@ -4,6 +4,32 @@ window.sendWorldUpdate = function(action, payload) {
     if (window.game.isMultiplayer && window.socket) { window.socket.emit('worldUpdate', { action: action, payload: payload }); }
 };
 
+window.spawnDustPuff = function(x, y, facingRight, isRemote) {
+    if (!window.dustParticles) window.dustParticles = [];
+    const count = 3;
+    for (let i = 0; i < count; i++) {
+        const spread = (Math.random() - 0.5) * 6;
+        const speed = 0.4 + Math.random() * 0.6;
+        const dir = facingRight ? -1 : 1; // humo sale al lado contrario del movimiento
+        window.dustParticles.push({
+            x: x + spread,
+            y: y - 2 + (Math.random() - 0.5) * 4,
+            vx: dir * speed * (0.6 + Math.random() * 0.8),
+            vy: -(0.3 + Math.random() * 0.5),
+            r: 3 + Math.random() * 3,       // radio inicial
+            growRate: 0.18 + Math.random() * 0.12, // crece mientras sube
+            life: 1.0,
+            decay: 0.022 + Math.random() * 0.012,
+            alpha: 0.28 + Math.random() * 0.18,
+            gray: Math.floor(180 + Math.random() * 50), // tono grisáceo natural
+        });
+    }
+    // Sincronizar con otros jugadores
+    if (!isRemote && window.game.isMultiplayer && window.socket) {
+        window.socket.emit('worldUpdate', { action: 'dust_puff', payload: { x, y, facingRight } });
+    }
+};
+
 window.spawnDroppedItem = function(x, y, type, amount) {
     if(amount <= 0) return; 
     let newItem = { id: Math.random().toString(36).substring(2,15), x: x + (Math.random() * 10 - 5), y: y + (Math.random() * 10 - 5), vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 1) * 3 - 1, type: type, amount: amount, life: 1.0 };
@@ -324,7 +350,16 @@ window.startGame = function(multiplayer, ip = null) {
             window.socket.on('disconnect', () => { alert("⚠ Se perdió la conexión con el Servidor. La partida se reiniciará."); window.location.reload(); });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
             
-            window.socket.on('playerMoved', (pInfo) => { 
+            window.socket.on('playerMoved', (pInfo) => {
+                // Spawn dust for running remote players
+                if (pInfo.id !== window.socket?.id) {
+                    const op = window.otherPlayers && window.otherPlayers[pInfo.id];
+                    if (op && Math.abs(pInfo.vx) > 2.5 && pInfo.isGrounded && !pInfo.isDead && window.game.frameCount % 4 === 0) {
+                        const footX = pInfo.x + (op.width||24) / 2 + (pInfo.facingRight ? -8 : 8);
+                        const footY = pInfo.y + (op.height||40);
+                        window.spawnDustPuff(footX, footY, pInfo.facingRight, true);
+                    }
+                }
                 if(window.otherPlayers[pInfo.id]) { 
                     let op = window.otherPlayers[pInfo.id];
                     op.targetX = pInfo.x; op.targetY = pInfo.y; op.vx = pInfo.vx; op.vy = pInfo.vy;
@@ -464,6 +499,7 @@ window.startGame = function(multiplayer, ip = null) {
                 else if (data.action === 'sync_entities') { data.payload.forEach(snap => { let e = window.entities.find(en => en.id === snap.id); if (e) { e.x += (snap.x - e.x) * 0.3; e.y += (snap.y - e.y) * 0.3; e.vx = snap.vx; e.vy = snap.vy; e.hp = snap.hp; } }); }
                 else if (data.action === 'update_box') { let b = window.blocks.find(bl => Math.abs(bl.x - data.payload.x) < 1 && Math.abs(bl.y - data.payload.y) < 1 && (bl.type === 'box' || bl.type === 'grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && Math.abs(window.currentOpenBox.x - b.x) < 1) if(window.renderBoxUI) window.renderBoxUI(); } }
                 else if (data.action === 'update_campfire') { let b = window.blocks.find(bl => Math.abs(bl.x - data.payload.x) < 1 && Math.abs(bl.y - data.payload.y) < 1 && bl.type === 'campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire && Math.abs(window.currentCampfire.x - b.x) < 1) if(window.renderCampfireUI) window.renderCampfireUI(); } }
+                else if (data.action === 'dust_puff') { window.spawnDustPuff(data.payload.x, data.payload.y, data.payload.facingRight, true); }
             });
         } catch(e) { console.error("Error Socket:", e); alert("No se pudo conectar al servidor. Verifica la IP."); }
     }
@@ -1138,6 +1174,12 @@ function update() {
         }
 
         if (window.player.isGrounded || _isClimbing) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
+        // --- HUMO AL CORRER (después de calcular isGrounded definitivo) ---
+        if (window.player.isGrounded && Math.abs(window.player.vx) > 1.5 && !window.player.isDead && !_isClimbing && window.game.frameCount % 5 === 0) {
+            const footX = window.player.x + window.player.width / 2 + (window.player.facingRight ? -8 : 8);
+            const footY = window.player.y + window.player.height;
+            window.spawnDustPuff(footX, footY, window.player.facingRight);
+        }
         // Salto normal: solo si NO está en escalera activa
         if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead && !_isClimbing) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0 && !_isClimbing) window.player.vy *= 0.5;
@@ -1397,6 +1439,16 @@ function update() {
         if (window.player.x + (window._canvasLogicW / 2) > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
 
         for (let i = window.particles.length - 1; i >= 0; i--) { let p = window.particles[i]; p.x += p.vx; p.y += p.vy; p.vy += window.game.gravity * 0.4; p.life -= p.decay; let _pGY = window.getGroundY ? window.getGroundY(p.x) : window.game.groundLevel; if (p.y >= _pGY) { p.y = _pGY; p.vy = -p.vy * 0.5; p.vx *= 0.8; } if (p.life <= 0.05 || isNaN(p.life)) window.particles.splice(i, 1); }
+        // Actualizar partículas de polvo/humo
+        if (!window.dustParticles) window.dustParticles = [];
+        for (let i = window.dustParticles.length - 1; i >= 0; i--) {
+            const d = window.dustParticles[i];
+            d.x += d.vx; d.y += d.vy;
+            d.vx *= 0.92; d.vy *= 0.88;
+            d.life -= d.decay;
+            d.r += d.growRate; // crece con el tiempo
+            if (d.life <= 0) window.dustParticles.splice(i, 1);
+        }
         for (let i = window.damageTexts.length - 1; i >= 0; i--) { let dt = window.damageTexts[i]; dt.y -= 0.2; dt.life -= 0.008; if (dt.life <= 0.05 || isNaN(dt.life)) window.damageTexts.splice(i, 1); }
 
         if (window.game.frameCount % 60 === 0 && !window.player.isDead) { window.player.hunger -= isMoving ? 0.1 : 0.02; if (window.player.hunger <= 0) { window.player.hunger = 0; window.damagePlayer(2, 'Hambre'); } if (window.player.hunger > 50 && window.player.hp < window.player.maxHp) { window.player.hp += 0.5; if(typeof window.updateUI==='function') window.updateUI(); } }
