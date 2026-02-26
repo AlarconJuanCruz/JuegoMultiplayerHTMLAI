@@ -64,40 +64,27 @@ window.isValidPlacement = function(x, y, w, h, requireAdjacency = true, isStruct
 
     // ── VALIDACIÓN EXTRA PARA PUERTAS ─────────────────────────────────────────
     if (isDoor) {
-        // 1. La columna donde va la puerta debe tener terreno plano a ambos lados:
-        //    si el suelo sube justo al lado, la puerta quedaría semi-enterrada.
         const gyLeft  = window.getGroundY ? window.getGroundY(x - bs / 2)  : localGY;
         const gyRight = window.getGroundY ? window.getGroundY(x + bs + bs / 2) : localGY;
-        // Si hay terreno más alto que el pie de la puerta a cualquier lado → inválido
         if (gyLeft < y + h || gyRight < y + h) return false;
 
-        // 2. La puerta debe tener exactamente 2 bloques de alto libres en su columna:
-        //    no puede haber bloques de tierra/suelo dentro de su área vertical.
-        //    (el chequeo y+h > localGY ya cubre que no se meta en el suelo,
-        //     pero con terreno irregular puede haber un escalón a mitad de la puerta)
         const gyMid = window.getGroundY ? window.getGroundY(x + w / 2) : localGY;
-        // Si el suelo está dentro del area de la puerta (entre y y y+h) → inválido
         if (gyMid < y + h) return false;
 
-        // 3. Verificar ambas columnas adyacentes: si hay bloque de terreno que bloquee
-        //    el movimiento de apertura/cierre → inválido
         const leftBlocked  = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x - bs)) < 1 && b.y < y + h && b.y + bs > y);
         const rightBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x + bs)) < 1 && b.y < y + h && b.y + bs > y);
-        // Ambos lados bloqueados = la puerta no puede abrirse
         if (leftBlocked && rightBlocked) return false;
     }
     // ─────────────────────────────────────────────────────────────────────────
 
     if (isItem || isDoor) {
         let supported = false;
-        // Soportado si el fondo toca el suelo (con tolerancia de 1px por snapping)
         if (Math.abs((y + h) - localGY) <= bs) supported = true;
         if (!supported) { for (let b of window.blocks) { if ((b.type === 'block' || b.type === 'ladder') && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < bs / 2) { supported = true; break; } } }
         if (!supported) return false; 
     }
 
     for (let b of window.blocks) { 
-        // Escaleras son atravesables: no bloquean colocación de otras escaleras en la misma posición X
         if (b.type === 'ladder') continue;
         let bh = b.type === 'door' ? bs * 2 : bs; 
         if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false; 
@@ -144,7 +131,6 @@ window.isAdjacentToBlockOrGround = function(x, y, w, h) {
     for (let b of window.blocks) { if (b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue; let bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (window.checkRectIntersection(expX, expY, expW, expH, b.x, b.y, window.game.blockSize, bh)) return true; } return false;
 }
 
-// Devuelve verdadero si el jugador está dentro de una escalera (para trepar)
 window.isOnLadder = function() {
     const pCX = window.player.x + window.player.width / 2;
     for (let b of window.blocks) {
@@ -160,7 +146,6 @@ window.isOnLadder = function() {
 window.checkBlockCollisions = function(axis) {
     if (window.player.inBackground) return;
     for (let b of window.blocks) {
-        // Escaleras: traversables, colisión sólo gestionada por trepado
         if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade' || b.type === 'ladder') continue; 
         let itemHeight = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, window.game.blockSize, itemHeight)) {
@@ -206,16 +191,11 @@ window.generateWorldSector = function(startX, endX) {
     
     if (!window.removedTrees) window.removedTrees = []; if (!window.treeState) window.treeState = {}; if (!window.removedRocks) window.removedRocks = []; if (!window.killedEntities) window.killedEntities = [];
 
-    // --- Helper: verifica exactamente 2 columnas de blockSize planas a cada lado del centro ---
-    // Muestrea sobre el grid real (múltiplos de bs) igual que getGroundY los produce.
-    // "Plano" = misma Y exacta (getGroundY ya snapea, así que igualdad estricta funciona).
     const bs = window.game.blockSize;
     function isTerrainFlat(cx) {
         if (!window.getGroundY) return true;
-        // Snap al grid de blockSize
         const col = Math.round(cx / bs) * bs;
         const baseY = window.getGroundY(col);
-        // Exigir 2 bloques consecutivos idénticos ANTES y DESPUÉS
         for (let s = 1; s <= 2; s++) {
             if (window.getGroundY(col - s * bs) !== baseY) return false;
             if (window.getGroundY(col + s * bs) !== baseY) return false;
@@ -225,7 +205,7 @@ window.generateWorldSector = function(startX, endX) {
 
     const numTrees = Math.floor(sRandom() * 5) + 3; 
     let localTreeX = []; 
-    const TREE_W = 40; const TREE_H = 240; // constantes fijas para el check de posición
+    const TREE_W = 40; const TREE_H = 240; 
     
     for (let i = 0; i < numTrees; i++) { 
         let tx; let validPos = false; let attempts = 0;
@@ -233,7 +213,6 @@ window.generateWorldSector = function(startX, endX) {
             tx = Math.floor(startX + 50 + sRandom() * (endX - startX - 100)); 
             validPos = true;
             for (let existingX of localTreeX) { if (Math.abs(tx - existingX) < 140) { validPos = false; break; } }
-            // Verificar terreno plano: 2 bloques idénticos a cada lado del centro del árbol
             if (validPos && !isTerrainFlat(tx + TREE_W / 2)) validPos = false;
             attempts++;
         }
@@ -246,7 +225,16 @@ window.generateWorldSector = function(startX, endX) {
                 let isStump = tState ? tState.isStump : false; let rCount = tState ? tState.regrowthCount : 0; let gDay = tState ? tState.grownDay : -1;
                 let hp = isStump ? 50 : 100;
                 let tGroundY = window.getGroundY ? window.getGroundY(tx + tWidth/2) : window.game.groundLevel;
-                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) { window.trees.push({ id: 't_'+tx, x: tx, y: tGroundY - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: Math.floor(sRandom() * 3), isStump: isStump, regrowthCount: rCount, grownDay: gDay, groundY: tGroundY }); }
+                const _dStartTree = (window.game.desertStart || 2600) + window.game.shoreX;
+                const _dWidthTree = window.game.desertWidth || 800;
+                const _txDist = tx + tWidth / 2;
+                const _isDesertHere = _txDist > _dStartTree + _dWidthTree * 0.6;
+                const _isDesertEdge = _txDist > _dStartTree && !_isDesertHere;
+                let treeType;
+                if (_isDesertHere) treeType = 3; 
+                else if (_isDesertEdge) treeType = sRandom() < 0.4 ? 3 : Math.floor(sRandom() * 3); 
+                else treeType = Math.floor(sRandom() * 3); 
+                if(!window.trees.some(t => Math.abs(t.x - tx) < 1)) { window.trees.push({ id: 't_'+tx, x: tx, y: tGroundY - tHeight, width: tWidth, height: tHeight, hp: hp, maxHp: hp, isHit: false, type: treeType, isStump: isStump, regrowthCount: rCount, grownDay: gDay, groundY: tGroundY }); }
             }
         }
     }
@@ -255,7 +243,6 @@ window.generateWorldSector = function(startX, endX) {
         const numRocks = Math.floor(sRandom() * 3) + 2; 
         for (let i=0; i<numRocks; i++) { 
             let rx = Math.floor(startX + sRandom() * (endX - startX)); let rW = 50 + Math.floor(sRandom()*40); let rH = 35 + Math.floor(sRandom()*25); 
-            // Verificar terreno plano: 2 bloques idénticos a cada lado del centro de la roca
             const rcx = rx + rW / 2;
             if (!isTerrainFlat(rcx)) continue;
             let rGroundY = window.getGroundY ? window.getGroundY(rcx) : window.game.groundLevel;
@@ -264,12 +251,10 @@ window.generateWorldSector = function(startX, endX) {
     }
     
     let cx = Math.floor(startX + 100 + sRandom() * (endX - startX - 200)); let distToShore = Math.abs(cx - window.game.shoreX); 
-    // Nivel escala cada 4000px (≈400m), mínimo 1 — mucho más suave que antes (era /1000)
     let lvl = Math.max(1, Math.floor(distToShore / 4000)) + Math.max(0, window.game.days - 1);
     let newId = 'e_' + cx;
     let cGroundY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
     if (!window.entities.some(e => e.id === newId) && !window.killedEntities.includes(newId)) {
-        // Pollos en zona cercana (<5000px). Arañas/arqueros en zona peligrosa (>7000px)
         if (distToShore > 5000) {
             if (distToShore > 7000 && sRandom() < 0.35) { 
                 let aMaxHp = 20 + (lvl * 12); 
@@ -294,9 +279,8 @@ window.startGame = function(multiplayer, ip = null) {
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
     if (window.initRenderCaches) window.initRenderCaches();
-    // Aplicar semilla antes de generar el mundo
+    
     if (!window.worldSeed || window.worldSeed === 0) {
-        // Intentar cargar semilla guardada
         const savedSeed = localStorage.getItem('worldSeedCode');
         if (savedSeed && window.setSeedFromCode) window.setSeedFromCode(savedSeed);
         else if (window.generateSeed) window.generateSeed();
@@ -329,49 +313,24 @@ window.startGame = function(multiplayer, ip = null) {
             
             window.socket.on('timeSync', (serverUptimeMs) => { window.game.serverStartTime = Date.now() - serverUptimeMs; });
 
-            // Recibir semilla del servidor (autoritativa en multiplayer)
             window.socket.on('worldSeed', (data) => {
                 if (data && data.seed && window.setSeedFromCode) {
                     window.setSeedFromCode(data.seed);
                     localStorage.setItem('worldSeedCode', window.seedCode);
-                    // Actualizar display si está visible
                     const el = document.getElementById('seed-display');
                     if (el) el.textContent = window.seedCode;
-                    console.log('[SEED] Semilla del servidor:', window.seedCode);
                 }
             });
 
-            // Servidor lleno
-            window.socket.on('serverFull', () => {
-                alert('⚠️ El servidor está lleno. Inténtalo más tarde.');
-                window.location.reload();
-            });
+            window.socket.on('serverFull', () => { alert('⚠️ El servidor está lleno. Inténtalo más tarde.'); window.location.reload(); });
 
-            // El servidor fue reseteado: limpiar mundo local y aplicar nueva semilla
             window.socket.on('worldReset', (data) => {
-                if (data && data.seed && window.setSeedFromCode) {
-                    window.setSeedFromCode(data.seed);
-                    localStorage.setItem('worldSeedCode', window.seedCode);
-                }
-                // Limpiar todo el estado del mundo
-                window.blocks         = [];
-                window.droppedItems   = [];
-                window.removedTrees   = [];
-                window.removedRocks   = [];
-                window.treeState      = {};
-                window.killedEntities = [];
-                window.stuckArrows    = [];
-                window.trees          = [];
-                window.rocks          = [];
-                window.entities       = [];
-                window.game.exploredRight = window.game.shoreX;
-                // Regenerar sector inicial con la nueva semilla
+                if (data && data.seed && window.setSeedFromCode) { window.setSeedFromCode(data.seed); localStorage.setItem('worldSeedCode', window.seedCode); }
+                window.blocks = []; window.droppedItems = []; window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = []; window.stuckArrows = []; window.trees = []; window.rocks = []; window.entities = []; window.game.exploredRight = window.game.shoreX;
                 if (window.applySeed) window.applySeed();
                 window.generateWorldSector(window.game.shoreX, window.game.shoreX + window.game.chunkSize);
                 window.game.exploredRight = window.game.shoreX + window.game.chunkSize;
-                // Actualizar display
-                const el = document.getElementById('seed-display');
-                if (el) el.textContent = window.seedCode || '-----';
+                const el = document.getElementById('seed-display'); if (el) el.textContent = window.seedCode || '-----';
                 if (window.addGlobalMessage) window.addGlobalMessage('🌍 Mundo reseteado — nueva semilla: ' + (window.seedCode || '?'), '#3ddc84');
             });
             
@@ -395,9 +354,7 @@ window.startGame = function(multiplayer, ip = null) {
             window.socket.on('worldUpdate', (data) => {
                 const myId = window.socket.id;
 
-                // ── PVP (túnel por worldUpdate) ─────────────────────────────────
                 if (data.action === 'pvp_challenge') {
-                    // Solo le importa al targetId
                     if (data.payload.toId !== myId) return;
                     window.pvp = window.pvp || {};
                     window.pvp.pendingChallenge = { fromId: data.payload.fromId, fromName: data.payload.fromName };
@@ -405,7 +362,6 @@ window.startGame = function(multiplayer, ip = null) {
                     return;
                 }
                 if (data.action === 'pvp_accepted') {
-                    // Le importa al que envió el desafío original
                     if (data.payload.fromId !== myId) return;
                     window.pvp = window.pvp || {};
                     const opName = window.otherPlayers[data.payload.toId]?.name || data.payload.toName;
@@ -437,12 +393,10 @@ window.startGame = function(multiplayer, ip = null) {
                     window.pvp = window.pvp || {};
                     if (window.pvp.activeOpponent !== data.payload.sourceId) return;
                     window.damagePlayer(data.payload.dmg, window.otherPlayers[data.payload.sourceId]?.name || 'Rival');
-                    // Flash visual en el jugador local
                     window.player.pvpHitFlash = 8;
                     return;
                 }
 
-                // ── Resto de eventos del mundo ──────────────────────────────────
                 if (data.action === 'player_death') { if(window.addGlobalMessage) window.addGlobalMessage(`☠️ ${data.payload.name} murió por ${data.payload.source}`, '#e74c3c'); }
                 else if (data.action === 'hit_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.hp -= data.payload.dmg; window.setHit(t); } }
                 else if (data.action === 'stump_tree') { let t = window.trees.find(tr => Math.abs(tr.x - data.payload.x) < 1); if (t) { t.isStump = true; t.hp = 50; t.maxHp = 50; t.regrowthCount = data.payload.regrowthCount; t.grownDay = data.payload.grownDay; window.treeState[t.x] = { isStump: true, regrowthCount: t.regrowthCount, grownDay: t.grownDay }; } }
@@ -497,7 +451,6 @@ window.challengePvp = function(targetId) {
         if(window.addGlobalMessage) window.addGlobalMessage('⚠️ PVP requiere modo multijugador.', '#f0a020'); return; 
     }
     const targetName = window.otherPlayers[targetId]?.name || '?';
-    // Túnel por worldUpdate (el servidor ya lo broadcast a todos; el receptor filtra por toId)
     window.sendWorldUpdate('pvp_challenge', { toId: targetId, fromId: window.socket.id, fromName: window.player.name });
     if(window.addGlobalMessage) window.addGlobalMessage(`⚔️ Desafío enviado a ${targetName}...`, '#f0a020');
 };
@@ -507,7 +460,6 @@ window.acceptPvp = function(fromId) {
     if (!window.socket) return;
     window.pvp.activeOpponent = fromId;
     if(window.otherPlayers[fromId]) window.otherPlayers[fromId].pvpActive = true;
-    // Túnel por worldUpdate
     window.sendWorldUpdate('pvp_accepted', { fromId: fromId, toId: window.socket.id, toName: window.player.name });
     if(window.addGlobalMessage) window.addGlobalMessage(`⚔️ ¡Duelo aceptado! A luchar.`, '#ff4444');
     if(window.updatePlayerList) window.updatePlayerList();
@@ -527,7 +479,6 @@ window.updatePlayerList = function() {
         return; 
     }
     const myId = window.socket?.id;
-    // Mostrar todos los jugadores, incluyendo el propio, pero sin botón PVP para uno mismo
     const ops = Object.values(window.otherPlayers).filter(p => p.name);
     if (ops.length === 0) { 
         inner.innerHTML = '<div style="color:#5a6475; font-size:12px; text-align:center; padding:16px 0; font-family:var(--font-ui);">Sin jugadores en línea</div>'; 
@@ -609,33 +560,15 @@ window.addEventListener('keydown', (e) => {
             if (document.activeElement === chatInput) {
                 let msg = chatInput.value.trim();
                 if (msg.length > 0) {
-                    // --- COMANDOS DE CHAT ---
                     if (msg.startsWith('/')) {
                         const cmd = msg.toLowerCase();
-                        if (cmd === '/madera') {
-                            window.player.inventory.wood = (window.player.inventory.wood || 0) + 100;
-                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Madera 🌲', '#c19a6b');
-                            if (window.updateUI) window.updateUI();
-                        } else if (cmd === '/piedra') {
-                            window.player.inventory.stone = (window.player.inventory.stone || 0) + 100;
-                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Piedra ⛏️', '#999');
-                            if (window.updateUI) window.updateUI();
-                        } else if (cmd === '/flechas') {
-                            window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10;
-                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22');
-                            if (window.updateUI) window.updateUI();
-                        } else if (cmd === '/dance') {
-                            window.player.isDancing = true;
-                            window.player.danceStart = window.game.frameCount;
-                            window.player.chatText = '🕺 ¡A bailar!';
-                            window.player.chatExpires = Date.now() + 3000;
-                        } else {
-                            window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, 'Comando desconocido', '#e74c3c');
-                        }
-                        chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none'; window.player.isTyping = false;
-                        return;
+                        if (cmd === '/madera') { window.player.inventory.wood = (window.player.inventory.wood || 0) + 100; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Madera 🌲', '#c19a6b'); if (window.updateUI) window.updateUI(); } 
+                        else if (cmd === '/piedra') { window.player.inventory.stone = (window.player.inventory.stone || 0) + 100; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Piedra ⛏️', '#999'); if (window.updateUI) window.updateUI(); } 
+                        else if (cmd === '/flechas') { window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22'); if (window.updateUI) window.updateUI(); } 
+                        else if (cmd === '/dance') { window.player.isDancing = true; window.player.danceStart = window.game.frameCount; window.player.chatText = '🕺 ¡A bailar!'; window.player.chatExpires = Date.now() + 3000; } 
+                        else { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, 'Comando desconocido', '#e74c3c'); }
+                        chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none'; window.player.isTyping = false; return;
                     }
-                    // Mensaje normal
                     window.player.chatText = msg; window.player.chatExpires = Date.now() + 6500;
                     if(window.addGlobalMessage) window.addGlobalMessage(`💬 [Tú]: ${msg}`, '#3498db');
                     if (window.socket) window.socket.emit('chatMessage', msg);
@@ -650,7 +583,6 @@ window.addEventListener('keydown', (e) => {
     if (window.player.isDead) return; 
 
     if (!window.keys) window.keys = {};
-    // Cancelar baile con cualquier tecla de movimiento/acción
     if (window.player.isDancing) { window.player.isDancing = false; }
     if (e.key === 'a' || e.key === 'A') window.keys.a = true; if (e.key === 'd' || e.key === 'D') window.keys.d = true; if (e.key === 'Shift') window.keys.shift = true; if (e.key === 'w' || e.key === 'W' || e.key === ' ') window.keys.jumpPressed = true; if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
     
@@ -716,7 +648,6 @@ window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
     const range = meleeRange || window.player.miningRange;
     for (let i = window.entities.length - 1; i >= 0; i--) {
         let ent = window.entities[i];
-        // Usar distancia directa al jugador, sin requerir que el cursor esté sobre la entidad
         const dist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
         if (dist <= range) {
                 ent.hp -= dmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
@@ -755,9 +686,8 @@ window.tryHitBlock = function(pCX, pCY, dmg, meleeRange) {
 
 window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
     const range = meleeRange || window.player.miningRange;
-    // Dirección del golpe: del jugador hacia el cursor del mouse
     const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
-    const halfArc = Math.PI * 0.55; // arco de ~110° (±55° del eje del golpe)
+    const halfArc = Math.PI * 0.55;
 
     for (let i = window.rocks.length - 1; i >= 0; i--) {
         const r = window.rocks[i];
@@ -769,7 +699,6 @@ window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
         const dist = Math.hypot(pCX - rCX, pCY - rCY);
         if (dist > range) continue;
 
-        // Verificar que la roca esté dentro del arco de golpe
         const angleToRock = Math.atan2(rCY - pCY, rCX - pCX);
         let angleDiff = Math.abs(angleToRock - swingAngle);
         if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
@@ -789,21 +718,18 @@ window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
 
 window.tryHitTree = function(pCX, pCY, dmg, meleeRange) {
     const range = meleeRange || window.player.miningRange;
-    // Dirección del golpe: del jugador hacia el cursor del mouse
     const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
-    const halfArc = Math.PI * 0.55; // arco de ~110°
+    const halfArc = Math.PI * 0.55;
 
     for (let i = window.trees.length - 1; i >= 0; i--) {
         const t = window.trees[i];
         const tFootY = window.getGroundY ? window.getGroundY(t.x + t.width/2) : (t.groundY || t.y + t.height);
         const tCX = t.x + t.width / 2;
-        // Centro de golpe: parte baja del árbol (tronco), accesible desde el suelo
         const tHitY = t.isStump ? tFootY - 40 : tFootY - Math.min(t.height * 0.35, range * 0.6);
 
         const dist = Math.hypot(pCX - tCX, pCY - tHitY);
         if (dist > range) continue;
 
-        // Verificar arco de golpe
         const angleToTree = Math.atan2(tHitY - pCY, tCX - pCX);
         let angleDiff = Math.abs(angleToTree - swingAngle);
         if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
@@ -828,7 +754,6 @@ window.tryHitTree = function(pCX, pCY, dmg, meleeRange) {
     } return false;
 };
 
-// --- NUEVA FUNCIÓN MAESTRA DE AUTO-ATAQUE / CONSTRUCCIÓN ---
 window.attemptAction = function() {
     if (!window.player || window.player.isDead || document.querySelector('.window-menu.open')) return;
     if (window.player.placementMode) return;
@@ -842,21 +767,17 @@ window.attemptAction = function() {
     const tool = window.player.activeTool; 
     let actionDone = false;
 
-    // Rango de MELEE: corto, para combate y tala/minería cercana
-    // Rango de CONSTRUCCIÓN (miningRange) se mantiene intacto para el martillo
-    const meleeRange = 80 + (window.player.stats.str || 0) * 2; // ~80px base, crece con STR
+    const meleeRange = 80 + (window.player.stats.str || 0) * 2; 
 
     let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
     let treeDmg = tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0));
     let rockDmg = tool === 'pickaxe' ? Math.floor(baseDmg * 3) : (tool === 'hammer' ? 0 : 1);
     let blockDmg = tool === 'hammer' ? Math.floor(baseDmg * 3) : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
 
-    // Aplicar cooldown base para evitar que hacer "clic al aire" ocurra 60 veces por segundo
     window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
 
     if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg, meleeRange)) actionDone = true;
 
-    // === PVP: golpe melee al oponente activo ===
     if (!actionDone && entityDmg > 0 && window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer) {
         const op = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
         if (op && !op.isDead) {
@@ -864,7 +785,6 @@ window.attemptAction = function() {
             const opCY = op.y + (op.height || 48) / 2;
             const dist = Math.hypot(opCX - pCX, opCY - pCY);
             if (dist <= meleeRange) {
-                // Verificar arco de swing
                 const swingAngle = Math.atan2(window.mouseWorldY - pCY, window.mouseWorldX - pCX);
                 const angleToOp = Math.atan2(opCY - pCY, opCX - pCX);
                 let aDiff = Math.abs(angleToOp - swingAngle);
@@ -883,8 +803,6 @@ window.attemptAction = function() {
     if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
 
     if (!actionDone && tool === 'hammer') {
-        // La cuadrícula se alinea al terreno local: como getGroundY ya snapea a blockSize,
-        // simplemente snapeamos X e Y a múltiplos de blockSize.
         const bs = window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX / bs) * bs;
         const gridY = Math.floor(window.mouseWorldY / bs) * bs;
@@ -928,7 +846,6 @@ window.addEventListener('mousedown', (e) => {
                          : window.player.placementMode === 'barricade_item' ? 'barricade'
                          : window.player.placementMode === 'ladder_item' ? 'ladder'
                          : 'campfire';
-                // Escalera: puede ponerse sobre suelo o encima de otra escalera
                 let validPlace;
                 if (type === 'ladder') {
                     const bs_l = window.game.blockSize;
@@ -962,10 +879,7 @@ window.addEventListener('mousedown', (e) => {
         return; 
     }
     
-    // Disparo inmediato para evitar lag visual al hacer clic simple
-    if (e.button === 0) {
-        window.attemptAction();
-    }
+    if (e.button === 0) { window.attemptAction(); }
 });
 
 window.addEventListener('mouseup', (e) => {
@@ -989,7 +903,6 @@ window.addEventListener('mouseup', (e) => {
 
 window.addEventListener('wheel', (e) => {
     if (!window.game || !window.game.isRunning || !window.player || window.player.isDead) return;
-    // Ctrl / Meta + scroll → Zoom (siempre, incluso en placement)
     if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         let delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -999,10 +912,8 @@ window.addEventListener('wheel', (e) => {
 
     let dir = Math.sign(e.deltaY);
 
-    // En modo de colocación: scroll cambia de slot y actualiza el item a colocar
     if (window.player.placementMode) {
         e.preventDefault();
-        // Cambiar al siguiente slot con item colocable
         const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'];
         let nextSlot = window.player.activeSlot;
         for (let tries = 0; tries < 6; tries++) {
@@ -1014,7 +925,6 @@ window.addEventListener('wheel', (e) => {
                 if(window.renderToolbar) window.renderToolbar();
                 break;
             } else if (!toolInSlot) {
-                // Slot vacío: cancelar colocación
                 window.player.placementMode = null;
                 window.selectToolbarSlot(nextSlot);
                 if(window.renderToolbar) window.renderToolbar();
@@ -1024,7 +934,6 @@ window.addEventListener('wheel', (e) => {
         return;
     }
 
-    // Scroll normal → cambiar slot toolbar
     if (dir > 0) window.player.activeSlot = (window.player.activeSlot + 1) % 6; else if (dir < 0) window.player.activeSlot = (window.player.activeSlot - 1 + 6) % 6;
     if(window.selectToolbarSlot) window.selectToolbarSlot(window.player.activeSlot); if(window.renderToolbar) window.renderToolbar();
 }, { passive: false });
@@ -1032,11 +941,9 @@ window.addEventListener('wheel', (e) => {
 function update() {
     try {
         if (!window.game || !window.game.isRunning || !window.canvas || !window.player) return;
-        const bs = window.game.blockSize; // ← disponible en todo update() incl. el loop de IA
+        const bs = window.game.blockSize; 
         let pCX = window.player.x + window.player.width/2; let pCY = window.player.y + window.player.height/2;
 
-        // Recalcular coordenadas de mundo del mouse cada frame usando la posición de cámara actual.
-        // Esto es esencial para que la mira del arco no se mueva al desplazarse la cámara.
         {
             const _W = window._canvasLogicW || 1280; const _H = window._canvasLogicH || 720;
             const _z = window.game.zoom || 1;
@@ -1072,10 +979,8 @@ function update() {
         if (window.player.isDead) { 
             window.player.vx = 0; window.player.isStealth = false; 
             let pO = window.getEl('placement-overlay'); if(pO) pO.style.display = 'none';
-            // Tick de animación de muerte
             if ((window.player.deathAnimFrame || 0) > 0) window.player.deathAnimFrame--;
         }
-        // Tick pvpHitFlash del jugador local
         if ((window.player.pvpHitFlash || 0) > 0) window.player.pvpHitFlash--;
         else if (window.keys && window.keys.shift) { window.player.wantsBackground = true; } else { window.player.wantsBackground = false; }
         
@@ -1100,14 +1005,13 @@ function update() {
         window.player.x += window.player.vx; if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
         window.checkBlockCollisions('x');
 
-        // === ESCALERA: si el jugador está sobre una, cancelar gravedad y trepar con W ===
         const _onLadder = !window.player.isDead && window.isOnLadder();
         if (_onLadder) {
-            if (window.player.vy > 0) window.player.vy = 0; // detener caída al entrar en escalera
+            if (window.player.vy > 0) window.player.vy = 0; 
             if (window.keys && window.keys.jumpPressed) {
-                window.player.vy = -3.5; // subir escalera
+                window.player.vy = -3.5; 
             } else if (!window.keys || (!window.keys.jumpPressed && !window.keys.s)) {
-                window.player.vy = 0; // flotar en escalera si no se presiona nada
+                window.player.vy = 0; 
             }
             window.player.isGrounded = false;
             window.player.isJumping = false;
@@ -1115,17 +1019,31 @@ function update() {
         } else {
             window.player.vy += window.game.gravity;
         }
+        
+        // --- NUEVAS FÍSICAS DE ADHERENCIA AL SUELO (SNAP) ---
         window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
+        
         let _pGroundY = window.getGroundY ? window.getGroundY(window.player.x + window.player.width / 2) : window.game.groundLevel;
-        if (window.player.y + window.player.height >= _pGroundY) { window.player.y = _pGroundY - window.player.height; window.player.vy = 0; window.player.isGrounded = true; }
+        let footY = window.player.y + window.player.height;
+        let wasGrounded = window.player.coyoteTime > 0 && !window.player.isJumping;
+
+        if (footY >= _pGroundY) { 
+            // Subida (Uphill) o caída normal
+            window.player.y = _pGroundY - window.player.height; 
+            window.player.vy = 0; 
+            window.player.isGrounded = true; 
+        } else if (wasGrounded && window.player.vy >= 0 && footY >= _pGroundY - 22) {
+            // Bajada (Downhill) - Adherirse a la pendiente suavemente
+            window.player.y = _pGroundY - window.player.height;
+            window.player.vy = 0;
+            window.player.isGrounded = true;
+        }
+
         if (window.player.isGrounded || _onLadder) { window.player.coyoteTime = 10; window.player.isJumping = false; } else window.player.coyoteTime--;
         if (window.keys && window.keys.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead && !_onLadder) { window.player.vy = window.player.jumpPower; window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false; }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0 && !_onLadder) window.player.vy *= 0.5;
 
-        // EJECUTAR AUTO-ATAQUE SI SE MANTIENE EL CLIC
-        if (window.keys && window.keys.mouseLeft && !window.player.isDead) {
-            window.attemptAction();
-        }
+        if (window.keys && window.keys.mouseLeft && !window.player.isDead) { window.attemptAction(); }
 
         if (window.game.isMultiplayer) {
             if (window.socket && (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState)) {
@@ -1134,11 +1052,7 @@ function update() {
             }
             if (window.otherPlayers) {
                 Object.values(window.otherPlayers).forEach(op => {
-                    if (op.targetX !== undefined) {
-                        op.x += (op.targetX - op.x) * 0.35;
-                        op.y += (op.targetY - op.y) * 0.35;
-                    }
-                    // Tick pvpHitFlash
+                    if (op.targetX !== undefined) { op.x += (op.targetX - op.x) * 0.35; op.y += (op.targetY - op.y) * 0.35; }
                     if ((op.pvpHitFlash || 0) > 0) op.pvpHitFlash--;
                 });
             }
@@ -1168,10 +1082,7 @@ function update() {
         for (let i = window.stuckArrows.length - 1; i >= 0; i--) {
             let sa = window.stuckArrows[i];
             sa.life--;
-            if (sa.blockX !== undefined && sa.blockX !== null) {
-                let stillExists = window.blocks.some(b => b.x === sa.blockX && b.y === sa.blockY);
-                if (!stillExists) sa.life = 0; 
-            }
+            if (sa.blockX !== undefined && sa.blockX !== null) { let stillExists = window.blocks.some(b => b.x === sa.blockX && b.y === sa.blockY); if (!stillExists) sa.life = 0; }
             if (sa.life <= 0) window.stuckArrows.splice(i, 1);
         }
 
@@ -1249,7 +1160,6 @@ function update() {
                         hitEnt = true; break;
                     }
                 }
-                // PVP: flecha del jugador golpea a oponente activo
                 if (!hitEnt && window.pvp && window.pvp.activeOpponent && window.game.isMultiplayer && pr.owner === window.socket?.id) {
                     const opPvp = window.otherPlayers && window.otherPlayers[window.pvp.activeOpponent];
                     if (opPvp && !opPvp.isDead && window.checkRectIntersection(pr.x, pr.y, 4, 4, opPvp.x, opPvp.y, opPvp.width||24, opPvp.height||48)) {
@@ -1282,7 +1192,6 @@ function update() {
         if (isNight && window.game.frameCount % spawnRate === 0 && isMasterClient) { 
             let cx = window.player.x + 800; if (Math.random() > 0.5 && window.player.x - 800 > window.game.shoreX + 2000) cx = window.player.x - 800; 
             let distToShore = Math.abs(cx - window.game.shoreX); 
-            // Nivel suave: escala cada 4000px + días de bonificación (muy gradual)
             let lvl = Math.max(1, Math.floor(distToShore / 4000)) + Math.max(0, window.game.days - 1);
             if (distToShore > 2000) { 
                 let newEnt = null; let _spawnGY = window.getGroundY ? window.getGroundY(cx) : window.game.groundLevel;
@@ -1311,9 +1220,17 @@ function update() {
 
             let lastX = ent.x; ent.x += ent.vx; let hitWall = window.checkEntityCollisions(ent, 'x'); 
             if (ent.x < window.game.shoreX + 2000) { ent.x = window.game.shoreX + 2000; ent.vx = Math.abs(ent.vx); hitWall = true; }
+            
+            // --- FÍSICAS DE ADHERENCIA AL SUELO PARA ENEMIGOS ---
             ent.vy += window.game.gravity; ent.y += ent.vy; window.checkEntityCollisions(ent, 'y'); 
             let _entGroundY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
-            if (ent.y + ent.height >= _entGroundY) { ent.y = _entGroundY - ent.height; ent.vy = 0; }
+            
+            if (ent.y + ent.height >= _entGroundY) { 
+                ent.y = _entGroundY - ent.height; ent.vy = 0; 
+            } else if (ent.vy >= 0 && ent.y + ent.height >= _entGroundY - 22) {
+                // Snappean a las colinas cuando bajan
+                ent.y = _entGroundY - ent.height; ent.vy = 0; 
+            }
             
             let targetPlayer = window.player; let targetCX = pCX, targetCY = pCY; let minDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
             if (window.game.isMultiplayer && window.otherPlayers) { Object.values(window.otherPlayers).forEach(op => { if (op.isDead) return; let opCX = op.x + (op.width||24)/2; let opCY = op.y + (op.height||48)/2; let dist = Math.hypot(opCX - (ent.x + ent.width/2), opCY - (ent.y + ent.height/2)); if (dist < minDist) { minDist = dist; targetPlayer = op; targetCX = opCX; targetCY = opCY; } }); }
@@ -1335,24 +1252,20 @@ function update() {
                     let dirX = (targetPlayer.x > ent.x) ? 1 : -1;
                     ent.vx = dirX * _spd;
 
-                    // --- Detección de terreno adelante: saltar si el suelo sube ---
                     if (isGrounded && window.getGroundY) {
-                        const lookDist = bs * 1.5;
+                        const lookDist = window.game.blockSize * 1.5;
                         const groundHere  = window.getGroundY(ent.x + ent.width / 2);
                         const groundAhead = window.getGroundY(ent.x + ent.width / 2 + dirX * lookDist);
-                        // El terreno sube más de medio bloque → saltar proactivamente
-                        if (groundAhead < groundHere - bs * 0.4) {
+                        if (groundAhead < groundHere - window.game.blockSize * 0.4) {
                             ent.vy = ent.type === 'zombie' ? -7 : -9;
                             ent.stuckFrames = 0;
                         }
                     }
 
-                    // --- Stuck fallback: saltar si bloqueado por pared o bloque ---
                     if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
                         ent.stuckFrames++;
                         const hasBarricadeAhead = window.blocks.some(b => b.type === 'barricade' && Math.abs((ent.x + ent.width/2) - (b.x + window.game.blockSize/2)) < ent.width + 5 && Math.abs((ent.y + ent.height/2) - (b.y + window.game.blockSize/2)) < ent.height + 5);
                         if (ent.stuckFrames > 20 && isGrounded) {
-                            // Saltar para superar el obstáculo
                             ent.vy = ent.type === 'zombie' ? -7 : -9;
                             if (ent.stuckFrames > 60 && ent.type !== 'zombie' && !hasBarricadeAhead) {
                                 ent.ignorePlayer = 180; ent.vx = -dirX * _spd * 1.5; ent.stuckFrames = 0;
@@ -1370,30 +1283,26 @@ function update() {
                 const isGrounded = (ent.y + ent.height >= _entGroundY - 2);
                 if (minDist < aggroRange && ent.ignorePlayer <= 0 && !targetPlayer.inBackground && !targetPlayer.isDead) {
                     let dirX = targetPlayer.x > ent.x ? 1 : -1;
-                    // Posicionamiento: acercarse si lejos, retroceder si muy cerca, mantenerse en rango ideal
                     if (minDist > 500) ent.vx = dirX * 0.9; 
                     else if (minDist < 250) ent.vx = -dirX * 1.1; 
                     else ent.vx = 0;
 
-                    // --- Detección de terreno adelante para el archer ---
                     if (isGrounded && window.getGroundY && ent.vx !== 0) {
                         const mvDir = ent.vx > 0 ? 1 : -1;
                         const groundHere  = window.getGroundY(ent.x + ent.width / 2);
-                        const groundAhead = window.getGroundY(ent.x + ent.width / 2 + mvDir * bs * 1.5);
-                        if (groundAhead < groundHere - bs * 0.4) {
-                            ent.vy = -7; // saltar pendiente
+                        const groundAhead = window.getGroundY(ent.x + ent.width / 2 + mvDir * window.game.blockSize * 1.5);
+                        if (groundAhead < groundHere - window.game.blockSize * 0.4) {
+                            ent.vy = -7; 
                             ent.stuckFrames = 0;
                         }
                     }
 
-                    // Stuck: saltar sobre bloque/pared
                     if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && ent.vx !== 0)) {
                         ent.stuckFrames++;
                         if (ent.stuckFrames > 20 && isGrounded) { ent.vy = -7; }
                         if (ent.stuckFrames > 60) { ent.ignorePlayer = 60; ent.stuckFrames = 0; }
                     } else { ent.stuckFrames = 0; }
 
-                    // Disparar
                     if (ent.attackCooldown <= 0 && minDist < 550) {
                         let vx_base = targetCX - (ent.x + ent.width/2); let vy_base = targetCY - (ent.y + ent.height/2);
                         let currentSpeed = Math.max(0.1, Math.hypot(vx_base, vy_base));
@@ -1409,29 +1318,24 @@ function update() {
             else if (ent.type === 'chicken') { if (ent.fleeTimer > 0) { ent.fleeTimer--; ent.vx = ent.fleeDir * 1.5; } else if(Math.random() < 0.02) { ent.vx = (Math.random() > 0.5 ? 0.3 : -0.3); } }
         });
 
-        // Zoom suave con interpolación
         if (window.game.zoomTarget !== undefined) {
             window.game.zoom += (window.game.zoomTarget - window.game.zoom) * 0.12;
         }
         const _W = window._canvasLogicW || 1280;
         const _H = window._canvasLogicH || 720;
-        // Cámara X: directa, sin lag
         window.camera.x = window.player.x + window.player.width/2 - _W/2;
-        // Cámara Y: snap inmediato al estar en suelo, lerp suave solo en aire
-        let idealCamY = window.player.y + window.player.height - _H * 0.62;
-        if (window.camera._targetY === undefined) window.camera._targetY = idealCamY;
-        const camDiff = idealCamY - window.camera._targetY;
-        if (window.player.isGrounded && !window.player.isJumping) {
-            // En suelo: snap directo — elimina el jitter de escalones de terreno
-            window.camera._targetY = idealCamY;
-        } else if (Math.abs(camDiff) > 200) {
-            window.camera._targetY = idealCamY;
-        } else {
-            // En aire: lerp suave para movimiento fluido de salto/caída
-            window.camera._targetY += camDiff * 0.14;
+
+        // --- CÁMARA LIBRE: Sigue suavemente al jugador para que no salga de la pantalla ---
+        {
+            if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H * 0.62;
+
+            // En vez de volver forzadamente al suelo base (510), la cámara se ajusta suavemente
+            // a la altura actual del jugador (usando lerp de 0.08)
+            const targetCamY = window.player.y + window.player.height - _H * 0.62;
+            window.camera._targetY += (targetCamY - window.camera._targetY) * 0.08;
+            window.camera.y = window.camera._targetY;
         }
-        window.camera.y = window.camera._targetY;
-        // Límite izquierdo
+        
         if (window.camera.x < window.game.shoreX - _W/2) window.camera.x = window.game.shoreX - _W/2;
         if (window.player.x + (window._canvasLogicW / 2) > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
 

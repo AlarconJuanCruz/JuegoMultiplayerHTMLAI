@@ -171,23 +171,36 @@ window.draw = function() {
     let hourFloat = (totalFrames / 3600) % 24; 
     let darkness = (Math.cos((hourFloat / 24) * Math.PI * 2) + 1) / 2;
 
-    let r = Math.floor(135 - (130 * darkness));
-    let g = Math.floor(206 - (200 * darkness));
-    let b = Math.floor(235 - (215 * darkness));
-    if (window.game.isRaining) { r = Math.max(28, r - 65); g = Math.max(38, g - 65); b = Math.max(50, b - 45); }
+    // Cielo: día más brillante (base más alta), noche menos oscura (mínimo elevado)
+    // darkness: 0=mediodía, 1=medianoche
+    let r = Math.floor(165 - (148 * darkness));   // día: 165, noche: 17
+    let g = Math.floor(220 - (202 * darkness));   // día: 220, noche: 18
+    let b = Math.floor(255 - (225 * darkness));   // día: 255, noche: 30
+    // Noche: añadir tinte azul marino suave (no negro puro)
+    if (darkness > 0.6) {
+        const nightBlend = (darkness - 0.6) / 0.4;
+        r = Math.max(r, Math.floor(8  + 22 * (1-nightBlend)));
+        g = Math.max(g, Math.floor(12 + 28 * (1-nightBlend)));
+        b = Math.max(b, Math.floor(35 + 45 * (1-nightBlend)));
+    }
+    if (window.game.isRaining) { r = Math.max(28, r - 55); g = Math.max(38, g - 55); b = Math.max(55, b - 35); }
 
     let skyGrad = window.ctx.createLinearGradient(0, 0, 0, window.game.groundLevel);
     if (darkness < 0.3) {
+        // Día claro: cielo azul brillante con horizonte más cálido
         skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(0.5, `rgb(${Math.min(255,r+30)},${Math.min(255,g+20)},${Math.min(255,b+10)})`);
-        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+60)},${Math.min(255,g+45)},${Math.min(255,b+20)})`);
+        skyGrad.addColorStop(0.5, `rgb(${Math.min(255,r+18)},${Math.min(255,g+12)},${Math.min(255,b+5)})`);
+        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+50)},${Math.min(255,g+38)},${Math.min(255,b+18)})`);
     } else if (darkness < 0.6) {
+        // Amanecer/atardecer: tonos cálidos en horizonte
         skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(0.4, `rgb(${Math.min(255,r+40)},${Math.min(255,g+25)},${Math.min(255,b-10)})`);
-        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+80)},${Math.min(255,g+50)},${Math.min(255,b)})`);
+        skyGrad.addColorStop(0.4, `rgb(${Math.min(255,r+50)},${Math.min(255,g+30)},${Math.min(255,b-15)})`);
+        skyGrad.addColorStop(1, `rgb(${Math.min(255,r+100)},${Math.min(255,g+55)},${Math.min(255,b-10)})`);
     } else {
+        // Noche: gradiente sutil azul oscuro→ azul marino
         skyGrad.addColorStop(0, `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(1, `rgb(${Math.max(0,r+15)},${Math.max(0,g+10)},${Math.max(0,b+20)})`);
+        skyGrad.addColorStop(0.5, `rgb(${Math.max(0,r+8)},${Math.max(0,g+8)},${Math.max(0,b+18)})`);
+        skyGrad.addColorStop(1, `rgb(${Math.max(0,r+14)},${Math.max(0,g+12)},${Math.max(0,b+28)})`);
     }
     window.ctx.fillStyle = skyGrad;
     window.ctx.fillRect(0, 0, W, H);
@@ -292,31 +305,49 @@ window.draw = function() {
         window.ctx.restore();
     });
 
-    // --- FONDOS DE MONTAÑAS CON SPRITES (PARALLAX) ---
-    let bgW = 1280; 
-    let bgBackH = 500; // Alto visual de la capa más lejana
-    let bgMidH = 350;  // Alto visual de la capa intermedia
+    // --- FONDOS DE MONTAÑAS CON SPRITES (PARALLAX HORIZONTAL + VERTICAL) ---
+    const bgW = 1280;
+    const bgBackH = 500;
+    const bgMidH  = 350;
 
+    // Parallax horizontal: capas lentas según profundidad
     let backX = -(window.camera.x * 0.05) % bgW;
     if (backX > 0) backX -= bgW;
-
     let midX = -(window.camera.x * 0.15) % bgW;
     if (midX > 0) midX -= bgW;
+
+    // Parallax vertical: la cámara Y mueve las montañas en dirección opuesta
+    const camYOffset = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
+    const backY = window.game.groundLevel - bgBackH + 80 + camYOffset * 0.06;
+    const midY  = window.game.groundLevel - bgMidH  + 30 + camYOffset * 0.12;
+
+    // Tintado nocturno: oscurecer montañas según darkness
+    const bgDimAlpha = darkness * 0.55;
 
     // Capa Lejana
     if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
         for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
-            window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), window.game.groundLevel - bgBackH + 80, bgW, bgBackH);
+            window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), backY, bgW, bgBackH);
         }
+    }
+    // Overlay nocturno capa lejana
+    if (bgDimAlpha > 0.04) {
+        window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`;
+        window.ctx.fillRect(0, backY, W, bgBackH);
     }
 
     // Capa Intermedia
     if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
         for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) {
-            window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), window.game.groundLevel - bgMidH + 30, bgW, bgMidH);
+            window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), midY, bgW, bgMidH);
         }
     }
-    // -------------------------------------------------
+    // Overlay nocturno capa intermedia
+    if (bgDimAlpha > 0.04) {
+        window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`;
+        window.ctx.fillRect(0, midY, W, bgMidH);
+    }
+    // -------------------------------------------------------------------------
 
     // --- ZOOM: aplicar transformación centrada en canvas ---
     const z = window.game.zoom || 1;
@@ -327,23 +358,21 @@ window.draw = function() {
     window.ctx.translate(-window.camera.x, -window.camera.y);
 
     const bs = window.game.blockSize; // 30px — granularidad del terreno
-    // Con zoom centrado en el canvas, los bordes visibles en coordenadas de mundo son:
-    //   Izquierdo: camera.x + W/2 - W/(2*z)
-    //   Derecho:   camera.x + W/2 + W/(2*z)
     const _visHalfW = (W / 2) / z;  // mitad del ancho visible en coords de mundo
     const _visCenterX = window.camera.x + W / 2;
     const _visLeft  = _visCenterX - _visHalfW;
     const _visRight = _visCenterX + _visHalfW;
     const _visHalfH = (H / 2) / z;
-    const startX = Math.max(Math.floor((_visLeft - 60) / bs) * bs, window.game.shoreX);
-    const endX   = _visRight + 60 + bs;
+    const startX = Math.max(Math.floor((_visLeft - 60) / bs) * bs, Math.floor(window.game.shoreX / bs) * bs);
+    const endX   = Math.ceil((_visRight + 60) / bs) * bs + bs;
     const bottomY = window.camera.y + H / z + 60;
 
-    // === TERRENO DINÁMICO POR COLUMNAS DE blockSize ===
-    // Cada columna tiene su propia altura getGroundY → alineación perfecta con físicas
+    // === TERRENO DINÁMICO POR COLUMNAS CON SISTEMA DE SLOPES ===
     for (let px = startX; px < endX; px += bs) {
         const colCenterX = px + bs / 2;
-        const gY = window.getGroundY ? window.getGroundY(colCenterX) : window.game.groundLevel;
+        const gY = window.getGroundY ? window.getGroundY(px) : window.game.groundLevel;
+        // Revisar la altura del SIGUIENTE bloque para decidir si dibujamos una rampa
+        const gY_next = window.getGroundY ? window.getGroundY(px + bs) : gY;
 
         // Bioma: desierto — posición y ancho controlados por semilla
         const _dStart = (window.game.desertStart || 2600) + window.game.shoreX;
@@ -352,11 +381,32 @@ window.draw = function() {
         if (colCenterX > _dStart + _dWidth) desertAlpha = 1;
         else if (colCenterX > _dStart) desertAlpha = (colCenterX - _dStart) / _dWidth;
 
-        // ── CAPA BASE (pasto/tierra) a alpha COMPLETO ──────────────────────────
-        // Se dibuja SIEMPRE a opacidad 1 para que no haya huecos transparentes.
-        // En la zona de desierto puro, el overlay de arena cubrirá todo encima.
+        // Determinamos si es plano, subida o bajada
+        let slopeType = 'flat';
+        if (gY_next < gY) slopeType = 'up';        // Sube /
+        else if (gY_next > gY) slopeType = 'down'; // Baja \
+
+        // ── CAPA BASE (pasto/tierra o slopes) a alpha COMPLETO ──────────────────
         window.ctx.globalAlpha = 1;
-        {
+
+        if (slopeType === 'up') {
+             const slopeImg = desertAlpha > 0.5 ? window.sprites.tile_sand_slope_up : window.sprites.tile_grass_slope_up;
+             if (slopeImg && slopeImg.complete && slopeImg.naturalWidth > 0) {
+                 window.ctx.drawImage(slopeImg, px, gY_next, bs + 1, gY - gY_next + 30);
+             } else {
+                 // Fallback si no hay textura
+                 window.ctx.fillStyle = desertAlpha > 0.5 ? '#e6c280' : '#528c2a';
+                 window.ctx.beginPath(); window.ctx.moveTo(px, gY); window.ctx.lineTo(px + bs, gY_next); window.ctx.lineTo(px + bs, gY + 30); window.ctx.lineTo(px, gY + 30); window.ctx.fill();
+             }
+        } else if (slopeType === 'down') {
+             const slopeImg = desertAlpha > 0.5 ? window.sprites.tile_sand_slope_down : window.sprites.tile_grass_slope_down;
+             if (slopeImg && slopeImg.complete && slopeImg.naturalWidth > 0) {
+                 window.ctx.drawImage(slopeImg, px, gY, bs + 1, gY_next - gY + 30);
+             } else {
+                 window.ctx.fillStyle = desertAlpha > 0.5 ? '#e6c280' : '#528c2a';
+                 window.ctx.beginPath(); window.ctx.moveTo(px, gY); window.ctx.lineTo(px + bs, gY_next); window.ctx.lineTo(px + bs, gY_next + 30); window.ctx.lineTo(px, gY + 30); window.ctx.fill();
+             }
+        } else {
             const fImg = window.sprites.tile_grass_top;
             if (fImg && fImg.complete && fImg.naturalWidth > 0) {
                 window.ctx.drawImage(fImg, px, gY, bs + 1, 64);
@@ -364,44 +414,46 @@ window.draw = function() {
                 window.ctx.fillStyle = '#528c2a';
                 window.ctx.fillRect(px, gY, bs + 1, 20);
             }
-            for (let py = gY + 64; py < bottomY; py += 64) {
-                const dImg = window.sprites.tile_dirt;
-                if (dImg && dImg.complete && dImg.naturalWidth > 0) {
-                    window.ctx.drawImage(dImg, px, py, bs + 1, 64);
-                } else {
-                    window.ctx.fillStyle = '#3d2412';
-                    window.ctx.fillRect(px, py, bs + 1, 64);
-                }
+        }
+
+        // TIERRA RELLENO (debajo de la superficie)
+        let fillY = slopeType === 'down' ? gY_next : gY;
+        fillY += (slopeType === 'flat' ? 64 : 0); 
+        
+        for (let py = fillY; py < bottomY; py += 64) {
+            const dImg = window.sprites.tile_dirt;
+            if (dImg && dImg.complete && dImg.naturalWidth > 0) {
+                window.ctx.drawImage(dImg, px, py, bs + 1, 64);
+            } else {
+                window.ctx.fillStyle = '#3d2412';
+                window.ctx.fillRect(px, py, bs + 1, 64);
             }
         }
 
         // ── CAPA DE ARENA encima, a alpha = desertAlpha ────────────────────────
-        // Se pinta SOBRE el pasto ya existente → no deja huecos
-        if (desertAlpha > 0) {
+        if (desertAlpha > 0 && slopeType === 'flat') {
             window.ctx.globalAlpha = desertAlpha;
-            {
-                const sImg = window.sprites.tile_sand_top;
-                if (sImg && sImg.complete && sImg.naturalWidth > 0) {
-                    window.ctx.drawImage(sImg, px, gY, bs + 1, 64);
+            const sImg = window.sprites.tile_sand_top;
+            if (sImg && sImg.complete && sImg.naturalWidth > 0) {
+                window.ctx.drawImage(sImg, px, gY, bs + 1, 64);
+            } else {
+                window.ctx.fillStyle = '#e6c280';
+                window.ctx.fillRect(px, gY, bs + 1, 20);
+            }
+            for (let py = gY + 64; py < bottomY; py += 64) {
+                const sBaseImg = window.sprites.tile_sand_base;
+                if (sBaseImg && sBaseImg.complete && sBaseImg.naturalWidth > 0) {
+                    window.ctx.drawImage(sBaseImg, px, py, bs + 1, 64);
                 } else {
-                    window.ctx.fillStyle = '#e6c280';
-                    window.ctx.fillRect(px, gY, bs + 1, 20);
-                }
-                for (let py = gY + 64; py < bottomY; py += 64) {
-                    const sBaseImg = window.sprites.tile_sand_base;
-                    if (sBaseImg && sBaseImg.complete && sBaseImg.naturalWidth > 0) {
-                        window.ctx.drawImage(sBaseImg, px, py, bs + 1, 64);
-                    } else {
-                        window.ctx.fillStyle = '#d4a853';
-                        window.ctx.fillRect(px, py, bs + 1, 64);
-                    }
+                    window.ctx.fillStyle = '#d4a853';
+                    window.ctx.fillRect(px, py, bs + 1, 64);
                 }
             }
             window.ctx.globalAlpha = 1;
         }
 
-        // ── Hierba decorativa encima de la superficie (solo zona verde) ─────────
-        if (desertAlpha < 1 && darkness < 0.8) {
+        // ── Hierba decorativa encima de la superficie (solo zona verde plana) ──
+        if (desertAlpha < 1 && slopeType === 'flat' && darkness < 0.8) {
             window.ctx.globalAlpha = (1 - desertAlpha) * 0.75;
             window.ctx.fillStyle = 'rgba(70,110,30,0.8)';
             const seed = Math.sin(px * 0.0173) * 0.5 + 0.5;
@@ -450,13 +502,84 @@ window.draw = function() {
             else if (t.type === 0) img = window.sprites.tree_oak;
             else if (t.type === 1) img = window.sprites.tree_pine;
             else if (t.type === 2) img = window.sprites.tree_birch;
+            // type 3 = cactus: siempre procedural, no usa sprite
 
             let drawH = 256; 
             let drawW = 128;    
             let drawX = -drawW / 2;
             let drawY = -drawH;
 
-            if (img && img.complete && img.naturalWidth > 0) {
+            if (t.type === 3 && !t.isStump) {
+                // ── CACTUS procedural ─────────────────────────────────────────
+                const C2 = window.ctx;
+                const hit = t.isHit;
+                const ch  = t.height * 0.9;          // altura tronco central
+                const cw  = 10;                       // ancho tronco
+                const rad = 4;                        // esquinas redondeadas
+                // Colores — verde cactus con variación leve por posición
+                const varSeed = (Math.sin(t.x * 0.047) * 0.5 + 0.5);
+                const green1 = hit ? '#ff5555' : `hsl(${108 + varSeed*16},${52+varSeed*12}%,${28+varSeed*8}%)`;
+                const green2 = hit ? '#cc2222' : `hsl(${110 + varSeed*14},${45+varSeed*10}%,${20+varSeed*6}%)`;
+                const spine  = hit ? '#ffaaaa' : '#c8d6a0';
+
+                C2.save();
+
+                // ── Tronco central con esquinas redondeadas ───────────────────
+                C2.fillStyle = green1;
+                C2.beginPath();
+                C2.roundRect(-cw/2, -ch, cw, ch, rad);
+                C2.fill();
+                // Línea central vertical (textura)
+                C2.strokeStyle = green2; C2.lineWidth = 1.5;
+                C2.beginPath(); C2.moveTo(0, -ch + 4); C2.lineTo(0, -4); C2.stroke();
+
+                // ── Brazo izquierdo (posición y tamaño variable por seed) ─────
+                const armLY = -ch * (0.48 + varSeed * 0.14); // altura donde sale el brazo
+                const armLH = ch * (0.28 + varSeed * 0.08);
+                const armW  = 8;
+                const armLX = -cw/2 - armW;
+                C2.fillStyle = green1;
+                // Tramo horizontal
+                C2.beginPath(); C2.roundRect(armLX, armLY - armW*0.6, armW + cw/2, armW*0.65, 2); C2.fill();
+                C2.strokeStyle = green2; C2.lineWidth = 0.8;
+                C2.stroke();
+                // Tramo vertical hacia arriba
+                C2.beginPath(); C2.roundRect(armLX, armLY - armLH, armW, armLH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
+
+                // ── Brazo derecho (asimétrico) ────────────────────────────────
+                const armRY = -ch * (0.60 + varSeed * 0.10);
+                const armRH = ch * (0.22 + varSeed * 0.06);
+                const armRX = cw/2;
+                C2.fillStyle = green1;
+                C2.beginPath(); C2.roundRect(armRX - 2, armRY - armW*0.6, armW + 2, armW*0.65, 2); C2.fill();
+                C2.strokeStyle = green2; C2.lineWidth = 0.8; C2.stroke();
+                C2.beginPath(); C2.roundRect(armRX + armW - 2, armRY - armRH, armW, armRH, [rad, rad, 2, 2]); C2.fill(); C2.stroke();
+
+                // ── Espinas ───────────────────────────────────────────────────
+                C2.strokeStyle = spine; C2.lineWidth = 0.8;
+                for (let sy = -ch + 10; sy < -8; sy += 12) {
+                    C2.beginPath(); C2.moveTo(-cw/2, sy);     C2.lineTo(-cw/2 - 5, sy - 2); C2.stroke();
+                    C2.beginPath(); C2.moveTo(cw/2,  sy + 4); C2.lineTo(cw/2  + 5, sy + 2); C2.stroke();
+                }
+
+                // ── Flor en la punta (aleatoria según posición) ───────────────
+                if (varSeed > 0.35) {
+                    const petals = 5;
+                    const pr = 4.5;
+                    C2.fillStyle = varSeed > 0.65 ? '#f06090' : '#f0b040';
+                    for (let pi = 0; pi < petals; pi++) {
+                        const angle = (pi / petals) * Math.PI * 2 - Math.PI / 2;
+                        C2.beginPath();
+                        C2.ellipse(Math.cos(angle) * pr, -ch - Math.sin(angle) * pr, 2.5, 4, angle, 0, Math.PI * 2);
+                        C2.fill();
+                    }
+                    C2.fillStyle = '#ffe066';
+                    C2.beginPath(); C2.arc(0, -ch, 3, 0, Math.PI * 2); C2.fill();
+                }
+
+                C2.restore();
+                // ─────────────────────────────────────────────────────────────
+            } else if (img && img.complete && img.naturalWidth > 0) {
                 if (t.isHit) {
                     window.hitCanvas.width = drawW; window.hitCanvas.height = drawH;
                     window.hitCtx.clearRect(0, 0, drawW, drawH); window.hitCtx.drawImage(img, 0, 0, drawW, drawH);
@@ -464,7 +587,7 @@ window.draw = function() {
                     window.hitCtx.fillRect(0, 0, drawW, drawH); window.hitCtx.globalCompositeOperation = 'source-over'; 
                     window.ctx.drawImage(window.hitCanvas, drawX, drawY);
                 } else { window.ctx.drawImage(img, drawX, drawY, drawW, drawH); }
-            } else {
+            } else if (t.type !== 3) {
                 window.ctx.fillStyle = t.isHit ? '#ff4444' : (t.isStump ? '#5D4037' : '#2E7D32');
                 window.ctx.fillRect(-hw, -t.height, t.width, t.isStump ? 15 : t.height);
             }
@@ -814,14 +937,12 @@ window.draw = function() {
     window.ctx.textAlign = 'left';
     window.ctx.globalAlpha = 1.0; 
 
-
-
-
     window.ctx.restore(); 
 
     if (window.lightCtx) {
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
-        let ambientDarkness = 0.2 + (0.75 * darkness); 
+        // Noche menos oscura: máximo 0.62 en lugar de 0.95; y el piso diurno es solo 0.05
+        let ambientDarkness = 0.05 + (0.57 * darkness); 
         window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`; window.lightCtx.fillRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         window.lightCtx.globalCompositeOperation = 'destination-out';
         // Helper: world position → lightCanvas screen position (accounting for zoom)
@@ -1073,15 +1194,40 @@ window.draw = function() {
     const _ppW = window._canvasLogicW || 1280;
     const _ppH = window._canvasLogicH || 720;
 
-    // 1. VIÑETA — bordes oscuros suaves, más intensos de noche
+    // 1. VIÑETA — adaptativa: oscura de noche, roja con poca vida
     {
-        const vigStrength = 0.35 + darkness * 0.3;
-        const vigGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.25, _ppW/2, _ppH/2, _ppH * 0.85);
-        vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
-        vigGrad.addColorStop(0.6, `rgba(0,0,0,${vigStrength * 0.3})`);
-        vigGrad.addColorStop(1, `rgba(0,0,0,${vigStrength})`);
+        // HP del jugador para el tinte rojo
+        const hp = (window.player && window.player.hp != null) ? window.player.hp : 100;
+        const maxHp = (window.player && window.player.maxHp) ? window.player.maxHp : 100;
+        const hpRatio = hp / maxHp;                    // 0=muerto, 1=lleno
+        const dangerLevel = hpRatio < 0.4 ? Math.pow(1 - hpRatio / 0.4, 1.5) : 0; // 0–1 cuando hp<40%
+
+        // Pulso del peligro — parpadeo lento cuando HP muy baja
+        const dangerPulse = dangerLevel > 0.4 
+            ? 0.7 + 0.3 * Math.sin(window.game.frameCount * 0.08) 
+            : 1.0;
+
+        // Viñeta base: día=sutil, noche=más intensa
+        const vigBase = 0.18 + darkness * 0.22;
+        const vigOuter = vigBase + dangerLevel * 0.45 * dangerPulse;
+
+        const vigGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.28, _ppW/2, _ppH/2, _ppH * 0.9);
+        vigGrad.addColorStop(0,   'rgba(0,0,0,0)');
+        vigGrad.addColorStop(0.55, `rgba(0,0,0,${vigBase * 0.25})`);
+        vigGrad.addColorStop(1,    `rgba(0,0,0,${vigOuter})`);
         window.ctx.fillStyle = vigGrad;
         window.ctx.fillRect(0, 0, _ppW, _ppH);
+
+        // Viñeta roja superpuesta cuando HP baja (<40%)
+        if (dangerLevel > 0.01) {
+            const redAlpha = dangerLevel * 0.38 * dangerPulse;
+            const redGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.22, _ppW/2, _ppH/2, _ppH * 0.88);
+            redGrad.addColorStop(0,   'rgba(180,0,0,0)');
+            redGrad.addColorStop(0.5, `rgba(160,0,0,${redAlpha * 0.4})`);
+            redGrad.addColorStop(1,   `rgba(140,0,0,${redAlpha})`);
+            window.ctx.fillStyle = redGrad;
+            window.ctx.fillRect(0, 0, _ppW, _ppH);
+        }
     }
 
     // 2. ABERRACIÓN CROMÁTICA — tinte rojo/azul en bordes, pulsante en combate

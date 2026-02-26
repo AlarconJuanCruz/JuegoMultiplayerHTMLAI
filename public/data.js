@@ -17,11 +17,16 @@ window.sprites = {
     tile_dirt: new Image(),
     tile_sand_top: new Image(),
     tile_sand_base: new Image(),
-    bg_mountains_back: new Image(), // <-- NUEVA
-    bg_mountains_mid: new Image(),  // <-- NUEVA
-    sprite_sun: new Image(),        // <-- NUEVA
-    sprite_moon: new Image(),       // <-- NUEVA
-    sprite_cloud: new Image()       // <-- NUEVA
+    bg_mountains_back: new Image(), 
+    bg_mountains_mid: new Image(),  
+    sprite_sun: new Image(),        
+    sprite_moon: new Image(),       
+    sprite_cloud: new Image(),
+    // <-- NUEVAS TEXTURAS DE SLOPES (RAMPAS) -->
+    tile_grass_slope_up: new Image(),
+    tile_grass_slope_down: new Image(),
+    tile_sand_slope_up: new Image(),
+    tile_sand_slope_down: new Image()
 };
 window.sprites.tree_oak.src = 'assets/tree_oak.png';
 window.sprites.tree_pine.src = 'assets/tree_pine.png';
@@ -33,11 +38,16 @@ window.sprites.tile_grass_top.src = 'assets/tile_grass_top.png';
 window.sprites.tile_dirt.src = 'assets/tile_dirt.png';
 window.sprites.tile_sand_top.src = 'assets/tile_sand_top.png';
 window.sprites.tile_sand_base.src = 'assets/tile_sand_base.png';
-window.sprites.bg_mountains_back.src = 'assets/bg_mountains_back.png'; // <-- NUEVA
-window.sprites.bg_mountains_mid.src = 'assets/bg_mountains_mid.png';   // <-- NUEVA
-window.sprites.sprite_sun.src = 'assets/sprite_sun.png';               // <-- NUEVA
-window.sprites.sprite_moon.src = 'assets/sprite_moon.png';             // <-- NUEVA
-window.sprites.sprite_cloud.src = 'assets/sprite_cloud.png';           // <-- NUEVA
+window.sprites.bg_mountains_back.src = 'assets/bg_mountains_back.png'; 
+window.sprites.bg_mountains_mid.src = 'assets/bg_mountains_mid.png';   
+window.sprites.sprite_sun.src = 'assets/sprite_sun.png';               
+window.sprites.sprite_moon.src = 'assets/sprite_moon.png';             
+window.sprites.sprite_cloud.src = 'assets/sprite_cloud.png';           
+// <-- RUTAS DE LAS NUEVAS TEXTURAS -->
+window.sprites.tile_grass_slope_up.src = 'assets/tile_grass_slope_up.png';
+window.sprites.tile_grass_slope_down.src = 'assets/tile_grass_slope_down.png';
+window.sprites.tile_sand_slope_up.src = 'assets/tile_sand_slope_up.png';
+window.sprites.tile_sand_slope_down.src = 'assets/tile_sand_slope_down.png';
 // ------------------------
 
 // Alta resolución (2x) para canvas nítido
@@ -107,9 +117,10 @@ window.applySeed = function() {
         a0: 38 + sh(6) * 24,
         a1: 22 + sh(7) * 16,
         a2: 10 + sh(8) * 10,
-        // Biomas: distancia desde shore donde empieza desierto
-        desertStart: 2000 + Math.floor(sh(9) * 2000),
-        desertWidth: 600 + Math.floor(sh(10) * 800),
+        // --- AQUÍ ALARGAMOS EL BOSQUE ---
+        // Antes empezaba en 2000, ahora empezará entre 6000 y 10000
+        desertStart: 6000 + Math.floor(sh(9) * 4000), 
+        desertWidth: 1000 + Math.floor(sh(10) * 800),
         // Mountain zone start
         mountainOffset: 8000 + Math.floor(sh(11) * 4000),
         // Fases de montañas
@@ -128,6 +139,9 @@ window.getGroundY = function(x) {
     const base = window.game.baseGroundLevel; // 510
     const tp   = window._tp || window._defaultTp;
 
+    // Snap a la grilla: Snappeamos a medios bloques (15px) para mayor fluidez (SLOPES)
+    x = Math.round(x / (bs / 2)) * (bs / 2);
+
     if (x <= window.game.shoreX + 60) return base;
 
     let blend = Math.min(1.0, (x - window.game.shoreX - 60) / 340);
@@ -144,17 +158,18 @@ window.getGroundY = function(x) {
         let mt = Math.min(1.0, (x - mountainStart) / 3000);
         let mh = 0;
         mh += Math.sin(x * 0.0008 + (tp ? tp.mp0 : 4.2)) * 130;
-        mh += Math.cos(x * 0.0014 + (tp ? tp.mp1 : 1.1)) *  90;
-        mh += Math.sin(x * 0.0028 + (tp ? tp.mp2 : 2.8)) *  45;
-        mh += Math.cos(x * 0.0060 + 0.5)                  *  18;
+        mh += Math.cos(x * 0.0014 + (tp ? tp.mp1 : 1.1)) * 90;
+        mh += Math.sin(x * 0.0028 + (tp ? tp.mp2 : 2.8)) * 45;
+        mh += Math.cos(x * 0.0060 + 0.5)                  * 18;
         h = h * (1 - mt) + mh * mt;
     }
 
-    let snapped = Math.round((base + h * blend) / bs) * bs;
+    // Redondeamos la altura a pasos de 15px (bs/2) para que las escaleras sean pequeñas
+    let snapped = Math.round((base + h * blend) / (bs / 2)) * (bs / 2);
     return Math.max(180, Math.min(630, snapped));
 };
 // Parámetros por defecto (antes de que se cargue la semilla)
-window._defaultTp = { p0:1.5, p1:0.8, p2:2.3, p3:0.4, p4:3.7, a0:45, a1:28, a2:14, desertStart:2600, desertWidth:800, mountainOffset:10000, mp0:4.2, mp1:1.1, mp2:2.8 };
+window._defaultTp = { p0:1.5, p1:0.8, p2:2.3, p3:0.4, p4:3.7, a0:45, a1:28, a2:14, desertStart:8000, desertWidth:1000, mountainOffset:10000, mp0:4.2, mp1:1.1, mp2:2.8 };
 // ────────────────────────────────────────────────────────────────
 window.camera = { x: 0, y: 0 }; window.mouseWorldX = 0; window.mouseWorldY = 0; window.screenMouseX = 1280 / 2; window.screenMouseY = 720 / 2;
 window.keys = { w: false, a: false, d: false, space: false, shift: false, jumpPressed: false, y: false };
