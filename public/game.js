@@ -332,13 +332,20 @@ window.generateWorldSector = function(startX, endX) {
     }
 };
 
-window.startGame = function(multiplayer, ip = null) {
+window.startGame = function(multiplayer, ip = null, roomId = null) {
+    window._currentRoomId = roomId;
     const nameInput = window.getEl('player-name'); 
     let rawName = (nameInput && nameInput.value) ? nameInput.value.trim() : "Jugador " + Math.floor(Math.random()*1000);
     window.player.name = rawName.substring(0, 15);
 
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
+
+    // --- CÓDIGO NUEVO: Mostrar el botón de Sala si es multijugador ---
+    let btnServerMenu = window.getEl('btn-server-menu');
+    if (btnServerMenu) btnServerMenu.style.display = multiplayer ? 'inline-block' : 'none';
+    // -----------------------------------------------------------------
+
     if (window.initRenderCaches) window.initRenderCaches();
     
     if (!window.worldSeed || window.worldSeed === 0) {
@@ -352,11 +359,18 @@ window.startGame = function(multiplayer, ip = null) {
     if (multiplayer && typeof io !== 'undefined') {
         try {
             const connectionURL = ip ? `http://${ip}:3000` : window.location.origin; window.socket = io(connectionURL);
-            let sInfo = window.getEl('server-info'); if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = ip ? ip : 'Servidor Web'; }
+            let sInfo = window.getEl('server-info'); if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = roomId ? 'Sala ' + roomId : (ip ? ip : 'Global'); }
             if (ip && ip !== window.location.hostname && ip !== 'localhost' && ip !== '127.0.0.1') { let list = JSON.parse(localStorage.getItem('savedServers') || '[]'); if (!list.includes(ip)) { list.push(ip); localStorage.setItem('savedServers', JSON.stringify(list)); if(window.refreshServerList) window.refreshServerList(); } }
             
             // Enviamos la semilla del host por si es el primer jugador en entrar
-            window.socket.on('connect', () => { window.socket.emit('joinGame', { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level, seedCode: window.seedCode }); });
+            window.socket.on('connect', () => {
+                const _pd = { name: window.player.name, x: window.player.x, y: window.player.y, level: window.player.level, seedCode: window.seedCode };
+                if (window._currentRoomId) {
+                    window.socket.emit('joinRoom', { roomId: window._currentRoomId, playerData: _pd });
+                } else {
+                    window.socket.emit('joinGame', _pd);
+                }
+            });
             
             window.socket.on('disconnect', () => { alert("⚠ Se perdió la conexión con el Servidor. La partida se reiniciará."); window.location.reload(); });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if(pCount) pCount.innerText = Object.keys(srvPlayers).length; });
@@ -412,7 +426,12 @@ window.startGame = function(multiplayer, ip = null) {
             });
 
             window.socket.on('serverFull', () => { alert('⚠️ El servidor está lleno. Inténtalo más tarde.'); window.location.reload(); });
+            window.socket.on('roomError', (err) => { alert('⚠️ ' + err.message); window.location.reload(); });
 
+            window.socket.on('roomListUpdate', (list) => {
+                window._serverRoomList = list;
+                if (typeof window.renderRoomList === 'function') window.renderRoomList(list);
+            });
             window.socket.on('worldReset', (data) => {
                 if (data && data.seed && window.setSeedFromCode) { window.setSeedFromCode(data.seed); localStorage.setItem('worldSeedCode', window.seedCode); }
                 window.blocks = []; window.droppedItems = []; window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = []; window.stuckArrows = []; window.trees = []; window.rocks = []; window.entities = []; window.game.exploredRight = window.game.shoreX;

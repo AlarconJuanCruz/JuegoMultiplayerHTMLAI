@@ -163,8 +163,8 @@ window.addGlobalMessage = function(text, color = '#fff') {
 };
 
 window.getEl('btn-single')?.addEventListener('click', () => window.startGame(false));
-window.getEl('btn-host')?.addEventListener('click', () => window.startGame(true, window.location.hostname));
-window.getEl('btn-join')?.addEventListener('click', () => { const ip = window.getEl('server-ip').value; if(ip) window.startGame(true, ip); else alert("Ingresa una IP válida"); });
+window.getEl('btn-host')?.addEventListener('click', () => window.openCreateRoom());
+window.getEl('btn-join')?.addEventListener('click', () => { const ip = window.getEl('server-ip').value; if(ip) window.startGame(true, ip, null); else alert("Ingresa una IP válida"); });
 window.getEl('btn-help')?.addEventListener('click', () => { const t = window.getEl('game-tips'); if(t) t.style.display = t.style.display === 'none' ? 'block' : 'none'; });
 
 // ── Tabs del menú principal ────────────────────────────
@@ -173,8 +173,8 @@ window.showMenuTab = function(tab) {
     const tSolo = window.getEl('tab-solo'), tMulti = window.getEl('tab-multi');
     const pSolo = window.getEl('panel-solo'), pMulti = window.getEl('panel-multi');
     if (!tSolo || !tMulti || !pSolo || !pMulti) return;
-    pSolo.style.display  = isSolo ? 'block' : 'none';
-    pMulti.style.display = isSolo ? 'none'  : 'block';
+    pSolo.style.display  = isSolo ? 'flex' : 'none';
+    pMulti.style.display = isSolo ? 'none' : 'flex';
     // Tab activo
     tSolo.style.background  = isSolo ? 'rgba(61,220,132,0.12)' : 'rgba(255,255,255,0.03)';
     tSolo.style.borderColor = isSolo ? 'rgba(61,220,132,0.4)'  : 'rgba(255,255,255,0.08)';
@@ -182,54 +182,128 @@ window.showMenuTab = function(tab) {
     tMulti.style.background  = !isSolo ? 'rgba(91,180,245,0.1)'  : 'rgba(255,255,255,0.03)';
     tMulti.style.borderColor = !isSolo ? 'rgba(91,180,245,0.35)' : 'rgba(255,255,255,0.08)';
     tMulti.style.color       = !isSolo ? '#5bb4f5' : '#5a6475';
-    if (!isSolo) window.refreshServerList();
+    if (!isSolo) { window.refreshServerList(); }
 };
 // Init tab
 window.showMenuTab('solo');
 
 // ── Lista de servidores guardados ────────────────────────
-window.refreshServerList = function() {
+// ── Renderizar lista de salas ──────────────────────────
+window.renderRoomList = function(rooms) {
     const list = window.getEl('server-list');
     if (!list) return;
-    const saved = JSON.parse(localStorage.getItem('savedServers') || '[]');
     const emptyMsg = window.getEl('server-list-empty');
-    if (emptyMsg) emptyMsg.style.display = saved.length ? 'none' : 'block';
-
-    // Remove old server rows (keep empty msg)
     list.querySelectorAll('.srv-row').forEach(e => e.remove());
 
-    saved.forEach(ip => {
-        const row = document.createElement('div');
+    const hostile = rooms.filter(r => r.name !== '__global__');
+    if (emptyMsg) emptyMsg.style.display = hostile.length ? 'none' : 'block';
+
+    hostile.forEach(room => {
+        const pct  = room.players / room.maxPlayers;
+        const pCol = pct >= 1 ? '#ee3333' : pct > 0.6 ? '#f0a030' : '#44dd44';
+        const row  = document.createElement('div');
         row.className = 'srv-row';
-        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:7px 9px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:7px;font-family:var(--font-ui);';
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:7px;font-family:var(--font-ui);cursor:default;';
         row.innerHTML = `
-            <span style="font-size:10px;color:#5a6475;">🟡</span>
-            <span style="flex:1;font-size:12px;color:#d8dde6;font-family:monospace;">${ip}</span>
-            <span class="srv-ping" style="font-size:10px;color:#5a6475;min-width:40px;text-align:right;">…ms</span>
-            <button onclick="window.getEl('server-ip').value='${ip}';window.startGame(true,'${ip}')" style="background:rgba(91,180,245,0.12);border:1px solid rgba(91,180,245,0.3);color:#5bb4f5;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:10px;font-family:var(--font-ui);">Unirse</button>
-            <button onclick="window.removeSavedServer('${ip}')" style="background:transparent;border:none;color:#5a6475;cursor:pointer;font-size:13px;padding:0 2px;" title="Eliminar" onmouseover="this.style.color='#e07070'" onmouseout="this.style.color='#5a6475'">✕</button>
+            <span style="font-size:18px;line-height:1;">🏠</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;color:#d8dde6;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${room.name}</div>
+                <div style="font-size:10px;color:#5a6475;">Por ${room.hostName} · 🌍 ${room.seedCode}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:11px;font-weight:700;color:${pCol};">${room.players}/${room.maxPlayers}</div>
+                <div style="font-size:9px;color:#5a6475;">jugadores</div>
+            </div>
+            <button onclick="window.joinRoom('${room.id}')" ${room.players>=room.maxPlayers?'disabled':''} style="background:rgba(91,180,245,0.12);border:1px solid rgba(91,180,245,0.3);color:${room.players>=room.maxPlayers?'#5a6475':'#5bb4f5'};border-radius:6px;padding:5px 11px;cursor:${room.players>=room.maxPlayers?'not-allowed':'pointer'};font-size:11px;font-family:var(--font-ui);font-weight:700;white-space:nowrap;">
+                ${room.players>=room.maxPlayers?'Llena':'Unirse'}
+            </button>
         `;
         list.appendChild(row);
-        // Ping check
-        const pingEl = row.querySelector('.srv-ping');
-        const t0 = Date.now();
-        fetch(`http://${ip}:3000/api/status`).then(r => r.json()).then(data => {
-            const ms = Date.now() - t0;
-            pingEl.innerHTML = `<span style="color:${ms<80?'#44dd44':ms<200?'#f0a030':'#ee3333'}">${ms}ms</span>`;
-            row.querySelector('span:nth-child(1)').textContent = '🟢';
-            row.querySelector('span:nth-child(2)').textContent = `${ip}  ·  👥${data.players}/${data.maxPlayers}  ·  🌍${data.seedCode}`;
-        }).catch(() => {
-            pingEl.textContent = 'offline';
-            row.querySelector('span:nth-child(1)').textContent = '🔴';
-        });
     });
 };
 
-window.removeSavedServer = function(ip) {
-    let list = JSON.parse(localStorage.getItem('savedServers') || '[]');
-    list = list.filter(s => s !== ip);
-    localStorage.setItem('savedServers', JSON.stringify(list));
-    window.refreshServerList();
+window.refreshServerList = function() {
+    const list = window.getEl('server-list');
+    if (!list) return;
+    const emptyMsg = window.getEl('server-list-empty');
+    if (emptyMsg) emptyMsg.textContent = 'Buscando salas…';
+
+    const base = window.location.origin !== 'null' ? window.location.origin : 'http://localhost:3000';
+    const t0 = Date.now();
+    fetch(base + '/api/rooms').then(r => r.json()).then(rooms => {
+        window._serverRoomList = rooms;
+        window.renderRoomList(rooms);
+        // ping display en el badge
+        const ping = Date.now() - t0;
+        const badge = window.getEl('server-status-badge');
+        if (badge) badge.innerHTML = `🟢 <span style="color:#3ddc84;">En línea</span> · <span style="color:#5a6475;">${ping}ms</span>`;
+    }).catch(() => {
+        if (emptyMsg) emptyMsg.textContent = 'No se pudo conectar con el servidor.';
+        const badge = window.getEl('server-status-badge');
+        if (badge) badge.innerHTML = '🔴 <span style="color:#ff4444;">Sin conexión</span>';
+    });
+};
+
+// ── Unirse a una sala ──────────────────────────────────
+window.joinRoom = function(roomId) {
+    const ip = window.getEl('server-ip')?.value?.trim() || null;
+    window.startGame(true, ip, roomId);
+};
+
+// ── Modal Crear Sala ───────────────────────────────────
+window.openCreateRoom = function() {
+    const modal = window.getEl('modal-create-room');
+    if (modal) { modal.style.display = 'flex'; }
+    const ni = window.getEl('room-name-input');
+    const si = window.getEl('room-seed-input');
+    if (ni) ni.value = '';
+    if (si) si.value = window.seedCode || '';
+    const err = window.getEl('create-room-error');
+    if (err) err.style.display = 'none';
+};
+
+window.closeCreateRoom = function() {
+    const modal = window.getEl('modal-create-room');
+    if (modal) { modal.style.display = 'none'; modal.style.visibility = 'hidden'; }
+};
+window.openCreateRoom = window.openCreateRoom || function() {};
+// Re-patch openCreateRoom to also fix visibility
+const _origOpen = window.openCreateRoom;
+window.openCreateRoom = function() {
+    const modal = window.getEl('modal-create-room');
+    if (modal) { modal.style.display = 'flex'; modal.style.visibility = 'visible'; }
+    const ni = window.getEl('room-name-input');
+    const si = window.getEl('room-seed-input');
+    if (ni) ni.value = '';
+    if (si) si.value = window.seedCode || '';
+    const err = window.getEl('create-room-error');
+    if (err) err.style.display = 'none';
+};
+
+window.submitCreateRoom = async function() {
+    const name     = (window.getEl('room-name-input')?.value || '').trim() || 'Mi Servidor';
+    const seedCode = (window.getEl('room-seed-input')?.value || '').trim().toUpperCase() || null;
+    const hostName = window.player?.name || window.getEl('player-name')?.value || 'Anónimo';
+    const errEl    = window.getEl('create-room-error');
+    const base     = window.location.origin !== 'null' ? window.location.origin : 'http://localhost:3000';
+
+    try {
+        const res = await fetch(base + '/api/rooms', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, seedCode, hostName })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (errEl) { errEl.textContent = data.error || 'Error al crear sala.'; errEl.style.display = 'block'; }
+            return;
+        }
+        window.closeCreateRoom();
+        // Si hay semilla del server, aplicarla
+        if (data.seedCode && window.setSeedFromCode) window.setSeedFromCode(data.seedCode);
+        window.startGame(true, null, data.id);
+    } catch(e) {
+        if (errEl) { errEl.textContent = 'Error de red: ' + e.message; errEl.style.display = 'block'; }
+    }
 };
 
 // ── Menú in-game ────────────────────────────────────────
@@ -245,9 +319,11 @@ window.toggleServerMenu = function() {
             const isMulti = window.game.isMultiplayer;
             const playerCount = isMulti && window.otherPlayers ? Object.keys(window.otherPlayers).length + 1 : 1;
             const serverAddr = isMulti ? (window.socket?.io?.opts?.hostname || window.location.hostname) : 'Local';
+            const roomId = window._currentRoomId || '';
+            const roomInfo = window._serverRoomList?.find(r => r.id === roomId);
             info.innerHTML = `
-                <div>🖥️ Servidor: <span style="color:#d8dde6;">${serverAddr}</span></div>
-                <div>👥 Jugadores: <span style="color:#d8dde6;">${playerCount}</span></div>
+                <div>🏠 Sala: <span style="color:#f0a030;">${roomInfo ? roomInfo.name : (roomId || 'Global')}</span> <span style="color:#5a6475;font-size:10px;">${roomId}</span></div>
+                <div>👥 Jugadores: <span style="color:#d8dde6;">${playerCount}/${roomInfo ? roomInfo.maxPlayers : 10}</span></div>
                 <div>🌍 Semilla: <span style="color:#3ddc84;">${window.seedCode || '?'}</span></div>
             `;
         }
@@ -280,21 +356,6 @@ window.leaveServer = function() {
         if (window.socket) window.socket.disconnect();
         window.location.reload();
     }
-};
-
-// Mostrar botón de servidor en juego solo en multijugador
-window._origStartGame = window.startGame;
-window.startGame = function(multiplayer, ip) {
-    window._origStartGame(multiplayer, ip);
-    setTimeout(() => {
-        const btn = window.getEl('btn-server-menu');
-        if (btn) btn.style.display = multiplayer ? 'inline-block' : 'none';
-        // Guardar servidor al unirse
-        if (multiplayer && ip && ip !== window.location.hostname) {
-            let saved = JSON.parse(localStorage.getItem('savedServers') || '[]');
-            if (!saved.includes(ip)) { saved.unshift(ip); if(saved.length > 8) saved.pop(); localStorage.setItem('savedServers', JSON.stringify(saved)); }
-        }
-    }, 500);
 };
 
 window.getEl('craft-search')?.addEventListener('input', (e) => { 
