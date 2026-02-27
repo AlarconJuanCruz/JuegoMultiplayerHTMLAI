@@ -357,8 +357,10 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
     window.generateWorldSector(window.game.shoreX, window.game.exploredRight);
 
     if (multiplayer && typeof io !== 'undefined') {
-        try {
-            const connectionURL = ip ? `http://${ip}:3000` : window.location.origin; window.socket = io(connectionURL);
+        try { 
+            const connectionURL = ip ? `http://${ip}:3000` : window.BACKEND_URL; 
+            window.socket = io(connectionURL);
+ 
             let sInfo = window.getEl('server-info'); if(sInfo) { sInfo.style.display = 'flex'; window.getEl('sv-ip').innerText = roomId ? 'Sala ' + roomId : (ip ? ip : 'Global'); }
             if (ip && ip !== window.location.hostname && ip !== 'localhost' && ip !== '127.0.0.1') { let list = JSON.parse(localStorage.getItem('savedServers') || '[]'); if (!list.includes(ip)) { list.push(ip); localStorage.setItem('savedServers', JSON.stringify(list)); if(window.refreshServerList) window.refreshServerList(); } }
             

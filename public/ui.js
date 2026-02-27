@@ -42,7 +42,7 @@
             setStatus('⏳ Contactando servidor…', '#f0a030', 8000);
             try {
                 const body = specificCode ? { seed: specificCode } : {};
-                const res = await fetch('/api/reset-seed', {
+                const res = await fetch(window.BACKEND_URL + '/api/reset-seed', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
@@ -85,6 +85,8 @@
 // === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
 
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
+window.BACKEND_URL = isLocalEnv ? 'http://localhost:3000' : 'http://TU_IP_PUBLICA:3000';
+
 const btnOnline = window.getEl('btn-online');
 if (btnOnline) btnOnline.addEventListener('click', () => { window.startGame(true); });
 
@@ -95,7 +97,7 @@ const statusBadge = window.getEl('server-status-badge');
 // Check global server status + stats
 if (!isLocalEnv && statusBadge) {
     const t0 = Date.now();
-    fetch(window.location.origin + '/api/status').then(r => r.json()).then(data => {
+    fetch(window.BACKEND_URL + '/api/status').then(r => r.json()).then(data => {
         const ping = Date.now() - t0;
         statusBadge.innerHTML = `🟢 <span style="color:#3ddc84;">En Línea</span>`;
         const ps = window.getEl('gstat-players'); if(ps) ps.textContent = data.players + '/' + data.maxPlayers;
@@ -228,9 +230,8 @@ window.refreshServerList = function() {
     const emptyMsg = window.getEl('server-list-empty');
     if (emptyMsg) emptyMsg.textContent = 'Buscando salas…';
 
-    const base = window.location.origin !== 'null' ? window.location.origin : 'http://localhost:3000';
     const t0 = Date.now();
-    fetch(base + '/api/rooms').then(r => r.json()).then(rooms => {
+    fetch(window.BACKEND_URL + '/api/rooms').then(r => r.json()).then(rooms => {
         window._serverRoomList = rooms;
         window.renderRoomList(rooms);
         // ping display en el badge
@@ -285,10 +286,9 @@ window.submitCreateRoom = async function() {
     const seedCode = (window.getEl('room-seed-input')?.value || '').trim().toUpperCase() || null;
     const hostName = window.player?.name || window.getEl('player-name')?.value || 'Anónimo';
     const errEl    = window.getEl('create-room-error');
-    const base     = window.location.origin !== 'null' ? window.location.origin : 'http://localhost:3000';
 
     try {
-        const res = await fetch(base + '/api/rooms', {
+        const res = await fetch(window.BACKEND_URL + '/api/rooms', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, seedCode, hostName })
         });
@@ -355,6 +355,25 @@ window.leaveServer = function() {
     if (confirm('¿Salir del servidor y volver al menú?')) {
         if (window.socket) window.socket.disconnect();
         window.location.reload();
+    }
+};
+
+// Mostrar botón de servidor en juego solo en multijugador
+window._origStartGame = window.startGame;
+window.startGame = function(multiplayer, ip, roomId) {
+    window._origStartGame(multiplayer, ip, roomId);
+    // Mostrar/ocultar botón ☰ Sala en juego
+    const _showBtn = () => {
+        const btn = window.getEl('btn-server-menu');
+        if (btn) btn.style.display = multiplayer ? 'inline-flex' : 'none';
+    };
+    _showBtn();
+    setTimeout(_showBtn, 200);
+    setTimeout(_showBtn, 800);
+    // Guardar IP si es servidor externo
+    if (multiplayer && ip && ip !== window.location.hostname) {
+        let saved = JSON.parse(localStorage.getItem('savedServers') || '[]');
+        if (!saved.includes(ip)) { saved.unshift(ip); if(saved.length > 8) saved.pop(); localStorage.setItem('savedServers', JSON.stringify(saved)); }
     }
 };
 
