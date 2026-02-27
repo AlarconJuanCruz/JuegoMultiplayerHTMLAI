@@ -784,12 +784,17 @@ window.updateUI = function() {
 
 window.updateEntityHUD = function() {
     if(!window.getEl('entity-hud')) return;
+    const camLeft  = window.camera.x;
+    const camRight = window.camera.x + (window._canvasLogicW || 1280);
     let html = '';
     window.entities.forEach(ent => {
-        if (ent.hp < ent.maxHp && (Date.now() - (ent.lastHitTime || 0) < 3000) && ent.x + ent.width > window.camera.x && ent.x < window.camera.x + window.canvas.width) {
-            let hpPercent = (ent.hp / ent.maxHp) * 100; let color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : '#ffaa00'));
-            html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
-        }
+        const inView = ent.x + ent.width > camLeft && ent.x < camRight;
+        if (!inView) return;
+        const hpPercent = (ent.hp / ent.maxHp) * 100;
+        const recentlyHit = Date.now() - (ent.lastHitTime || 0) < 2000;
+        const color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : '#ffaa00'));
+        const pulse = recentlyHit ? 'style="animation: hpPulse 0.3s ease-out;"' : '';
+        html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" ${pulse} style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
     });
     window.getEl('entity-hud').innerHTML = html;
 };
