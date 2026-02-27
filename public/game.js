@@ -169,6 +169,7 @@ window.isOnLadder = function() {
     return false;
 };
 
+// --- FUNCIÓN REDISEÑADA: COLISIONES PERFECTAS PARA MÚLTIPLES BLOQUES ---
 window.checkBlockCollisions = function(axis) {
     if (window.player.inBackground) return;
     const p = window.player;
@@ -178,26 +179,17 @@ window.checkBlockCollisions = function(axis) {
         if ((b.type === 'door' && b.open) || b.type === 'box' || b.type === 'campfire' || b.type === 'bed' || b.type === 'grave' || b.type === 'barricade' || b.type === 'ladder' || b.type === 'stair') continue; 
         let itemHeight = b.type === 'door' ? bs * 2 : bs;
 
-        if (window.checkRectIntersection(p.x, p.y, p.width, p.height, b.x, b.y, bs, itemHeight)) {
+        let checkX = p.x;
+        let checkW = p.width;
+        if (axis === 'y') {
+            checkX = p.x + 2;
+            checkW = p.width - 4;
+        }
+
+        if (window.checkRectIntersection(checkX, p.y, checkW, p.height, b.x, b.y, bs, itemHeight)) {
             if (axis === 'x') { 
-                // Ignorar colisión de pared si los pies están cerca de la cima (esquina)
-                if (p.y + p.height <= b.y + 18) continue;
-                // Ignorar si el jugador ya está subiendo
-                if (p.vy < 0) continue;
-
-                const wantsJump = window.keys && window.keys.jumpPressed && p.jumpKeyReleased && p.coyoteTime > 0;
-                if (wantsJump) {
-                    // Separar activamente del bloque para que el salto no quede trabado
-                    if (p.vx > 0) { p.x = b.x - p.width - 2; p.vx = 0; }
-                    else if (p.vx < 0) { p.x = b.x + bs + 2; p.vx = 0; }
-                    // Aplicar salto inmediatamente
-                    p.vy = p.jumpPower;
-                    p.isJumping = true;
-                    p.coyoteTime = 0;
-                    p.jumpKeyReleased = false;
-                    continue;
-                }
-
+                if (p.y + p.height <= b.y + 14) continue;
+                
                 if (p.vx > 0) p.x = b.x - p.width - 0.1; 
                 else if (p.vx < 0) p.x = b.x + bs + 0.1; 
                 p.vx = 0; 
@@ -948,6 +940,12 @@ window.attemptAction = function() {
                 } else { 
                     if (window.game.frameCount % 30 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00'); 
                 }
+            } else {
+                // --- CÓDIGO NUEVO: Feedback de sin materiales ---
+                if (window.game.frameCount % 30 === 0) {
+                    window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, `¡Faltan ${cost} Madera!`, '#ff4444');
+                    if (window.playSound) window.playSound('arrow_break');
+                }
             }
         }
     }
@@ -966,6 +964,16 @@ window.addEventListener('mousedown', (e) => {
     if (window.player.placementMode) {
         if (e.button === 2) { window.player.placementMode = null; return; } 
         if (e.button === 0) {
+            
+            // --- CÓDIGO NUEVO: Feedback de sin materiales para colocar objetos ---
+            if (!window.player.inventory[window.player.placementMode] || window.player.inventory[window.player.placementMode] <= 0) {
+                window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "¡Sin materiales!", "#ff4444");
+                if (window.playSound) window.playSound('arrow_break');
+                window.player.placementMode = null;
+                if (window.renderToolbar) window.renderToolbar();
+                return;
+            }
+
             const bs2 = window.game.blockSize;
             const gridX = Math.floor(window.mouseWorldX / bs2) * bs2;
             const gridY = Math.floor(window.mouseWorldY / bs2) * bs2;
@@ -1144,6 +1152,8 @@ function update() {
         if (Math.abs(window.player.vx) > 0.5 && window.player.isGrounded) window.player.animTime += Math.abs(window.player.vx) * 0.025; else window.player.animTime = 0; 
 
         window.player.x += window.player.vx; if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
+        
+        // --- FUNCIÓN DE COLISIONES CORREGIDA LLAMADA AQUÍ ---
         window.checkBlockCollisions('x');
 
         const _onLadder = !window.player.isDead && window.isOnLadder();
@@ -1187,7 +1197,10 @@ function update() {
         }
         const _isClimbing = window.player.isClimbing && _onLadder;
         
-        window.player.isGrounded = false; window.player.y += window.player.vy; window.checkBlockCollisions('y');
+        window.player.isGrounded = false; window.player.y += window.player.vy; 
+        
+        // --- Y REVISAMOS LA VERTICAL LUEGO ---
+        window.checkBlockCollisions('y');
         
         // --- FÍSICA DE ESCALONES: rampa continua (incluso parado) ---
         if (!window.player.isDead && !window.player.inBackground) {
