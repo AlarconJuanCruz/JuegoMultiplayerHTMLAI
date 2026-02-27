@@ -83,12 +83,17 @@ app.post('/api/rooms', express.json(), (req, res) => {
 });
 
 // Estado general (para ping / health check)
-app.get('/api/status', (req, res) => {
+app.get('/api/status', (req, res) => { 
+    let globalRoom = Object.values(rooms).find(r => r.name === '__global__');
+    
     res.json({
-        rooms:      Object.keys(rooms).length,
-        maxRooms:   MAX_ROOMS,
+        players:      globalRoom ? Object.keys(globalRoom.players).length : 0,
+        maxPlayers:   MAX_PLAYERS,
+        seedCode:     globalRoom ? globalRoom.worldState.seedCode : 'Aleatoria',
+        rooms:        Object.keys(rooms).length,
+        maxRooms:     MAX_ROOMS,
         totalPlayers: Object.values(rooms).reduce((s, r) => s + Object.keys(r.players).length, 0),
-        uptime:     Math.floor(process.uptime())
+        uptime:       Math.floor(process.uptime())
     });
 });
 
