@@ -85,7 +85,7 @@
 // === ui.js - GESTIÓN DE INTERFAZ Y EVENTOS ===
 
 const isLocalEnv = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
-window.BACKEND_URL = isLocalEnv ? 'http://localhost:3000' : 'https://juegomultiplayer.onrender.com/';
+window.BACKEND_URL = isLocalEnv ? 'http://localhost:3000' : 'https://juegomultiplayer.onrender.com';
 
 const btnOnline = window.getEl('btn-online');
 if (btnOnline) btnOnline.addEventListener('click', () => { window.startGame(true); });
