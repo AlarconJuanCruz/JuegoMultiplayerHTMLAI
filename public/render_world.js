@@ -261,6 +261,65 @@ window.draw = function() {
                 C.stroke();
                 // Grietas — se clip al bounding box del escalón completo
                 if (b.maxHp) drawCracks(C, b.x, b.y, bs, bs, b.hp / b.maxHp);
+            } else if (b.type === 'turret') {
+                const C = window.ctx; const bs = window.game.blockSize;
+                const bx = b.x, by = b.y;
+                const hasArrows = (b.arrows || 0) > 0;
+                const ang = b.aimAngle || 0;
+
+                // Base de madera
+                C.fillStyle = b.isHit ? '#ff8866' : '#8B6230';
+                C.fillRect(bx + 4, by + 16, 22, 14);
+                C.fillStyle = b.isHit ? '#cc5533' : '#5D3A1A';
+                C.fillRect(bx + 4, by + 14, 22, 4);
+
+                // Pivote central
+                C.fillStyle = b.isHit ? '#ffaa88' : '#a07840';
+                C.beginPath(); C.arc(bx + 15, by + 18, 5, 0, Math.PI * 2); C.fill();
+
+                // Cañón del arco — apunta hacia el ángulo de disparo
+                C.save();
+                C.translate(bx + 15, by + 18);
+                C.rotate(ang);
+                // Cañón
+                C.fillStyle = b.isHit ? '#ff6644' : '#6b4c24';
+                C.fillRect(0, -2, 16, 4);
+                // Arco tensado (si tiene flechas)
+                if (hasArrows) {
+                    C.strokeStyle = b.isHit ? '#ffaa44' : '#c8a050';
+                    C.lineWidth = 2.5;
+                    C.beginPath(); C.arc(14, 0, 7, -1.1, 1.1); C.stroke();
+                    C.strokeStyle = b.isHit ? '#ffccaa' : 'rgba(210,195,160,0.9)';
+                    C.lineWidth = 1;
+                    C.beginPath(); C.moveTo(14 + Math.cos(-1.1)*7, Math.sin(-1.1)*7);
+                    C.lineTo(8, 0); C.lineTo(14 + Math.cos(1.1)*7, Math.sin(1.1)*7); C.stroke();
+                    // Flecha cargada
+                    C.fillStyle = '#c8a050'; C.fillRect(8, -1, 10, 2);
+                    C.fillStyle = '#607888'; C.fillRect(18, -2, 4, 4);
+                } else {
+                    C.strokeStyle = 'rgba(100,80,40,0.5)'; C.lineWidth = 2;
+                    C.beginPath(); C.arc(14, 0, 7, -1.1, 1.1); C.stroke();
+                }
+                C.restore();
+
+                // Contador de flechas
+                C.fillStyle = 'rgba(0,0,0,0.7)';
+                C.beginPath(); C.roundRect(bx + 6, by + 2, 18, 10, 3); C.fill();
+                C.fillStyle = hasArrows ? '#f0c020' : '#888';
+                C.font = 'bold 7px monospace';
+                C.textAlign = 'center';
+                C.fillText(`🎯${b.arrows||0}`, bx + 15, by + 10);
+                C.textAlign = 'left';
+
+                // HP bar (solo si dañada)
+                if (b.hp < b.maxHp) {
+                    const pct = b.hp / b.maxHp;
+                    const bw  = 24, bh = 3;
+                    C.fillStyle = 'rgba(0,0,0,0.7)';
+                    C.fillRect(bx + 3, by + 29, bw, bh);
+                    C.fillStyle = pct > 0.5 ? '#2ecc71' : pct > 0.25 ? '#f39c12' : '#e74c3c';
+                    C.fillRect(bx + 3, by + 29, bw * pct, bh);
+                }
             }
         }
     });
@@ -441,16 +500,110 @@ window.draw = function() {
             window.ctx.fillRect(px + seed * (step - 4), gY - grassH, 2, grassH);
             if (seed > 0.3) window.ctx.fillRect(px + seed * (step - 10) + 4, gY - grassH * 0.65, 2, grassH * 0.65);
             window.ctx.globalAlpha = 1;
-        }
-    }
 
-    if (window.camera.x < window.game.shoreX) {
-        const gL = window.game.baseGroundLevel || window.game.groundLevel;
-        window.ctx.fillStyle = '#C8B878'; window.ctx.fillRect(window.game.shoreX - 70, gL, 70, (window.camera.y + H / (window.game.zoom||1)) - gL);
-        let waveOffset = Math.sin(window.game.frameCount * 0.04) * 6; let waterGrad = window.ctx.createLinearGradient(0, gL, 0, gL + 60); waterGrad.addColorStop(0, '#1a8fc0'); waterGrad.addColorStop(1, '#0a5c8a');
-        window.ctx.fillStyle = waterGrad; window.ctx.fillRect(window.camera.x, gL + 16 + waveOffset, window.game.shoreX - 70 - window.camera.x, H);
-        window.ctx.fillStyle = 'rgba(100,200,255,0.4)'; window.ctx.fillRect(window.camera.x, gL + 6 + waveOffset, window.game.shoreX - 70 - window.camera.x, 12);
-        window.ctx.fillStyle = 'rgba(255,255,255,0.6)'; window.ctx.fillRect(window.game.shoreX - 70 - 5, gL + 8, 5, 8);
+            // ── Detalles del bosque: hongos y flores ─────────────────────────
+            const dStart2 = (window.game.desertStart || 2600) + window.game.shoreX;
+            const inForestZone = colCenterX > window.game.shoreX + 200 && colCenterX < dStart2 - 200;
+            if (inForestZone && darkness < 0.7) {
+                const fSeed1 = Math.sin(px * 0.0531 + 7.3) * 0.5 + 0.5;
+                const fSeed2 = Math.sin(px * 0.0871 + 2.1) * 0.5 + 0.5;
+                const fSeed3 = Math.sin(px * 0.1237 + 4.7) * 0.5 + 0.5;
+                const C = window.ctx;
+                C.globalAlpha = (1 - desertAlpha) * 0.88;
+
+                // Hongo (aparece cada ~120px según seed) → umbral 0.93
+                if (fSeed1 > 0.93) {
+                    const mx = px + fSeed2 * step * 0.7;
+                    const isRed = fSeed3 > 0.5;
+                    const stemH = 5 + fSeed2 * 4;
+                    // Tallo — base pegada al suelo (+2 para enterrar ligeramente)
+                    C.fillStyle = '#e8dcc8';
+                    C.fillRect(mx + 2, gY - stemH + 2, 4, stemH);
+                    // Sombrero
+                    C.fillStyle = isRed ? '#c0392b' : '#8B4513';
+                    C.beginPath();
+                    C.ellipse(mx + 4, gY - stemH + 3, 7, 5, 0, Math.PI, 0);
+                    C.fill();
+                    // Puntitos blancos
+                    C.fillStyle = 'rgba(255,255,255,0.75)';
+                    C.beginPath(); C.arc(mx + 2, gY - stemH + 1, 1.2, 0, Math.PI * 2); C.fill();
+                    C.beginPath(); C.arc(mx + 6, gY - stemH + 2, 0.9, 0, Math.PI * 2); C.fill();
+                }
+
+                // Flor → umbral 0.91
+                if (fSeed2 > 0.91 && fSeed1 <= 0.93) {
+                    const fx = px + fSeed1 * step * 0.6 + 4;
+                    const stemH2 = 6 + fSeed3 * 5;
+                    const flowerColors = ['#e74c3c','#9b59b6','#f39c12','#e91e8c','#3498db'];
+                    const fc = flowerColors[Math.floor(fSeed3 * flowerColors.length)];
+                    // Tallo verde — base pegada al suelo (+3)
+                    C.fillStyle = '#27ae60';
+                    C.fillRect(fx + 1, gY - stemH2 + 3, 2, stemH2);
+                    // Pétalos
+                    C.fillStyle = fc;
+                    for (let p = 0; p < 4; p++) {
+                        const pa = (p / 4) * Math.PI * 2;
+                        C.beginPath(); C.ellipse(fx + 2 + Math.cos(pa) * 3, gY - stemH2 + 3 + Math.sin(pa) * 2.5, 2.2, 1.5, pa, 0, Math.PI * 2); C.fill();
+                    }
+                    // Centro amarillo
+                    C.fillStyle = '#f1c40f';
+                    C.beginPath(); C.arc(fx + 2, gY - stemH2 + 3, 1.8, 0, Math.PI * 2); C.fill();
+                }
+                C.globalAlpha = 1;
+                C.globalAlpha = 1;
+            }
+        }
+
+        // ── Detalles del desierto: huesos y ramitas ───────────────────────────
+        if (desertAlpha > 0.3 && darkness < 0.75) {
+            const dSeed1 = Math.sin(px * 0.0712 + 1.9) * 0.5 + 0.5;
+            const dSeed2 = Math.sin(px * 0.1183 + 5.5) * 0.5 + 0.5;
+            const dSeed3 = Math.sin(px * 0.0443 + 3.2) * 0.5 + 0.5;
+            const C = window.ctx;
+            C.globalAlpha = desertAlpha * 0.8;
+
+            // Hueso (aparece cada ~150px) → subir umbral a 0.93
+            if (dSeed1 > 0.93) {
+                const bx2 = px + dSeed2 * step * 0.8;
+                const bAng = (dSeed3 - 0.5) * 0.8; // ligera rotación
+                C.save();
+                C.translate(bx2, gY - 2);
+                C.rotate(bAng);
+                C.fillStyle = '#d4cdb8';
+                // Hueso horizontal: dos esferas y un palo
+                C.fillRect(-7, -1.5, 14, 3);
+                C.beginPath(); C.arc(-7, 0, 3.5, 0, Math.PI * 2); C.fill();
+                C.beginPath(); C.arc( 7, 0, 3.5, 0, Math.PI * 2); C.fill();
+                // Detalle oscuro
+                C.fillStyle = '#b8b0a0';
+                C.fillRect(-5, -1, 10, 2);
+                C.restore();
+            }
+
+            // Ramita seca (aparece cada ~90px) → subir umbral a 0.88
+            if (dSeed2 > 0.88 && dSeed1 <= 0.93) {
+                const tx = px + dSeed3 * step * 0.5 + 3;
+                C.strokeStyle = '#8B7355';
+                C.lineWidth = 1.5;
+                C.beginPath();
+                C.moveTo(tx, gY);
+                C.lineTo(tx + 3 + dSeed1 * 8, gY - 5 - dSeed2 * 7);
+                C.stroke();
+                // Ramitas secundarias
+                C.lineWidth = 1;
+                C.strokeStyle = '#7a6545';
+                C.beginPath();
+                C.moveTo(tx + 4, gY - 3);
+                C.lineTo(tx + 7, gY - 7);
+                C.stroke();
+                C.beginPath();
+                C.moveTo(tx + 6, gY - 4);
+                C.lineTo(tx + 4, gY - 8);
+                C.stroke();
+            }
+
+            C.globalAlpha = 1;
+        }
     }
 
     window.droppedItems.forEach(item => {
@@ -525,108 +678,158 @@ window.draw = function() {
             C.fillStyle='rgba(0,0,0,0.3)'; C.fillRect(bx+w*0.42,y+h*0.215,2,2); C.fillRect(bx+6,y+h*0.24,w-12,1.5);
         } else if (ent.type === 'wolf') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
-            const moving = Math.abs(ent.vx) > 0.05;
-            const walk   = moving ? Math.sin(T * 0.32) : 0;
-            const bob    = moving ? Math.abs(Math.sin(T * 0.32)) * 1.5 : 0;
-            const fR     = ent.vx >= 0;
+            const isLeaping = ent.wolfState === 'leaping';
+            const isCharging = ent.wolfState === 'charge' && (ent.wolfStateTimer || 0) === 0;
+            const moving = Math.abs(ent.vx) > 0.3 || isLeaping;
+            // Velocidad de animación más rápida en carga/salto
+            const walkFreq = isCharging ? 0.52 : isLeaping ? 0 : 0.32;
+            const walk   = moving && !isLeaping ? Math.sin(T * walkFreq) : 0;
+            const bob    = moving && !isLeaping ? Math.abs(Math.sin(T * walkFreq)) * 1.5 : 0;
+            const fR     = ent.wolfChargeDir !== undefined ? ent.wolfChargeDir > 0 : ent.vx >= 0;
+
+            // Inclinación del cuerpo: hacia adelante al cargar, extendido al saltar
+            const bodyTilt = isLeaping ? -0.45 : (isCharging ? -0.18 : 0);
+
+            C.save();
             if (!fR) { C.translate(x + w, 0); C.scale(-1, 1); }
             const bx = fR ? x : 0;
 
-            // Sombra
-            C.globalAlpha = 0.18; C.fillStyle = '#000';
-            C.beginPath(); C.ellipse(bx + w/2, y + h + 1, w * 0.5, 2.5, 0, 0, Math.PI * 2); C.fill();
+            // Sombra (más pequeña en el aire)
+            const shadowAlpha = isLeaping ? Math.max(0.05, 0.18 - (Math.abs(ent.vy) * 0.01)) : 0.2;
+            C.globalAlpha = shadowAlpha; C.fillStyle = '#000';
+            C.beginPath(); C.ellipse(bx + w/2, y + h + 2, w * 0.52, 2.8, 0, 0, Math.PI * 2); C.fill();
             C.globalAlpha = 1;
 
             const furMain  = H ? '#ff8866' : (ER ? '#cc2200' : '#6b5a4a');
             const furDark  = H ? '#cc5533' : (ER ? '#881100' : '#3d3028');
             const furLight = H ? '#ffbbaa' : '#9c8a78';
 
-            // Cola
-            const tailAng = moving ? Math.sin(T * 0.25) * 0.4 : 0.3;
+            // Punto de pivote del cuerpo para aplicar inclinación
+            const pivotX = bx + w * 0.5;
+            const pivotY = y + h * 0.6;
             C.save();
-            C.translate(bx + 2, y + h * 0.35);
-            C.rotate(tailAng - 0.4);
+            C.translate(pivotX, pivotY);
+            C.rotate(bodyTilt);
+            C.translate(-pivotX, -pivotY);
+
+            // Cola — más erguida al acechar, extendida atrás al saltar
+            const tailAng = isLeaping ? 0.6 : (moving ? Math.sin(T * 0.25) * 0.4 : 0.3);
+            C.save();
+            C.translate(bx + 3, y + h * 0.35);
+            C.rotate(tailAng - 0.3);
             C.fillStyle = furMain;
             C.beginPath();
-            C.moveTo(0, 0); C.quadraticCurveTo(-8, -6, -12, -2);
-            C.quadraticCurveTo(-8, 2, 0, 2); C.closePath(); C.fill();
-            // punta blanca de la cola
+            C.moveTo(0, 0); C.quadraticCurveTo(-9, -7, -14, -3);
+            C.quadraticCurveTo(-9, 3, 0, 2); C.closePath(); C.fill();
             C.fillStyle = '#ddd8d0';
-            C.beginPath(); C.ellipse(-11, -1, 3, 2, -0.4, 0, Math.PI * 2); C.fill();
+            C.beginPath(); C.ellipse(-13, -2, 3.5, 2.5, -0.4, 0, Math.PI * 2); C.fill();
             C.restore();
 
-            // Patas traseras
-            for (let p = 0; p < 2; p++) {
-                const px   = bx + 3 + p * 6;
-                const pang = p === 0 ? walk * 0.6 : -walk * 0.6;
-                C.save(); C.translate(px, y + h - 6);
+            // Patas — extendidas al saltar
+            for (let p = 0; p < 4; p++) {
+                const isBack = p < 2;
+                const basePx = isBack ? (bx + 3 + p * 7) : (bx + w * 0.45 + (p-2) * 7);
+                let pang;
+                if (isLeaping) {
+                    // Patas extendidas en salto: traseras atrás, delanteras adelante
+                    pang = isBack ? 0.5 : -0.5;
+                } else {
+                    const phase = p % 2 === 0 ? walk * 0.65 : -walk * 0.65;
+                    pang = phase;
+                }
+                const legLen = h * 0.45;
+                C.save(); C.translate(basePx, y + h * 0.72);
                 C.rotate(pang);
-                C.fillStyle = furDark; C.fillRect(-2, 0, 4, 7);
-                C.fillStyle = furDark; C.fillRect(-3, 6, 5, 2); // pata
+                C.fillStyle = isBack ? furDark : furMain;
+                C.fillRect(-2.5, 0, 5, legLen * 0.55);
+                C.translate(0, legLen * 0.55);
+                C.rotate(-pang * 0.4);
+                C.fillRect(-2, 0, 4.5, legLen * 0.45);
+                C.fillStyle = furDark;
+                C.fillRect(-3, legLen * 0.43, 6, 2.5); // pata
                 C.restore();
             }
 
             // Cuerpo
             C.fillStyle = furMain;
             C.beginPath();
-            C.ellipse(bx + w * 0.48, y + h * 0.58 + bob, w * 0.45, h * 0.38, -0.1, 0, Math.PI * 2);
+            C.ellipse(bx + w * 0.48, y + h * 0.56 + bob, w * 0.46, h * 0.37, -0.1, 0, Math.PI * 2);
             C.fill();
-            // Lomo más oscuro
+            // Lomo oscuro
             C.fillStyle = furDark;
             C.beginPath();
-            C.ellipse(bx + w * 0.44, y + h * 0.45 + bob, w * 0.35, h * 0.18, -0.2, 0, Math.PI * 2);
+            C.ellipse(bx + w * 0.44, y + h * 0.43 + bob, w * 0.36, h * 0.17, -0.2, 0, Math.PI * 2);
             C.fill();
-
-            // Patas delanteras
-            for (let p = 0; p < 2; p++) {
-                const px   = bx + 12 + p * 6;
-                const pang = p === 0 ? -walk * 0.6 : walk * 0.6;
-                C.save(); C.translate(px, y + h - 6);
-                C.rotate(pang);
-                C.fillStyle = furMain; C.fillRect(-2, 0, 4, 7);
-                C.fillStyle = furDark;  C.fillRect(-3, 6, 5, 2);
-                C.restore();
-            }
+            // Panza más clara
+            C.fillStyle = furLight;
+            C.beginPath();
+            C.ellipse(bx + w * 0.5, y + h * 0.68 + bob, w * 0.3, h * 0.14, 0, 0, Math.PI * 2);
+            C.fill();
 
             // Cuello
             C.fillStyle = furMain;
             C.beginPath();
-            C.moveTo(bx + w * 0.6, y + h * 0.38 + bob);
-            C.lineTo(bx + w * 0.8, y + h * 0.22);
-            C.lineTo(bx + w * 0.95, y + h * 0.28);
-            C.lineTo(bx + w * 0.78, y + h * 0.48 + bob);
+            const neckTilt = isLeaping ? -0.25 : 0;
+            C.moveTo(bx + w * 0.58, y + h * 0.36 + bob);
+            C.lineTo(bx + w * 0.78, y + h * 0.18 + neckTilt * h);
+            C.lineTo(bx + w * 0.95, y + h * 0.25 + neckTilt * h);
+            C.lineTo(bx + w * 0.76, y + h * 0.46 + bob);
             C.closePath(); C.fill();
 
             // Cabeza
+            const headTilt = isLeaping ? 0.25 : 0; // cabeza baja al saltar
+            C.save();
+            C.translate(bx + w * 0.83, y + h * 0.2);
+            C.rotate(headTilt);
             C.fillStyle = furMain;
             C.beginPath();
-            C.ellipse(bx + w * 0.82, y + h * 0.2, w * 0.25, h * 0.22, 0.15, 0, Math.PI * 2);
+            C.ellipse(0, 0, w * 0.26, h * 0.23, 0.1, 0, Math.PI * 2);
             C.fill();
             // Hocico
             C.fillStyle = furLight;
             C.beginPath();
-            C.ellipse(bx + w * 0.95, y + h * 0.24, w * 0.12, h * 0.1, 0.2, 0, Math.PI * 2);
+            C.ellipse(w * 0.14, h * 0.06, w * 0.13, h * 0.11, 0.15, 0, Math.PI * 2);
             C.fill();
+            // Boca abierta al atacar
+            if (isLeaping || isCharging) {
+                C.strokeStyle = furDark; C.lineWidth = 1;
+                C.beginPath();
+                C.moveTo(w * 0.06, h * 0.1);
+                C.lineTo(w * 0.22, h * 0.16);
+                C.stroke();
+                // Dientes
+                C.fillStyle = '#f0ede0';
+                C.fillRect(w * 0.09, h * 0.1, 3, 4);
+                C.fillRect(w * 0.15, h * 0.12, 3, 3);
+            }
             // Nariz
             C.fillStyle = '#1a0f0a';
-            C.beginPath(); C.ellipse(bx + w * 1.03, y + h * 0.22, 2, 1.5, 0, 0, Math.PI * 2); C.fill();
-            // Ojo
-            C.fillStyle = ER ? '#ff3300' : '#f0c020';
-            C.beginPath(); C.ellipse(bx + w * 0.84, y + h * 0.15, 2.5, 2, 0, 0, Math.PI * 2); C.fill();
-            C.fillStyle = '#111';
-            C.beginPath(); C.ellipse(bx + w * 0.85, y + h * 0.15, 1.2, 1.5, 0, 0, Math.PI * 2); C.fill();
+            C.beginPath(); C.ellipse(w * 0.25, h * 0.04, 2.5, 1.8, 0, 0, Math.PI * 2); C.fill();
+            // Ojo — rojo si cargando/saltando
+            const eyeColor = (isLeaping || isCharging) ? '#ff4400' : (ER ? '#ff3300' : '#f0c020');
+            C.fillStyle = eyeColor;
+            C.beginPath(); C.ellipse(-w * 0.02, -h * 0.05, 2.8, 2.2, 0, 0, Math.PI * 2); C.fill();
+            C.fillStyle = '#0a0505';
+            C.beginPath(); C.ellipse(-w * 0.01, -h * 0.05, 1.4, 1.6, 0, 0, Math.PI * 2); C.fill();
+            // Brillo ojo
+            C.fillStyle = 'rgba(255,255,255,0.7)';
+            C.beginPath(); C.ellipse(-w * 0.03, -h * 0.07, 0.8, 0.8, 0, 0, Math.PI * 2); C.fill();
             // Orejas
             C.fillStyle = furDark;
             C.beginPath();
-            C.moveTo(bx + w * 0.73, y + h * 0.07);
-            C.lineTo(bx + w * 0.68, y - h * 0.04);
-            C.lineTo(bx + w * 0.8,  y + h * 0.1);
+            C.moveTo(-w * 0.12, -h * 0.1);
+            C.lineTo(-w * 0.18, -h * 0.28);
+            C.lineTo(-w * 0.03, -h * 0.12);
             C.closePath(); C.fill();
             C.beginPath();
-            C.moveTo(bx + w * 0.88, y + h * 0.05);
-            C.lineTo(bx + w * 0.85, y - h * 0.06);
-            C.lineTo(bx + w * 0.96, y + h * 0.09);
+            C.moveTo(w * 0.04, -h * 0.12);
+            C.lineTo(w * 0.01, -h * 0.3);
+            C.lineTo(w * 0.14, -h * 0.11);
             C.closePath(); C.fill();
+            C.restore();
+
+            C.restore(); // fin inclinación cuerpo
+            C.restore(); // fin flip horizontal
         }
 
         {
@@ -864,15 +1067,23 @@ window.draw = function() {
     }
     window.damageTexts.forEach(dt => {
         window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life));
-        window.ctx.font = 'bold 15px Inter, sans-serif';
         window.ctx.textAlign = 'center';
         if (dt.color === 'melee') {
+            window.ctx.font = 'bold 15px Inter, sans-serif';
             window.ctx.strokeStyle = 'rgba(140,0,0,0.95)';
             window.ctx.lineWidth = 3;
             window.ctx.strokeText(dt.text, dt.x, dt.y);
             window.ctx.fillStyle = '#ffffff';
             window.ctx.fillText(dt.text, dt.x, dt.y);
+        } else if (dt.color === 'miss') {
+            window.ctx.font = 'italic bold 13px Inter, sans-serif';
+            window.ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+            window.ctx.lineWidth = 2.5;
+            window.ctx.strokeText(dt.text, dt.x, dt.y);
+            window.ctx.fillStyle = '#bbbbbb';
+            window.ctx.fillText(dt.text, dt.x, dt.y);
         } else {
+            window.ctx.font = 'bold 15px Inter, sans-serif';
             window.ctx.fillStyle = dt.color;
             window.ctx.fillText(dt.text, dt.x, dt.y);
         }
@@ -882,6 +1093,50 @@ window.draw = function() {
 
     window.ctx.restore(); 
 
+    // ── AGUA DE LA COSTA — en coordenadas de pantalla (fuera del zoom) ────────
+    // Convierte coordenada mundo→pantalla respetando zoom y cámara
+    if (window.camera.x < window.game.shoreX + 100) {
+        const z2      = window.game.zoom || 1;
+        const gL_w    = window.game.baseGroundLevel || window.game.groundLevel; // Y mundo
+        const shore_w = window.game.shoreX - 70;                                // X mundo del borde
+
+        // Función de conversión mundo → pantalla
+        function _wx2sx(wx) { return (wx - window.camera.x - W/2) * z2 + W/2; }
+        function _wy2sy(wy) { return (wy - window.camera.y - H/2) * z2 + H/2; }
+
+        const surfaceY  = _wy2sy(gL_w);       // Y pantalla de la superficie del agua
+        const shoreX_s  = _wx2sx(shore_w);     // X pantalla del borde de arena
+        const leftEdge  = 0;                   // siempre desde el borde izquierdo de pantalla
+        const waterW    = shoreX_s - leftEdge;
+
+        if (waterW > 0) {
+            const waveT      = window.game.frameCount * 0.04;
+            const waveOffset = Math.sin(waveT) * 4;
+
+            // Plano de agua desde la superficie hasta el fondo de pantalla
+            const deepGrad = window.ctx.createLinearGradient(0, surfaceY, 0, surfaceY + 80 * z2);
+            deepGrad.addColorStop(0,   '#1a8fc0');
+            deepGrad.addColorStop(0.5, '#0d6e9e');
+            deepGrad.addColorStop(1,   '#083d5a');
+            window.ctx.fillStyle = deepGrad;
+            window.ctx.fillRect(leftEdge, surfaceY, waterW, H - surfaceY + 50);
+
+            // Ola principal
+            window.ctx.fillStyle = 'rgba(100,200,255,0.35)';
+            window.ctx.fillRect(leftEdge, surfaceY + 5 + waveOffset, waterW, 8 * z2);
+            // Ola secundaria
+            const waveOffset2 = Math.sin(waveT + 1.3) * 3;
+            window.ctx.fillStyle = 'rgba(180,235,255,0.18)';
+            window.ctx.fillRect(leftEdge, surfaceY + 16 + waveOffset2, waterW, 5 * z2);
+            // Brillo de superficie
+            window.ctx.fillStyle = 'rgba(255,255,255,0.10)';
+            window.ctx.fillRect(leftEdge, surfaceY, waterW, 4);
+
+            // Espuma en la orilla
+            window.ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            window.ctx.fillRect(shoreX_s - 5, surfaceY + 3, 5, 7 * z2);
+        }
+    }
     if (window.lightCtx) {
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         

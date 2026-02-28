@@ -383,7 +383,7 @@ window.getEl('craft-search')?.addEventListener('input', (e) => {
 });
 
 window.switchCraftTab = function(tabName) {
-    ['herramientas', 'armas', 'muebles'].forEach(t => {
+    ['herramientas', 'armas', 'muebles', 'trampas'].forEach(t => {
         let el = window.getEl(`tab-${t}`); let btn = window.getEl(`btn-tab-${t}`);
         if (el) el.style.display = (t === tabName) ? 'block' : 'none';
         if (btn) btn.style.background = (t === tabName) ? '#4CAF50' : '#444';
@@ -399,13 +399,14 @@ window.loadServers = function() {
 window.loadServers();
 
 window.toggleMenu = function(mName) {
-    ['inventory', 'crafting', 'box', 'campfire'].forEach(m => { 
+    ['inventory', 'crafting', 'box', 'campfire', 'turret'].forEach(m => { 
         let d = window.getEl(`menu-${m}`); 
         if(!d) return; 
         if(m === mName) { 
             d.classList.toggle('open'); 
             if (m==='box') window.renderBoxUI(); 
-            if (m==='campfire') window.renderCampfireUI(); 
+            if (m==='campfire') window.renderCampfireUI();
+            if (m==='turret') window.renderTurretUI();
         } else {
             d.classList.remove('open');
         }
@@ -425,7 +426,7 @@ window.invItemClick = function(type) {
     if (type === 'meat') window.eatFood(15, 30); 
     else if (type === 'cooked_meat') window.eatFood(30, 60);
     // --- CORRECCIÓN ESCALERA Y BARRICADA (Añadidas a la lista interactiva) ---
-    else if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(type) || window.toolDefs[type]) { 
+    else if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item', 'turret_item'].includes(type) || window.toolDefs[type]) { 
         if (typeof window.autoEquip === 'function') window.autoEquip(type); window.toggleMenu('inventory'); 
     }
 };
@@ -559,7 +560,7 @@ window.selectToolbarSlot = function(index) {
         window.player.activeTool = item;
         window.player.placementMode = null;
     } else if (item && window.player.inventory[item] > 0) {
-        if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(item)) {
+        if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item', 'turret_item'].includes(item)) {
             window.player.activeTool = 'hand';
             window.player.placementMode = item;
         } else {
@@ -774,6 +775,7 @@ window.updateUI = function() {
 
     checkBtn('req-torch', 'btn-craft-torch', 5, 0, 2, 0, 'torch');
     checkBtn('req-barricade', 'btn-craft-barricade', 8, 4, 0, 0, null);
+    checkBtn('req-turret', 'btn-craft-turret', 60, 20, 0, 0, null);
     checkBtn('req-axe', 'btn-craft-axe', 10, 0, 0, 0, 'axe'); checkBtn('req-pickaxe', 'btn-craft-pickaxe', 20, 0, 0, 0, 'pickaxe'); checkBtn('req-hammer', 'btn-craft-hammer', 15, 0, 0, 0, 'hammer'); checkBtn('req-bow', 'btn-craft-bow', 100, 0, 2, 0, 'bow'); checkBtn('req-sword', 'btn-craft-sword', 30, 30, 0, 3, 'sword'); checkBtn('req-box', 'btn-craft-box', 40, 0, 0, 1, null); checkBtn('req-campfire', 'btn-craft-campfire', 20, 5, 0, 0, null); checkBtn('req-bed', 'btn-craft-bed', 30, 0, 10, 0, null); 
     // --- CORRECCIÓN BOTÓN ESCALERA (Enlazando ambos IDs posibles) ---
     checkBtn('req-ladder', 'btn-craft-ladder', 6, 0, 0, 0, null);
@@ -792,7 +794,7 @@ window.updateEntityHUD = function() {
         if (!inView) return;
         const hpPercent = (ent.hp / ent.maxHp) * 100;
         const recentlyHit = Date.now() - (ent.lastHitTime || 0) < 2000;
-        const color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : '#ffaa00'));
+        const color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : (ent.type === 'wolf' ? '#e67e22' : '#ffaa00')));
         const pulse = recentlyHit ? 'style="animation: hpPulse 0.3s ease-out;"' : '';
         html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" ${pulse} style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
     });
@@ -812,7 +814,7 @@ window.craftItem = function(reqW, reqS, reqWeb, reqInt, tool, item, amt=1) {
             if (!window.canAddItem(item, amt)) { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, "Inventario Lleno", '#fff'); return; }
             window.player.inventory.wood-=reqW; window.player.inventory.stone-=reqS; window.player.inventory.web-=reqWeb; window.player.inventory[item] = (window.player.inventory[item]||0) + amt; 
             // --- CORRECCIÓN ESCALERA Y BARRICADA AL FABRICAR (Equipado automático) ---
-            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
+            if (['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item', 'turret_item'].includes(item) && typeof window.autoEquip === 'function') window.autoEquip(item);
         }
         window.updateUI(); if(typeof window.renderToolbar === 'function') window.renderToolbar();
     }
@@ -836,6 +838,44 @@ window.bindCraft('btn-craft-barricade', () => window.craftItem(8, 4, 0, 0, null,
 window.bindCraft('btn-craft-ladder', () => window.craftItem(6, 0, 0, 0, null, 'ladder_item', 1));
 window.bindCraft('btn-craft-ladder1', () => window.craftItem(6, 0, 0, 0, null, 'ladder_item', 1));
 window.bindCraft('btn-craft-ladder5', () => window.craftItem(30, 0, 0, 0, null, 'ladder_item', 5));
+window.bindCraft('btn-craft-turret', () => window.craftItem(60, 20, 0, 0, null, 'turret_item', 1));
+
+// ─── Torreta UI ───────────────────────────────────────────────────────────────
+window.currentTurret = null;
+
+window.renderTurretUI = function() {
+    if (!window.currentTurret) return;
+    const el = window.getEl('turret-arrow-count');
+    if (el) el.textContent = window.currentTurret.arrows || 0;
+};
+
+window.turretAction = function(action) {
+    const t = window.currentTurret;
+    if (!t || !window.player) return;
+    const inv = window.player.inventory;
+    const MAX_ARROWS = 50;
+    const avail = Math.max(0, parseInt(inv.arrows) || 0);
+    const space  = Math.max(0, MAX_ARROWS - Math.max(0, parseInt(t.arrows) || 0));
+    let changed = 0;
+    if (action === 'add1') {
+        if (avail >= 1 && space >= 1) { inv.arrows = avail - 1; t.arrows = (parseInt(t.arrows) || 0) + 1; changed = 1; }
+    } else if (action === 'add5') {
+        const n = Math.min(5, avail, space);
+        if (n > 0) { inv.arrows = avail - n; t.arrows = (parseInt(t.arrows) || 0) + n; changed = n; }
+    } else if (action === 'add10') {
+        const n = Math.min(10, avail, space);
+        if (n > 0) { inv.arrows = avail - n; t.arrows = (parseInt(t.arrows) || 0) + n; changed = n; }
+    } else if (action === 'addAll') {
+        const n = Math.min(avail, space);
+        if (n > 0) { inv.arrows = avail - n; t.arrows = (parseInt(t.arrows) || 0) + n; changed = n; }
+    }
+    if (changed > 0) {
+        window.sendWorldUpdate('update_turret', { x: t.x, y: t.y, arrows: t.arrows });
+        window.renderTurretUI();
+        if (window.updateUI) window.updateUI();
+        if (window.renderToolbar) window.renderToolbar();
+    }
+};
 
 // === SISTEMA GLOBAL DE TOOLTIPS (CON ESTILOS INYECTADOS) ===
 document.addEventListener('DOMContentLoaded', () => {

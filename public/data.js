@@ -117,7 +117,8 @@ window.itemDefs = {
     campfire_item: { name: 'Fogata',             color: '#e67e22', size: 14, maxStack:  10 },
     bed_item:      { name: 'Cama',              color: '#8B0000', size: 16, maxStack:   1 },
     barricade_item:{ name: 'Barricada con Púas', color: '#8B4513', size: 14, maxStack:   5 },
-    ladder_item:   { name: 'Escalera',          color: '#c8a86a', size: 14, maxStack:  20 }
+    ladder_item:   { name: 'Escalera',          color: '#c8a86a', size: 14, maxStack:  20 },
+    turret_item:   { name: 'Torreta',            color: '#6b4c24', size: 14, maxStack:   3 }
 };
 
 window.toolMaxDurability = {
@@ -141,7 +142,7 @@ window.player = {
     inventory: {
         wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10,
         arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0,
-        barricade_item: 0, ladder_item: 0
+        barricade_item: 0, ladder_item: 0, turret_item: 0
     },
     toolbar: ['hand', null, null, null, null, null],
     activeSlot: 0, activeTool: 'hand', availableTools: ['hand'],

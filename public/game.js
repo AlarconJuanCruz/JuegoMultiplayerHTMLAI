@@ -67,7 +67,7 @@ window.destroyBlockLocally = function(b) {
 
     if (window.currentOpenBox && window.currentOpenBox.x === b.x && window.currentOpenBox.y === b.y) { window.currentOpenBox = null; let dBox = window.getEl('menu-box'); if(dBox) dBox.classList.remove('open'); }
     
-    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : (b.type === 'ladder' ? 'ladder_item' : 'wood')))); 
+    let refundType = b.type === 'box' ? 'boxes' : (b.type === 'campfire' ? 'campfire_item' : (b.type === 'bed' ? 'bed_item' : (b.type === 'barricade' ? 'barricade_item' : (b.type === 'ladder' ? 'ladder_item' : (b.type === 'turret' ? 'turret_item' : 'wood'))))); 
     let refundAmt = b.type === 'door' ? 2 : 1;
     if (b.type !== 'grave') { let ni = { id: Math.random().toString(36).substring(2,9), x:b.x+15, y:b.y+15, vx:0, vy:-2, type:refundType, amount:refundAmt, life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); }
 
@@ -425,7 +425,7 @@ window.addEventListener('keydown', (e) => {
                         const cmd = msg.toLowerCase();
                         if (cmd === '/madera') { window.player.inventory.wood = (window.player.inventory.wood || 0) + 100; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Madera 🌲', '#c19a6b'); if (window.updateUI) window.updateUI(); } 
                         else if (cmd === '/piedra') { window.player.inventory.stone = (window.player.inventory.stone || 0) + 100; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+100 Piedra ⛏️', '#999'); if (window.updateUI) window.updateUI(); } 
-                        else if (cmd === '/flechas') { window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 10; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+10 Flechas 🏹', '#e67e22'); if (window.updateUI) window.updateUI(); } 
+                        else if (cmd === '/flechas') { window.player.inventory.arrows = (window.player.inventory.arrows || 0) + 50; window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, '+50 Flechas 🏹', '#e67e22'); if (window.updateUI) window.updateUI(); } 
                         else if (cmd === '/dance') { window.player.isDancing = true; window.player.danceStart = window.game.frameCount; window.player.chatText = '🕺 ¡A bailar!'; window.player.chatExpires = Date.now() + 3000; } 
                         else { window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, 'Comando desconocido', '#e74c3c'); }
                         chatInput.value = ''; chatInput.blur(); chatContainer.style.display = 'none'; window.player.isTyping = false; return;
@@ -469,7 +469,7 @@ window.addEventListener('keydown', (e) => {
                 return;
             }
 
-            let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
+            let interactables = window.blocks.filter(b => (b.type === 'box' || b.type === 'campfire' || b.type === 'door' || b.type === 'grave' || b.type === 'turret') && window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type==='door'?window.game.blockSize*2:window.game.blockSize));
             if (interactables.length > 1) {
                 const _pCX2 = window.player.x + window.player.width / 2;
                 interactables.sort((a, b) => {
@@ -486,6 +486,7 @@ window.addEventListener('keydown', (e) => {
                 if (b.type === 'door') { b.open = !b.open; window.spawnParticles(b.x + window.game.blockSize / 2, b.y + window.game.blockSize, '#5C4033', 5); window.sendWorldUpdate('interact_door', { x: b.x, y: b.y }); if (window.playSound) window.playSound('door'); } 
                 else if (b.type === 'box' || b.type === 'grave') { window.currentOpenBox = b; if(window.toggleMenu) window.toggleMenu('box'); } 
                 else if (b.type === 'campfire') { window.currentCampfire = b; if(window.toggleMenu) window.toggleMenu('campfire'); }
+                else if (b.type === 'turret') { window.currentTurret = b; if(window.toggleMenu) window.toggleMenu('turret'); }
             }
         }
         
@@ -537,6 +538,13 @@ window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
         if (i === -1) return false;
         let ent = target;
         {
+                // Probabilidad de MISS: base 15%, cada punto de agi reduce 2% (mín 2%)
+                const missChance = Math.max(0.02, 0.15 - (window.player.stats.agi || 0) * 0.02);
+                if (Math.random() < missChance) {
+                    window.spawnDamageText(ent.x + ent.width/2 + (Math.random()-0.5)*16, ent.y - 5 - Math.random()*8, 'MISS', 'miss');
+                    window.player.meleeCooldown = 18;
+                    return true; // consumed el hit, pero no hizo daño
+                }
                 ent.hp -= dmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
                 if (window.playSound) window.playSound('hit_entity');
                 window.spawnDamageText(ent.x+ent.width/2+(Math.random()-0.5)*16, ent.y-5-Math.random()*8, `-${dmg}`, 'melee');
@@ -568,7 +576,7 @@ window.tryHitBlock = function(pCX, pCY, dmg, meleeRange) {
             b.hp -= dmg; window.setHit(b); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 5);
             if (window.playSound) window.playSound('hit_block');
             if (b.hp <= 0) { window.destroyBlockLocally(b); } else { window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: dmg }); }
-            window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+            window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
             return true;
         }
     } return false;
@@ -601,7 +609,7 @@ window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
             window.sendWorldUpdate('destroy_rock', { x: r.x }); window.spawnParticles(rCX, rTopY + 15, '#888', 20, 1.5); 
             let ni = { id: Math.random().toString(36).substring(2,9), x:rCX, y:rTopY+15, vx:(Math.random()-0.5)*3, vy:-2, type:'stone', amount:15 + Math.floor(Math.random()*10), life:1.0}; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.rocks.splice(i, 1); window.gainXP(25); 
         } else { window.sendWorldUpdate('hit_rock', { x: r.x, dmg: dmg }); }
-        window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+        window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
         return true;
     } return false;
 };
@@ -639,7 +647,7 @@ window.tryHitTree = function(pCX, pCY, dmg, meleeRange) {
                 window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
             }
         } else { window.sendWorldUpdate('hit_tree', { x: t.x, dmg: dmg }); }
-        window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+        window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
         return true;
     } return false;
 };
@@ -664,7 +672,7 @@ window.attemptAction = function() {
     let rockDmg = tool === 'pickaxe' ? Math.floor(baseDmg * 3) : (tool === 'hammer' ? 0 : 1);
     let blockDmg = tool === 'hammer' ? Math.floor(baseDmg * 3) : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
 
-    window.player.meleeCooldown = Math.max(22, 45 - Math.floor((window.player.stats.agi||0) * 3));
+    window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
 
     if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg, meleeRange)) actionDone = true;
 
@@ -754,6 +762,7 @@ window.addEventListener('mousedown', (e) => {
                          : window.player.placementMode === 'bed_item' ? 'bed' 
                          : window.player.placementMode === 'barricade_item' ? 'barricade'
                          : window.player.placementMode === 'ladder_item' ? 'ladder'
+                         : window.player.placementMode === 'turret_item' ? 'turret'
                          : 'campfire';
                 let validPlace;
                 if (type === 'ladder') {
@@ -767,13 +776,34 @@ window.addEventListener('mousedown', (e) => {
                     const onBlock  = window.blocks.some(b => (b.type === 'block' || b.type === 'stair') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs_l)) < 2);
                     const inRange  = Math.hypot((window.player.x + window.player.width/2) - (gridX + bs_l/2), (window.player.y + window.player.height/2) - (gridY + bs_l/2)) <= window.player.miningRange + 60;
                     validPlace = noOverlapPlayer && !alreadyHere && (onGround || onLadder || onBlock) && inRange;
+                } else if (type === 'turret') {
+                    const bs_t = window.game.blockSize;
+                    // Solo se puede colocar encima de un bloque de madera construido (no escalón, no suelo natural)
+                    const blockBelow = window.blocks.some(b =>
+                        b.type === 'block' &&
+                        Math.abs(b.x - gridX) < bs_t - 1 &&
+                        Math.abs(b.y - (gridY + bs_t)) < 4
+                    );
+                    const noOverlap = !window.blocks.some(b =>
+                        Math.abs(b.x - gridX) < bs_t - 1 &&
+                        Math.abs(b.y - gridY) < bs_t - 1
+                    );
+                    const inRangeT = Math.hypot(
+                        (window.player.x + window.player.width / 2) - (gridX + bs_t / 2),
+                        (window.player.y + window.player.height / 2) - (gridY + bs_t / 2)
+                    ) <= (window.player.miningRange || 150) + 40;
+                    if (!blockBelow) {
+                        window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, 'Necesita un bloque debajo', '#ffaa00');
+                    }
+                    validPlace = blockBelow && noOverlap && inRangeT;
                 } else {
                     validPlace = window.isValidPlacement(gridX, gridY, window.game.blockSize, window.game.blockSize, true, false);
                 }
                 if (validPlace) {
-                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : 200), maxHp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : 200), isHit: false };
+                    let newB = { x: gridX, y: gridY, type: type, hp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : type === 'turret' ? 300 : 200), maxHp: type === 'barricade' ? 150 : (type === 'ladder' ? 50 : type === 'turret' ? 300 : 200), isHit: false };
                     if (type === 'box') newB.inventory = {wood:0, stone:0, meat:0, web:0, arrows:0, cooked_meat:0};
                     if (type === 'campfire') { newB.wood = 0; newB.meat = 0; newB.cooked = 0; newB.isBurning = false; newB.burnTime = 0; newB.cookTimer = 0; }
+                    if (type === 'turret') { newB.arrows = 0; newB.fireCooldown = 0; newB.aimAngle = 0; }
                     if (type === 'bed') { window.blocks = window.blocks.filter(b => b.type !== 'bed' || b.owner !== window.player.name); newB.owner = window.player.name; window.player.bedPos = { x: gridX, y: gridY }; window.spawnDamageText(gridX + 15, gridY - 10, "Punto Respawn", '#4CAF50'); window.sendWorldUpdate('remove_old_bed', { owner: window.player.name }); }
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory[window.player.placementMode]--; window.spawnParticles(gridX+15, gridY+15, '#fff', 10); if (window.playSound) window.playSound('build');
                     if (window.player.inventory[window.player.placementMode] <= 0) { window.player.toolbar[window.player.activeSlot] = null; window.selectToolbarSlot(0); }
@@ -826,7 +856,7 @@ window.addEventListener('wheel', (e) => {
 
     if (window.player.placementMode) {
         e.preventDefault();
-        const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item'];
+        const placeableItems = ['boxes', 'campfire_item', 'bed_item', 'barricade_item', 'ladder_item', 'turret_item'];
         let nextSlot = window.player.activeSlot;
         for (let tries = 0; tries < 6; tries++) {
             nextSlot = (nextSlot + (dir > 0 ? 1 : -1) + 6) % 6;
@@ -898,7 +928,8 @@ function update() {
 
         // ── Carga del arco ────────────────────────────────────────────────────
         if (window.player.isCharging) {
-            window.player.chargeLevel += 1.0 * (1 + window.player.stats.agi * 0.2);
+            // Base: 0.55 (más lento que antes era 1.0), escala con agi: +0.18 por punto
+            window.player.chargeLevel += 0.55 * (1 + (window.player.stats.agi || 0) * 0.18);
             if (window.player.chargeLevel > 100) window.player.chargeLevel = 100;
         }
 
@@ -966,7 +997,26 @@ function update() {
             if (window.keys?.a) window.player.vx -= accel;
             if (window.keys?.d) window.player.vx += accel;
             window.player.vx *= fric;
-            window.player.vx = Math.max(-window.player.speed, Math.min(window.player.speed, window.player.vx));
+
+            // Reducir velocidad al subir escalones (rampa hacia arriba)
+            let stairSpeedMult = 1.0;
+            const pMidX = window.player.x + window.player.width / 2;
+            const pFoot = window.player.y + window.player.height;
+            for (const b of window.blocks) {
+                if (b.type !== 'stair') continue;
+                const relX = pMidX - b.x;
+                if (relX < 0 || relX > window.game.blockSize) continue;
+                if (pFoot < b.y - 2 || pFoot > b.y + window.game.blockSize + 4) continue;
+                const frac   = b.facingRight ? (relX / window.game.blockSize) : (1 - relX / window.game.blockSize);
+                const rampY  = b.y + window.game.blockSize - frac * window.game.blockSize;
+                if (Math.abs(pFoot - rampY) < 10) {
+                    // Subiendo: el jugador se mueve hacia la parte alta de la rampa
+                    const goingUp = (b.facingRight && window.player.vx > 0) || (!b.facingRight && window.player.vx < 0);
+                    stairSpeedMult = goingUp ? 0.55 : 0.8;
+                }
+                break;
+            }
+            window.player.vx = Math.max(-window.player.speed * stairSpeedMult, Math.min(window.player.speed * stairSpeedMult, window.player.vx));
         }
 
         const isMoving = Math.abs(window.player.vx) > 0.2 || !window.player.isGrounded;
@@ -1068,7 +1118,16 @@ function update() {
 
         // ── Salto ─────────────────────────────────────────────────────────────
         if (window.keys?.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead && !_isClimbing) {
-            window.player.vy = window.player.jumpPower;
+            // Calcular cuánto subiría el jugador con este salto (aprox. vt²/2g)
+            const jumpPower = Math.abs(window.player.jumpPower);
+            // Verificar si hay techo dentro del arco de salto
+            const headroom = Math.ceil((jumpPower * jumpPower) / (2 * 0.5)); // 0.5 = gravedad aprox
+            if (window.hasCeilingAbove && window.hasCeilingAbove(headroom)) {
+                // Techo muy cerca: salto corto (bump) para no atravesarlo
+                window.player.vy = Math.max(window.player.jumpPower, -3);
+            } else {
+                window.player.vy = window.player.jumpPower;
+            }
             window.player.isJumping  = true;
             window.player.coyoteTime = 0;
             window.player.jumpKeyReleased = false;
@@ -1165,6 +1224,97 @@ function update() {
                     }
                 });
             }
+
+            // ── Torreta: disparo automático ───────────────────────────────────
+            if (b.type === 'turret') {
+                if (b.fireCooldown > 0) { b.fireCooldown--; }
+
+                if (b.arrows > 0 && b.fireCooldown <= 0) {
+                    const TURRET_RANGE  = 420;
+                    const TURRET_DAMAGE = 12;
+                    const tCX = b.x + window.game.blockSize / 2;
+                    const tCY = b.y + 8; // parte alta del cañón
+
+                    // Bloque soporte de la torreta (el bloque directamente debajo)
+                    const supportBlock = window.blocks.find(sb =>
+                        sb.type === 'block' &&
+                        Math.abs(sb.x - b.x) < window.game.blockSize - 1 &&
+                        Math.abs(sb.y - (b.y + window.game.blockSize)) < 4
+                    );
+
+                    // Función de raycast: ¿hay algún bloque sólido entre dos puntos?
+                    const hasLOS = (x1, y1, x2, y2) => {
+                        const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 10);
+                        for (let s = 1; s < steps; s++) {
+                            const rx = x1 + (x2 - x1) * s / steps;
+                            const ry = y1 + (y2 - y1) * s / steps;
+                            for (const bl of window.blocks) {
+                                if (bl === b) continue;              // ignorar la propia torreta
+                                if (bl === supportBlock) continue;   // ignorar bloque soporte
+                                if (bl.type === 'turret' || bl.type === 'box' || bl.type === 'campfire' ||
+                                    bl.type === 'barricade' || bl.type === 'ladder' || bl.type === 'grave' ||
+                                    bl.type === 'bed') continue;
+                                const bh = bl.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
+                                if (rx >= bl.x && rx <= bl.x + window.game.blockSize &&
+                                    ry >= bl.y && ry <= bl.y + bh) return false;
+                            }
+                        }
+                        return true;
+                    };
+
+                    // Ordenar enemigos por distancia, elegir el primero con LOS
+                    const candidates = window.entities
+                        .filter(ent => {
+                            if (ent.type === 'chicken' || ent.hp <= 0) return false;
+                            return Math.hypot(ent.x + ent.width/2 - tCX, ent.y + ent.height/2 - tCY) <= TURRET_RANGE;
+                        })
+                        .sort((a, b2) =>
+                            Math.hypot(a.x + a.width/2 - tCX, a.y + a.height/2 - tCY) -
+                            Math.hypot(b2.x + b2.width/2 - tCX, b2.y + b2.height/2 - tCY)
+                        );
+
+                    let bestTarget = null;
+                    for (const ent of candidates) {
+                        const eCX = ent.x + ent.width / 2;
+                        const eCY = ent.y + ent.height / 2;
+                        if (hasLOS(tCX, tCY, eCX, eCY)) { bestTarget = ent; break; }
+                    }
+
+                    if (bestTarget) {
+                        const eCX  = bestTarget.x + bestTarget.width / 2;
+                        const eCY  = bestTarget.y + bestTarget.height / 2;
+                        const predX = eCX + (bestTarget.vx || 0) * 12;
+                        const predY = eCY + (bestTarget.vy || 0) * 6;
+
+                        const dx    = predX - tCX;
+                        const dy    = predY - tCY;
+                        const dist  = Math.max(0.1, Math.hypot(dx, dy));
+                        const aSpd  = 11;
+                        const tFlight = dist / aSpd;
+                        const vyAdj   = dy / tFlight - window.game.gravity * 0.4 * tFlight * 0.5;
+                        const angle   = Math.atan2(vyAdj, dx / tFlight);
+                        b.aimAngle    = Math.atan2(predY - tCY, predX - tCX);
+
+                        const arrow = {
+                            x: tCX, y: tCY,
+                            vx: Math.cos(angle) * aSpd,
+                            vy: Math.sin(angle) * aSpd,
+                            life: Math.ceil(dist / aSpd) + 20,
+                            damage: TURRET_DAMAGE,
+                            isEnemy: false,
+                            fromTurret: true,
+                            owner: 'turret_' + b.x + '_' + b.y
+                        };
+                        window.projectiles.push(arrow);
+                        window.sendWorldUpdate('spawn_projectile', arrow);
+                        if (window.playSound) window.playSound('arrow_shoot');
+                        b.arrows--;
+                        b.fireCooldown = 180;
+                        window.sendWorldUpdate('update_turret', { x: b.x, y: b.y, arrows: b.arrows });
+                        if (window.currentTurret === b && window.renderTurretUI) window.renderTurretUI();
+                    }
+                }
+            }
         });
 
         // ── Flechas clavadas ──────────────────────────────────────────────────
@@ -1180,7 +1330,7 @@ function update() {
         pCY = window.player.y + window.player.height / 2;
 
         let interactables = window.blocks.filter(b =>
-            ['box','campfire','door','grave'].includes(b.type) &&
+            ['box','campfire','door','grave','turret'].includes(b.type) &&
             window.checkRectIntersection(window.player.x - 15, window.player.y - 15, window.player.width + 30, window.player.height + 30, b.x, b.y, window.game.blockSize, b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize)
         );
         if (interactables.length > 1) {
@@ -1283,7 +1433,9 @@ function update() {
             let hitBlock = null;
             for (const b of window.blocks) {
                 const bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-                if (!b.open && b.type !== 'box' && b.type !== 'campfire' && b.type !== 'barricade' && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh)) { hitBlock = b; break; }
+                // Las flechas de torreta no chocan con torretas; ninguna flecha choca con campfire/box/barricada
+                if (b.type === 'turret' && pr.fromTurret) continue;
+                if (!b.open && b.type !== 'box' && b.type !== 'campfire' && b.type !== 'barricade' && b.type !== 'turret' && window.checkRectIntersection(pr.x, pr.y, 4, 4, b.x, b.y, window.game.blockSize, bh)) { hitBlock = b; break; }
             }
             if (hitBlock) {
                 if (isMyArrow && !pr.isEnemy && Math.random() < 0.5) {

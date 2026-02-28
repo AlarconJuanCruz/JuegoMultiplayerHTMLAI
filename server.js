@@ -257,6 +257,12 @@ io.on('connection', (socket) => {
                 break;
             }
 
+            case 'update_turret': {
+                const b = ws.blocks.find(bl => bl.x === data.payload?.x && bl.y === data.payload?.y);
+                if (b) { b.arrows = data.payload.arrows; }
+                break;
+            }
+
             case 'drop_item':
                 if (data.payload?.item) ws.droppedItems.push(data.payload.item);
                 break;

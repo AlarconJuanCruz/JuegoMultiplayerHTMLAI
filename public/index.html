@@ -50,6 +50,43 @@
             border-top: 1px solid rgba(255,255,255,0.07);
             margin: 14px 0;
         }
+
+        /* ── Entity HUD ───────────────────────────────────────────── */
+        .entity-bar-container {
+            background: rgba(0,0,0,0.68);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            padding: 5px 8px;
+            min-width: 160px;
+            max-width: 200px;
+            backdrop-filter: blur(2px);
+        }
+        .entity-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            font-family: var(--font-ui, monospace);
+            color: #ccc;
+            margin-bottom: 4px;
+            letter-spacing: 0.04em;
+        }
+        .entity-info span:last-child { color: #f0c020; font-weight: 600; }
+        .entity-hp-bg {
+            width: 100%;
+            height: 5px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .entity-hp-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.15s ease-out;
+        }
+        @keyframes hpPulse {
+            0%   { filter: brightness(2.5); }
+            100% { filter: brightness(1); }
+        }
     </style>
 </head>
 <body>
@@ -489,6 +526,9 @@
                     <button id="btn-tab-muebles" class="action-btn mini"
                             style="flex:1;"
                             onclick="window.switchCraftTab('muebles')">🏠 Muebles</button>
+                    <button id="btn-tab-trampas" class="action-btn mini"
+                            style="flex:1;"
+                            onclick="window.switchCraftTab('trampas')">⚙️ Trampas</button>
                 </div>
                 <input type="text" id="craft-search" class="search-bar" placeholder="🔍 Buscar receta…">
                 <div id="craft-list">
@@ -572,13 +612,6 @@
                             </div>
                             <button id="btn-craft-bed" class="action-btn mini">Fabricar · 30 Mad. + 10 Tela</button>
                         </div>
-                        <div class="craft-item" data-name="barricada puas trampa defensa">
-                            <div class="craft-header">
-                                <span class="craft-title">🪤 Barricada con Púas</span>
-                                <span id="req-barricade" class="req-text"></span>
-                            </div>
-                            <button id="btn-craft-barricade" class="action-btn mini">Fabricar · 8 Mad. + 4 Pie.</button>
-                        </div>
                         <div class="craft-item" data-name="escalera trepar subir bloque">
                             <div class="craft-header">
                                 <span class="craft-title">🪜 Escalera</span>
@@ -591,6 +624,48 @@
                         </div>
 
                     </div>
+
+                    <div id="tab-trampas" style="display:none;">
+                        <div class="craft-item" data-name="barricada puas trampa defensa">
+                            <div class="craft-header">
+                                <span class="craft-title">🪤 Barricada con Púas</span>
+                                <span id="req-barricade" class="req-text"></span>
+                            </div>
+                            <button id="btn-craft-barricade" class="action-btn mini">Fabricar · 8 Mad. + 4 Pie.</button>
+                        </div>
+                        <div class="craft-item" data-name="torreta ballesta trampa defensa automatica">
+                            <div class="craft-header">
+                                <span class="craft-title">🏹 Torreta</span>
+                                <span id="req-turret" class="req-text"></span>
+                            </div>
+                            <div style="font-size:10px; color:#888; margin-bottom:6px; font-family:var(--font-ui);">
+                                Dispara flechas automáticamente. Cargala con [E].
+                            </div>
+                            <button id="btn-craft-turret" class="action-btn mini">Fabricar · 60 Mad. + 20 Pie.</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menú torreta -->
+            <div id="menu-turret" class="window-menu" style="pointer-events:auto; min-width:260px;">
+                <div class="window-header">
+                    <h3>🏹 Torreta</h3>
+                    <button class="close-btn" onclick="window.toggleMenu('turret')">✕</button>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 10px; background:rgba(0,0,0,0.3); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+                    <span style="font-weight:600;">🎯 Flechas cargadas</span>
+                    <strong id="turret-arrow-count" style="color:var(--gold); min-width:30px; text-align:center;">0</strong>
+                    <span style="font-size:10px; color:#666;">/ 50</span>
+                </div>
+                <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+                    <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('add1')">+1</button>
+                    <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('add5')">+5</button>
+                    <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('add10')">+10</button>
+                    <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('addAll')">+ Todas</button>
+                </div>
+                <div style="font-size:10px; color:#5a6475; text-align:center; font-family:var(--font-ui);">
+                    Alcance: 420px · Cadencia: 3s · Daño: 18 · Cap: 50 flechas
                 </div>
             </div>
 

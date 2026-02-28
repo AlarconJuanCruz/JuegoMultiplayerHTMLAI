@@ -54,6 +54,7 @@ window.getBlockRefund = function (block) {
         bed:       { type: 'bed_item',       amount: 1 },
         barricade: { type: 'barricade_item', amount: 1 },
         ladder:    { type: 'ladder_item',    amount: 1 },
+        turret:    { type: 'turret_item',    amount: 1 },
         door:      { type: 'wood',           amount: 2 },
     };
     return map[block.type] || { type: 'wood', amount: 1 };
