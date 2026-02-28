@@ -6,6 +6,8 @@
     <title>Survival RPG</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
     <link rel="stylesheet" href="style.css">
     <style>
         /* ── Layout de pantalla ─────────────────────────── */
@@ -106,15 +108,15 @@
 
                     <div style="text-align:center;margin-bottom:20px;">
                         <h1 class="menu-title" style="font-size:1.7rem;margin-bottom:3px;">⚔️ SURVIVAL RPG</h1>
-                        <p class="menu-subtitle" style="margin:0;font-size:10px;">ALPHA MULTIJUGADOR</p>
+                        <p class="menu-subtitle" style="margin:0;font-size:12px;">ALPHA MULTIJUGADOR</p>
                     </div>
 
                     <div id="seed-section" style="background:rgba(61,220,132,0.05);border:1px solid rgba(61,220,132,0.18);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-family:var(--font-ui);">
-                        <span style="font-size:10px;color:#5a6475;letter-spacing:0.06em;text-transform:uppercase;display:block;margin-bottom:7px;">🌍 Semilla del Mundo</span>
+                        <span style="font-size:12px;color:#5a6475;letter-spacing:0.04em;text-transform:uppercase;display:block;margin-bottom:7px;">🌍 Semilla del Mundo</span>
                         <div style="display:flex;gap:5px;align-items:center;margin-bottom:7px;">
                             <div style="flex:1;background:rgba(0,0,0,0.4);border:1px solid rgba(61,220,132,0.25);border-radius:6px;padding:6px 9px;display:flex;align-items:center;gap:5px;">
                                 <span style="font-size:10px;color:#5a6475;">Código:</span>
-                                <span id="seed-display" style="font-family:monospace;font-size:15px;font-weight:700;letter-spacing:0.15em;color:#3ddc84;">-----</span>
+                                <span id="seed-display" style="font-family:var(--font-ui);font-size:13px;font-weight:700;letter-spacing:0.1em;color:#3ddc84;">-----</span>
                             </div>
                             <button id="btn-copy-seed" onclick="window.copySeedCode()" style="background:rgba(61,220,132,0.08);border:1px solid rgba(61,220,132,0.25);color:#3ddc84;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:11px;font-family:var(--font-ui);" title="Copiar">📋</button>
                             <button id="btn-new-seed" onclick="window.resetSeed()" style="background:rgba(240,160,48,0.08);border:1px solid rgba(240,160,48,0.25);color:#f0a030;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:11px;font-family:var(--font-ui);" title="Nueva">🔄</button>
@@ -129,8 +131,8 @@
                     <input type="text" id="player-name" class="menu-input" placeholder="Tu nombre de superviviente…" maxlength="15" style="margin-bottom:14px;">
 
                     <div style="display:flex;gap:5px;margin-bottom:0;">
-                        <button id="tab-solo" onclick="window.showMenuTab('solo')" style="flex:1;padding:9px 6px;border-radius:7px;border:1px solid rgba(61,220,132,0.4);background:rgba(61,220,132,0.12);color:#3ddc84;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;">🕹️ Solo</button>
-                        <button id="tab-multi" onclick="window.showMenuTab('multi')" style="flex:1;padding:9px 6px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#5a6475;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;">🌐 Multijugador</button>
+                        <button id="tab-solo" onclick="window.showMenuTab('solo')" style="flex:1;padding:9px 6px;border-radius:7px;border:1px solid rgba(61,220,132,0.4);background:rgba(61,220,132,0.12);color:#3ddc84;font-family:var(--font-ui);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.02em;">🕹️ Solo</button>
+                        <button id="tab-multi" onclick="window.showMenuTab('multi')" style="flex:1;padding:9px 6px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);color:#5a6475;font-family:var(--font-ui);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.02em;">🌐 Multijugador</button>
                     </div>
 
                     <div style="flex:1;"></div>
@@ -142,20 +144,20 @@
 
                     <div id="panel-solo" style="display:flex;flex-direction:column;height:100%;">
                         <div style="margin-bottom:16px;">
-                            <h2 style="font-family:var(--font-display);font-size:13px;letter-spacing:0.12em;color:#3ddc84;text-transform:uppercase;margin:0 0 6px;">Modo Sin Conexión</h2>
-                            <p style="font-family:var(--font-ui);font-size:11px;color:#5a6475;margin:0;line-height:1.6;">Jugá solo en tu propia mundo. Sin servidores, sin internet.</p>
+                            <h2 style="font-family:var(--font-display);font-size:15px;letter-spacing:0.08em;color:#3ddc84;text-transform:uppercase;margin:0 0 8px;">Modo Sin Conexión</h2>
+                            <p style="font-family:var(--font-ui);font-size:13px;color:#5a6475;margin:0;line-height:1.7;">Jugá solo en tu propia mundo. Sin servidores, sin internet.</p>
                         </div>
-                        <button id="btn-single" class="action-btn" style="font-size:14px;padding:14px;margin-top:auto;">🕹️ Jugar Solo (Offline)</button>
+                        <button id="btn-single" class="action-btn" style="font-size:11px;padding:10px;margin-top:auto;">🕹️ Jugar Solo (Offline)</button>
                     </div>
 
                     <div id="panel-multi" style="display:none;flex-direction:column;gap:10px;">
 
                         <div style="background:rgba(61,220,132,0.05);border:1px solid rgba(61,220,132,0.2);border-radius:9px;padding:11px 13px;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-                                <span style="font-family:var(--font-ui);font-size:10px;color:#5a6475;text-transform:uppercase;letter-spacing:0.07em;">🌐 Servidor Global</span>
-                                <div id="server-status-badge" style="font-size:11px;font-weight:600;color:#f0a030;font-family:var(--font-ui);">🟠 Verificando…</div>
+                                <span style="font-family:var(--font-ui);font-size:13px;color:#5a6475;text-transform:uppercase;letter-spacing:0.04em;">🌐 Servidor Global</span>
+                                <div id="server-status-badge" style="font-size:13px;font-weight:600;color:#f0a030;font-family:var(--font-ui);">🟠 Verificando…</div>
                             </div>
-                            <div id="global-server-stats" style="display:none;font-family:var(--font-ui);font-size:11px;color:#5a6475;margin-bottom:8px;gap:14px;">
+                            <div id="global-server-stats" style="display:none;font-family:var(--font-ui);font-size:13px;color:#5a6475;margin-bottom:8px;gap:14px;">
                                 <span>👥 <span id="gstat-players">?</span> jugadores</span>
                                 <span>🌍 <span id="gstat-seed">?</span></span>
                                 <span>📶 <span id="gstat-ping">?</span>ms</span>
@@ -165,11 +167,11 @@
 
                         <div style="background:rgba(91,180,245,0.05);border:1px solid rgba(91,180,245,0.18);border-radius:9px;padding:11px 13px;flex:1;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-                                <span style="font-family:var(--font-ui);font-size:10px;color:#5a6475;text-transform:uppercase;letter-spacing:0.07em;">🌍 Salas Multijugador</span>
-                                <button onclick="window.refreshServerList()" id="btn-refresh-servers" style="background:rgba(91,180,245,0.1);border:1px solid rgba(91,180,245,0.25);color:#5bb4f5;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:10px;font-family:var(--font-ui);">↺ Actualizar</button>
+                                <span style="font-family:var(--font-ui);font-size:13px;color:#5a6475;text-transform:uppercase;letter-spacing:0.04em;">🌍 Salas Multijugador</span>
+                                <button onclick="window.refreshServerList()" id="btn-refresh-servers" style="background:rgba(91,180,245,0.1);border:1px solid rgba(91,180,245,0.25);color:#5bb4f5;border-radius:5px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:var(--font-ui);">↺ Actualizar</button>
                             </div>
                             <div id="server-list" style="display:flex;flex-direction:column;gap:4px;min-height:36px;max-height:120px;overflow-y:auto;margin-bottom:8px;">
-                                <div id="server-list-empty" style="color:#5a6475;font-size:11px;font-family:var(--font-ui);text-align:center;padding:8px 0;">Ninguna sala encontrada. ¡Creá una abajo!</div>
+                                <div id="server-list-empty" style="color:#5a6475;font-size:13px;font-family:var(--font-ui);text-align:center;padding:8px 0;">Ninguna sala encontrada. ¡Creá una abajo!</div>
                             </div>
                             <div style="display:flex;gap:6px;">
                                 <input type="text" id="server-ip" class="menu-input" style="margin-bottom:0;flex:2;padding:8px 10px;font-size:12px;" placeholder="IP directa (ej: 192.168.1.5)…">
@@ -198,15 +200,15 @@
                         border-radius:12px;padding:26px 26px 22px;width:340px;
                         box-shadow:0 30px 70px rgba(0,0,0,0.9);">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-                    <h3 style="font-family:var(--font-display);font-size:14px;letter-spacing:0.1em;color:#f0a030;text-transform:uppercase;margin:0;">🏠 Crear Nueva Sala</h3>
+                    <h3 style="font-family:var(--font-display);font-size:16px;letter-spacing:0.06em;color:#f0a030;text-transform:uppercase;margin:0;">🏠 Crear Nueva Sala</h3>
                     <button onclick="window.closeCreateRoom()" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:16px;" onmouseover="this.style.color='#f0a030'" onmouseout="this.style.color='#555'">✕</button>
                 </div>
                 <div style="margin-bottom:10px;">
-                    <label style="font-family:var(--font-ui);font-size:10px;color:#5a6475;text-transform:uppercase;letter-spacing:0.07em;display:block;margin-bottom:5px;">Nombre de la sala</label>
+                    <label style="font-family:var(--font-ui);font-size:12px;color:#5a6475;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:5px;">Nombre de la sala</label>
                     <input type="text" id="room-name-input" class="menu-input" style="margin-bottom:0;" placeholder="Mi servidor épico…" maxlength="30">
                 </div>
                 <div style="margin-bottom:18px;">
-                    <label style="font-family:var(--font-ui);font-size:10px;color:#5a6475;text-transform:uppercase;letter-spacing:0.07em;display:block;margin-bottom:5px;">Semilla (opcional — vacío = aleatoria)</label>
+                    <label style="font-family:var(--font-ui);font-size:12px;color:#5a6475;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:5px;">Semilla (opcional — vacío = aleatoria)</label>
                     <input type="text" id="room-seed-input" class="menu-input" style="margin-bottom:0;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;" placeholder="Ej: A3F7K…" maxlength="8">
                 </div>
                 <div id="create-room-error" style="display:none;background:rgba(220,60,60,0.1);border:1px solid rgba(220,60,60,0.3);border-radius:6px;padding:8px 10px;font-family:var(--font-ui);font-size:11px;color:#e07070;margin-bottom:10px;"></div>
@@ -216,7 +218,7 @@
             </div>
         </div>
 
-        <canvas id="gameCanvas" width="1280" height="720" style="display:block;"></canvas>
+        <canvas id="gameCanvas" width="1280" height="720" style="display:block; image-rendering:pixelated; image-rendering:crisp-edges;"></canvas>
 
         <div id="death-screen" class="glass-panel"
              style="display:none; position:absolute; top:50%; left:50%;
@@ -250,8 +252,8 @@
                      background:rgba(5,10,16,0.92); backdrop-filter:blur(14px);
                      border:1px solid rgba(61,220,132,0.25); border-left:2px solid #3ddc84;
                      border-radius:8px; padding:6px 12px;
-                     font-family:var(--font-ui); font-size:12px; font-weight:600;
-                     color:var(--text-main); letter-spacing:0.03em; white-space:nowrap;">
+                     font-family:var(--font-ui); font-size:14px; font-weight:600;
+                     color:var(--text-main); letter-spacing:0.02em; white-space:nowrap;">
                     🟢 <span id="sv-ip" style="color:#3ddc84; font-weight:700;">Local</span>
                     <span style="color:rgba(255,255,255,0.2);">│</span>
                     👥 <span id="sv-players" style="color:#d8dde6; font-weight:700;">1</span><span style="color:#5a6475;">/10</span>
@@ -259,8 +261,8 @@
                     <button onclick="window.togglePlayerList()"
                         style="background:linear-gradient(135deg,rgba(100,10,10,0.9),rgba(70,5,5,0.95));
                                color:#ff9090; border:1px solid rgba(200,50,50,0.4); border-radius:5px;
-                               padding:3px 9px; cursor:pointer; font-size:11px; font-weight:700;
-                               font-family:var(--font-ui); letter-spacing:0.03em; pointer-events:auto;"
+                               padding:5px 11px; cursor:pointer; font-size:13px; font-weight:700;
+                               font-family:var(--font-ui); letter-spacing:0.02em; pointer-events:auto;"
                         onmouseover="this.style.background='linear-gradient(135deg,rgba(160,15,15,0.95),rgba(110,5,5,0.99))'"
                         onmouseout="this.style.background='linear-gradient(135deg,rgba(100,10,10,0.9),rgba(70,5,5,0.95))'">
                         ⚔️ Jugadores
@@ -276,14 +278,14 @@
                     <div style="padding:8px 12px 7px; border-bottom:1px solid rgba(180,40,40,0.2);
                                 display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-family:var(--font-display); font-size:11px; letter-spacing:0.1em;
-                                     color:#e07070; text-transform:uppercase; font-weight:700;">⚔ Duelos PVP</span>
+                                     color:#e07070; text-transform:uppercase; font-weight:700; font-size:13px;">⚔ Duelos PVP</span>
                         <button onclick="window.togglePlayerList()"
                             style="background:transparent; border:none; color:#555; cursor:pointer;
                                    font-size:14px; line-height:1; padding:0 2px; pointer-events:auto;"
                             onmouseover="this.style.color='#e07070'" onmouseout="this.style.color='#555'">✕</button>
                     </div>
                     <div id="pvp-player-list-inner" style="padding:8px 10px; max-height:220px; overflow-y:auto;">
-                        <div style="color:#5a6475; font-size:12px; text-align:center; padding:14px 0;
+                        <div style="color:#5a6475; font-size:13px; text-align:center; padding:14px 0;
                                     font-family:var(--font-ui);">Sin jugadores en línea</div>
                     </div>
                 </div>
@@ -301,16 +303,16 @@
                  border:1px solid rgba(240,160,48,0.3);border-top:2px solid #f0a030;border-radius:10px;
                  min-width:270px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.85);">
                 <div style="padding:11px 16px 9px;border-bottom:1px solid rgba(240,160,48,0.12);display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-family:var(--font-display);font-size:12px;letter-spacing:0.12em;color:#f0a030;text-transform:uppercase;font-weight:700;">☰ Servidor</span>
+                    <span style="font-family:var(--font-display);font-size:15px;letter-spacing:0.06em;color:#f0a030;text-transform:uppercase;font-weight:700;">☰ Servidor</span>
                     <button onclick="window.toggleServerMenu()" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:14px;padding:0 2px;pointer-events:auto;" onmouseover="this.style.color='#f0a030'" onmouseout="this.style.color='#555'">✕</button>
                 </div>
-                <div id="server-menu-info" style="padding:9px 16px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:var(--font-ui);font-size:11px;color:#5a6475;line-height:1.7;"></div>
+                <div id="server-menu-info" style="padding:9px 16px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:var(--font-ui);font-size:13px;color:#5a6475;line-height:1.8;"></div>
                 <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px;">
-                    <button onclick="window.copyInviteLink()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(61,220,132,0.3);background:rgba(61,220,132,0.08);color:#3ddc84;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;pointer-events:auto;">
+                    <button onclick="window.copyInviteLink()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(61,220,132,0.3);background:rgba(61,220,132,0.08);color:#3ddc84;font-family:var(--font-ui);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
                         🔗 Copiar Link de Invitación
                     </button>
                     <div id="invite-link-display" style="display:none;background:rgba(0,0,0,0.45);border:1px solid rgba(61,220,132,0.2);border-radius:6px;padding:8px 10px;font-family:monospace;font-size:10px;color:#3ddc84;word-break:break-all;line-height:1.5;"></div>
-                    <button onclick="window.leaveServer()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(220,60,60,0.3);background:rgba(220,60,60,0.07);color:#e07070;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.03em;pointer-events:auto;">
+                    <button onclick="window.leaveServer()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(220,60,60,0.3);background:rgba(220,60,60,0.07);color:#e07070;font-family:var(--font-ui);font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
                         🚪 Salir del Servidor
                     </button>
                 </div>
@@ -414,35 +416,35 @@
                     </div>
                     <div class="inv-right">
                         <div class="stat-header">Atributos &nbsp;<span style="color:#5a6475; font-size:0.7rem;">(Puntos: <span id="stat-points">0</span>)</span></div>
-                        <div class="stat-row">
+                        <div class="stat-row" data-stat-tooltip="str">
                             <span>💪 Fuerza</span>
                             <div style="display:flex; align-items:center;">
                                 <span class="stat-val" id="stat-str">0</span>
                                 <button class="stat-btn" onclick="window.upgradeStat('str')">+</button>
                             </div>
                         </div>
-                        <div class="stat-row">
+                        <div class="stat-row" data-stat-tooltip="agi">
                             <span>⚡ Agilidad</span>
                             <div style="display:flex; align-items:center;">
                                 <span class="stat-val" id="stat-agi">0</span>
                                 <button class="stat-btn" onclick="window.upgradeStat('agi')">+</button>
                             </div>
                         </div>
-                        <div class="stat-row">
+                        <div class="stat-row" data-stat-tooltip="vit">
                             <span>❤️ Vitalidad</span>
                             <div style="display:flex; align-items:center;">
                                 <span class="stat-val" id="stat-vit">0</span>
                                 <button class="stat-btn" onclick="window.upgradeStat('vit')">+</button>
                             </div>
                         </div>
-                        <div class="stat-row">
+                        <div class="stat-row" data-stat-tooltip="sta">
                             <span>🥩 Stamina</span>
                             <div style="display:flex; align-items:center;">
                                 <span class="stat-val" id="stat-sta">0</span>
                                 <button class="stat-btn" onclick="window.upgradeStat('sta')">+</button>
                             </div>
                         </div>
-                        <div class="stat-row">
+                        <div class="stat-row" data-stat-tooltip="int">
                             <span>🧠 Intelecto</span>
                             <div style="display:flex; align-items:center;">
                                 <span class="stat-val" id="stat-int">0</span>

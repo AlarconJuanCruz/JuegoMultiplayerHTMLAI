@@ -410,7 +410,9 @@ window.addEventListener('keyup', (e) => {
     if (chatInput && document.activeElement === chatInput) return;
     if (!window.keys) return;
     if (e.key === 'a' || e.key === 'A') window.keys.a = false; if (e.key === 'd' || e.key === 'D') window.keys.d = false; if (e.key === 's' || e.key === 'S') window.keys.s = false; if (e.key === 'Shift') window.keys.shift = false; if (e.key === 'y' || e.key === 'Y') window.keys.y = false;
-    if (e.key === 'w' || e.key === 'W' || e.key === ' ') { window.keys.jumpPressed = false; if(window.player) window.player.jumpKeyReleased = true; }
+    if (e.key === 's' || e.key === 'S') window.keys.s = false;
+    if (e.key === 'w' || e.key === 'W') { window.keys.w = false; }
+    if (e.key === ' ') { window.keys.jumpPressed = false; if(window.player) window.player.jumpKeyReleased = true; }
 });
 window.addEventListener('keydown', (e) => {
     if (!window.game || !window.game.isRunning || !window.player) return;
@@ -445,7 +447,7 @@ window.addEventListener('keydown', (e) => {
 
     if (!window.keys) window.keys = {};
     if (window.player.isDancing) { window.player.isDancing = false; }
-    if (e.key === 'a' || e.key === 'A') window.keys.a = true; if (e.key === 'd' || e.key === 'D') window.keys.d = true; if (e.key === 's' || e.key === 'S') window.keys.s = true; if (e.key === 'Shift') window.keys.shift = true; if (e.key === 'w' || e.key === 'W' || e.key === ' ') window.keys.jumpPressed = true; if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
+    if (e.key === 'a' || e.key === 'A') window.keys.a = true; if (e.key === 'd' || e.key === 'D') window.keys.d = true; if (e.key === 's' || e.key === 'S') window.keys.s = true; if (e.key === 'Shift') window.keys.shift = true; if (e.key === 'w' || e.key === 'W') window.keys.w = true; if (e.key === ' ') { window.keys.jumpPressed = true; } if (e.key === 'y' || e.key === 'Y') window.keys.y = true; 
     
     if (!window.player.placementMode) {
         if (e.key === 'i' || e.key === 'I') { if(window.toggleMenu) window.toggleMenu('inventory'); } 
@@ -542,14 +544,12 @@ window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
                 const missChance = Math.max(0.02, 0.15 - (window.player.stats.agi || 0) * 0.02);
                 if (Math.random() < missChance) {
                     window.spawnDamageText(ent.x + ent.width/2 + (Math.random()-0.5)*16, ent.y - 5 - Math.random()*8, 'MISS', 'miss');
-                    window.player.meleeCooldown = 18;
                     return true; // consumed el hit, pero no hizo daño
                 }
                 ent.hp -= dmg; window.setHit(ent); window.spawnParticles(ent.x + ent.width/2, ent.y + ent.height/2, '#ff4444', 5);
                 if (window.playSound) window.playSound('hit_entity');
                 window.spawnDamageText(ent.x+ent.width/2+(Math.random()-0.5)*16, ent.y-5-Math.random()*8, `-${dmg}`, 'melee');
                 ent.vx = (ent.x+ent.width/2 > pCX ? 1 : -1) * 3.5; ent.vy = -5.0; ent.knockbackFrames = 10;
-                window.player.meleeCooldown = 18;
                 if (ent.hp <= 0) {
                     window.killedEntities.push(ent.id);
                     window.sendWorldUpdate('kill_entity', { id: ent.id });
@@ -667,10 +667,12 @@ window.attemptAction = function() {
 
     const meleeRange = 80 + (window.player.stats.str || 0) * 2; 
 
-    let entityDmg = tool === 'hammer' ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
-    let treeDmg = tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0));
-    let rockDmg = tool === 'pickaxe' ? Math.floor(baseDmg * 3) : (tool === 'hammer' ? 0 : 1);
-    let blockDmg = tool === 'hammer' ? Math.floor(baseDmg * 3) : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
+    // Martillo: no hace daño a nada, solo construye
+    const isHammer = tool === 'hammer';
+    let entityDmg = isHammer ? 0 : Math.max(1, Math.floor(tool === 'pickaxe' ? baseDmg * 0.3 : (tool === 'axe' ? baseDmg * 0.6 : baseDmg)));
+    let treeDmg   = isHammer ? 0 : (tool === 'axe' ? Math.floor(baseDmg * 1.5) : (tool === 'sword' ? Math.floor(baseDmg * 0.25) : (tool === 'hand' ? baseDmg : 0)));
+    let rockDmg   = isHammer ? 0 : (tool === 'pickaxe' ? Math.floor(baseDmg * 3) : 1);
+    let blockDmg  = isHammer ? 0 : (tool === 'sword' ? Math.max(1, Math.floor(baseDmg * 0.2)) : baseDmg);
 
     window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
 
@@ -697,8 +699,37 @@ window.attemptAction = function() {
         }
     }
     if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg, meleeRange)) actionDone = true;
-    if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg, meleeRange)) actionDone = true;
-    if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
+
+    // Árbol y piedra: elegir el más cercano al cursor en vez de orden fijo
+    if (!actionDone && (treeDmg > 0 || rockDmg > 0)) {
+        const distToTree = (() => {
+            for (const t of window.trees) {
+                const tFootY = window.getGroundY ? window.getGroundY(t.x + t.width/2) : t.y + t.height;
+                const tCX = t.x + t.width / 2;
+                const tHitY = t.isStump ? tFootY - 40 : tFootY - Math.min(t.height * 0.35, meleeRange * 0.6);
+                const d = Math.hypot(window.mouseWorldX - tCX, window.mouseWorldY - tHitY);
+                if (d <= meleeRange) return d;
+            }
+            return Infinity;
+        })();
+        const distToRock = (() => {
+            for (const r of window.rocks) {
+                const rFY = window.getGroundY ? window.getGroundY(r.x + r.width/2) : r.y + r.height;
+                const rCX = r.x + r.width / 2;
+                const rCY = rFY - r.height / 2;
+                const d = Math.hypot(window.mouseWorldX - rCX, window.mouseWorldY - rCY);
+                if (d <= meleeRange) return d;
+            }
+            return Infinity;
+        })();
+        if (distToTree <= distToRock) {
+            if (treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
+            if (!actionDone && rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg, meleeRange)) actionDone = true;
+        } else {
+            if (rockDmg > 0 && window.tryHitRock(pCX, pCY, rockDmg, meleeRange)) actionDone = true;
+            if (!actionDone && treeDmg > 0 && window.tryHitTree(pCX, pCY, treeDmg, meleeRange)) actionDone = true;
+        }
+    }
 
     if (!actionDone && tool === 'hammer') {
         const bs = window.game.blockSize;
@@ -715,6 +746,7 @@ window.attemptAction = function() {
                     let newB = { x: gridX, y: gridY, type: newType, open: false, hp: 300, maxHp: 300, isHit: false };
                     if (isStairMode) newB.facingRight = !window.player.stairMirror;
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB }); window.player.inventory.wood -= cost; window.spawnParticles(gridX + 15, gridY + 15, '#D2B48C', 5, 0.5); if (window.playSound) window.playSound('build'); if(window.updateUI) window.updateUI();
+                    window.player.meleeCooldown = 8; // construcción rápida, independiente de agilidad
                 } else { 
                     if (window.game.frameCount % 30 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, "Lugar Inválido", '#ffaa00'); 
                 }
@@ -817,6 +849,45 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 2) window.player.isAiming = true; 
         if (e.button === 0 && window.player.isAiming && window.player.inventory.arrows > 0) window.player.isCharging = true; 
         return; 
+    }
+
+    // Martillo: click derecho = reparar bloque/puerta/torreta apuntado
+    if (window.player.activeTool === 'hammer' && e.button === 2) {
+        if ((window.player.meleeCooldown || 0) > 0) return;
+        const pCX = window.player.x + window.player.width / 2;
+        const pCY = window.player.y + window.player.height / 2;
+        const range = (window.player.miningRange || 120) + 20;
+        let repaired = false;
+        for (const b of window.blocks) {
+            if (!b.maxHp || b.hp >= b.maxHp) continue;
+            const bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
+            const bCX = b.x + window.game.blockSize / 2;
+            const bCY = b.y + bh / 2;
+            if (Math.hypot(window.mouseWorldX - bCX, window.mouseWorldY - bCY) > range) continue;
+            // Coste: 1 madera por cada 20 HP a reparar (mín 1, máx 5)
+            const missing  = b.maxHp - b.hp;
+            const healAmt  = Math.min(missing, 60);
+            const woodCost = Math.max(1, Math.min(5, Math.ceil(healAmt / 20)));
+            if ((window.player.inventory.wood || 0) < woodCost) {
+                window.spawnDamageText(bCX, bCY - 20, '¡Sin madera!', '#ffaa00');
+                break;
+            }
+            b.hp = Math.min(b.maxHp, b.hp + healAmt);
+            window.player.inventory.wood -= woodCost;
+            window.setHit(b);
+            window.spawnParticles(bCX, bCY, '#D2B48C', 8);
+            window.spawnDamageText(bCX, bCY - 16, `+${healAmt} 🔨`, '#7ec850');
+            window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: -healAmt }); // dmg negativo = curar
+            if (window.playSound) window.playSound('build');
+            if (window.updateUI) window.updateUI();
+            window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+            repaired = true;
+            break;
+        }
+        if (!repaired && window.game.frameCount % 20 === 0) {
+            window.spawnDamageText(window.mouseWorldX, window.mouseWorldY - 10, 'Nada que reparar', '#888');
+        }
+        return;
     }
     
     if (e.button === 0) {
@@ -977,23 +1048,25 @@ function update() {
 
         if ((window.player.pvpHitFlash || 0) > 0) window.player.pvpHitFlash--;
 
-        // ── Modo fondo (Shift) ────────────────────────────────────────────────
-        if (window.keys && window.keys.shift) window.player.wantsBackground = true;
-        else window.player.wantsBackground = false;
-
-        if (!window.player.isDead && !window.player.wantsBackground) {
-            if (!window.isOverlappingSolidBlock()) window.player.inBackground = false;
-        } else if (!window.player.isDead) {
-            window.player.inBackground = true;
-        }
+        // (Shift ahora solo controla el sprint — función de ocultarse eliminada)
+        window.player.inBackground = false;
+        window.player.wantsBackground = false;
 
         // ── Movimiento horizontal ─────────────────────────────────────────────
         if (!window.player.isDead) {
             const pO = window.getEl('placement-overlay');
             if (pO) pO.style.display = window.player.placementMode ? 'block' : 'none';
 
-            const accel = window.player.isGrounded ? 0.6 : 0.4;
-            const fric  = window.player.isGrounded ? 0.8 : 0.95;
+            // ── Aceleración suave: el personaje tarda ~12 frames en alcanzar velocidad máxima ──
+            const isPressingMove = window.keys?.a || window.keys?.d;
+            if (isPressingMove) {
+                window.player._accelRamp = Math.min(1.0, ((window.player._accelRamp || 0) + 0.09));
+            } else {
+                window.player._accelRamp = Math.max(0.0, ((window.player._accelRamp || 0) - 0.18));
+            }
+            const ramp  = window.player._accelRamp;
+            const accel = (window.player.isGrounded ? 0.6 : 0.4) * ramp;
+            const fric  = window.player.isGrounded ? 0.78 : 0.95;
             if (window.keys?.a) window.player.vx -= accel;
             if (window.keys?.d) window.player.vx += accel;
             window.player.vx *= fric;
@@ -1010,7 +1083,6 @@ function update() {
                 const frac   = b.facingRight ? (relX / window.game.blockSize) : (1 - relX / window.game.blockSize);
                 const rampY  = b.y + window.game.blockSize - frac * window.game.blockSize;
                 if (Math.abs(pFoot - rampY) < 10) {
-                    // Subiendo: el jugador se mueve hacia la parte alta de la rampa
                     const goingUp = (b.facingRight && window.player.vx > 0) || (!b.facingRight && window.player.vx < 0);
                     stairSpeedMult = goingUp ? 0.55 : 0.8;
                 }
@@ -1020,7 +1092,7 @@ function update() {
         }
 
         const isMoving = Math.abs(window.player.vx) > 0.2 || !window.player.isGrounded;
-        window.player.isStealth = window.player.inBackground && !isMoving && window.player.attackFrame <= 0 && !window.player.isDead;
+            window.player.isStealth = false;
 
         // ── HUD de reloj y distancia ──────────────────────────────────────────
         const timeText = `${String(clockH).padStart(2,'0')}:${String(clockM).padStart(2,'0')}`;
@@ -1034,11 +1106,22 @@ function update() {
         const dTxt = window.getEl('dist-text');
         if (dTxt) dTxt.innerText = `${Math.max(0, Math.floor((window.player.x - window.game.shoreX) / 10))}m`;
 
-        // ── Animación de caminar ──────────────────────────────────────────────
-        if (Math.abs(window.player.vx) > 0.5 && window.player.isGrounded)
-            window.player.animTime += Math.abs(window.player.vx) * 0.025;
-        else
+        // ── Animación de caminar / correr ─────────────────────────────────────
+        const _isSprinting = !!(window.keys?.shift) && window.player.hunger > 0 && !window.player.isClimbing;
+        // Actualizar velocidad según si corre o camina
+        const _baseAgi     = window.player.stats?.agi || 0;
+        const _walkSpd     = (window.player.walkSpeed || 1.4) + _baseAgi * 0.1;
+        const _runSpd      = (window.player.runSpeed  || 2.8) + _baseAgi * 0.5;
+        window.player.speed = _isSprinting ? _runSpd : _walkSpd;
+        window.player.isSprinting = _isSprinting;
+
+        // Animación: caminar más viva (×1.8), correr más rápida (×2.8)
+        if (Math.abs(window.player.vx) > 0.3 && window.player.isGrounded) {
+            const animMult = _isSprinting ? 2.8 : 2.2;
+            window.player.animTime += Math.abs(window.player.vx) * 0.025 * animMult;
+        } else {
             window.player.animTime = 0;
+        }
 
         // ── Física X ──────────────────────────────────────────────────────────
         window.player.x += window.player.vx;
@@ -1053,14 +1136,14 @@ function update() {
 
         if (_onLadder) {
             if (!window.player.isClimbing) {
-                if (window.player.vy > 1.5 || window.keys?.jumpPressed)
+                if (window.player.vy > 1.5 || window.keys?.w || window.keys?.jumpPressed)
                     window.player.isClimbing = true;
             }
             if (window.player.isClimbing) {
-                if (window.keys?.jumpPressed) window.player.vy = -2.5;
-                else if (window.keys?.s)       window.player.vy =  2.5;
-                else                            window.player.vy =  0;
-                if (window.keys && (window.keys.a || window.keys.d) && !window.keys.jumpPressed && !window.keys.s) {
+                if (window.keys?.w)        window.player.vy = -2.5;
+                else if (window.keys?.s)   window.player.vy =  2.5;
+                else                       window.player.vy =  0;
+                if (window.keys && (window.keys.a || window.keys.d) && !window.keys.w && !window.keys.s) {
                     window.player.isClimbing = false;
                     window.player.vy = -2.0;
                 }
@@ -1107,8 +1190,17 @@ function update() {
             window.player.coyoteTime--;
         }
 
-        // ── Polvo al correr ────────────────────────────────────────────────────
-        if (window.player.isGrounded && Math.abs(window.player.vx) > 1.5 && !window.player.isDead && !_isClimbing && window.game.frameCount % 5 === 0) {
+        // ── Drenaje de stamina al correr (cada frame) ─────────────────────────
+        if (window.player.isSprinting && Math.abs(window.player.vx) > 0.3 && !window.player.isDead) {
+            window.player.hunger = Math.max(0, window.player.hunger - 0.008);
+            if (window.player.hunger <= 0) {
+                // Sin stamina: forzar caminata
+                window.player.isSprinting = false;
+                window.player.speed = (window.player.walkSpeed || 1.4) + (_baseAgi * 0.1);
+            }
+            if (window.game.frameCount % 30 === 0 && window.updateUI) window.updateUI();
+        }
+        if (window.player.isGrounded && window.player.isSprinting && Math.abs(window.player.vx) > 1.5 && !window.player.isDead && !_isClimbing && window.game.frameCount % 5 === 0) {
             window.spawnDustPuff(
                 window.player.x + window.player.width / 2 + (window.player.facingRight ? -8 : 8),
                 window.player.y + window.player.height,
@@ -1236,26 +1328,28 @@ function update() {
                     const tCY = b.y + 8; // parte alta del cañón
 
                     // Bloque soporte de la torreta (el bloque directamente debajo)
-                    const supportBlock = window.blocks.find(sb =>
-                        sb.type === 'block' &&
-                        Math.abs(sb.x - b.x) < window.game.blockSize - 1 &&
-                        Math.abs(sb.y - (b.y + window.game.blockSize)) < 4
-                    );
+                    // Todos los bloques en la misma columna X debajo de la torreta (la estructura que la sostiene)
+                    const bs = window.game.blockSize;
+                    const columnBlocks = new Set(window.blocks.filter(sb =>
+                        sb !== b &&
+                        Math.abs((sb.x + bs/2) - (b.x + bs/2)) < bs * 0.6 &&
+                        sb.y >= b.y  // mismo X, igual o debajo de la torreta
+                    ));
 
-                    // Función de raycast: ¿hay algún bloque sólido entre dos puntos?
+                    // Función de raycast: ¿hay línea de visión libre entre dos puntos?
                     const hasLOS = (x1, y1, x2, y2) => {
-                        const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 10);
+                        const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 8);
                         for (let s = 1; s < steps; s++) {
                             const rx = x1 + (x2 - x1) * s / steps;
                             const ry = y1 + (y2 - y1) * s / steps;
                             for (const bl of window.blocks) {
-                                if (bl === b) continue;              // ignorar la propia torreta
-                                if (bl === supportBlock) continue;   // ignorar bloque soporte
+                                if (bl === b) continue;              // la propia torreta
+                                if (columnBlocks.has(bl)) continue;  // estructura soporte debajo
                                 if (bl.type === 'turret' || bl.type === 'box' || bl.type === 'campfire' ||
                                     bl.type === 'barricade' || bl.type === 'ladder' || bl.type === 'grave' ||
-                                    bl.type === 'bed') continue;
-                                const bh = bl.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize;
-                                if (rx >= bl.x && rx <= bl.x + window.game.blockSize &&
+                                    bl.type === 'bed' || bl.type === 'stair') continue;
+                                const bh = bl.type === 'door' ? bs * 2 : bs;
+                                if (rx >= bl.x && rx <= bl.x + bs &&
                                     ry >= bl.y && ry <= bl.y + bh) return false;
                             }
                         }
@@ -1574,9 +1668,13 @@ function update() {
             if (dt.life <= 0.05 || isNaN(dt.life)) window.damageTexts.splice(i, 1);
         }
 
-        // ── Hambre ────────────────────────────────────────────────────────────
+        // ── Hambre / Stamina ──────────────────────────────────────────────────
         if (window.game.frameCount % 60 === 0 && !window.player.isDead) {
-            window.player.hunger -= isMoving ? 0.1 : 0.02;
+            // Correr drena stamina ~3x más rápido que caminar
+            const hungerRate = window.player.isSprinting && Math.abs(window.player.vx) > 0.3
+                ? 0.35   // sprint
+                : (Math.abs(window.player.vx) > 0.1 ? 0.10 : 0.02);  // caminar / parado
+            window.player.hunger -= hungerRate;
             if (window.player.hunger <= 0) { window.player.hunger = 0; window.damagePlayer(2, 'Hambre'); }
             if (window.player.hunger > 50 && window.player.hp < window.player.maxHp) {
                 window.player.hp += 0.5;

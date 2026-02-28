@@ -117,19 +117,20 @@ window.checkEntityCollisions = function (ent, axis) {
         if (axis === 'x') {
             if (ent.y + ent.height <= b.y + 12) continue;
 
-            // Escalón: en vez de rebotar, intentar subir la rampa
+            // Escalón: hacer snap directo de la rampa en vez de saltar
             if (b.type === 'stair') {
                 const relX  = (ent.x + ent.width / 2) - b.x;
                 const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
-                const rampY = b.y + bs - Math.max(0, Math.min(1, frac)) * bs;
+                const clampedFrac = Math.max(0, Math.min(1, frac));
+                const rampY = b.y + bs - clampedFrac * bs;
                 const footY = ent.y + ent.height;
-                if (footY >= rampY - 4 && footY <= rampY + bs * 0.95) {
+                // Si el pie está dentro del rango subible de la rampa, snapear directo
+                if (footY >= rampY - bs && footY <= rampY + 4) {
                     ent.y  = rampY - ent.height;
                     ent.vy = 0;
-                } else if (ent.vy >= 0) {
-                    ent.vy = -9; // saltar para superar el escalón
                 }
-                continue; // nunca rebotar
+                // No rebotar nunca en escalones
+                continue;
             }
 
             if (ent.vx > 0)      { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; }

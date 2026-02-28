@@ -3,353 +3,389 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Animación Araña 2D - Profesional V3</title>
+    <title>Pixel Art: Curvas y Texturas</title>
     <style>
-        :root {
-            /* Paleta de colores mejorada para contraste */
-            --color-abdomen: #111111;   /* Negro casi puro */
-            --color-thorax: #3a3a3a;    /* Gris carbón para la cabeza */
-            --color-legs: #222222;      /* Gris muy oscuro para patas */
-            --color-eye: #ff0000;       /* Rojo brillante */
-            /* Borde sutil para definir las patas contra el cuerpo */
-            --leg-definition: 1px solid rgba(0,0,0,0.8);
-        }
-
         body {
-            margin: 0;
-            padding: 0;
-            background-color: #f0f0f0;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            background-color: #10101a; /* Fondo oscuro espacial */
+            margin: 0;
+            color: #eee;
+            font-family: 'Courier New', Courier, monospace;
+            flex-direction: column;
             overflow: hidden;
-            cursor: pointer;
         }
 
-        #scene {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            /* Fondo dividido estilo "flat design" */
-            background: linear-gradient(to top, #d0d0d0 45%, #e8e8e8 45%);
-        }
-
-        .spider-rig {
-            position: absolute;
-            top: 45%; /* Posicionado en la línea del suelo */
-            left: 50%;
-            z-index: 2;
-            /* El punto de transformación es el centro inferior (entre las patas) */
-            transform: translate(-50%, -100%);
-        }
-
-        /* --- ESTRUCTURA DEL CUERPO --- */
-        .body-container {
-             position: relative;
-             /* Z-index medio: Las patas traseras van detrás, las delanteras delante */
-             z-index: 10; 
-        }
-
-        /* Tórax (Cabeza/Pecho) */
-        .thorax {
-            position: absolute;
-            width: 48px;
-            height: 40px;
-            background-color: var(--color-thorax);
-            /* Forma más redondeada en el frente */
-            border-radius: 45% 50% 50% 45%;
-            top: 15px;
-            left: -22px;
-            z-index: 12; /* Delante del abdomen */
-            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.5); /* Sombra interna sutil para volumen */
-        }
-
-        /* Abdomen (Parte trasera) */
-        .abdomen {
-            position: absolute;
-            width: 90px;
-            height: 80px;
-            background-color: var(--color-abdomen);
-            border-radius: 50% 55% 50% 50%;
-            top: 0px;
-            left: 5px;
-            z-index: 11;
-            box-shadow: inset 0 -5px 10px rgba(0,0,0,1); /* Volumen extra oscuro */
-        }
-        
-        /* Ojo */
-        .eye-profile {
-            position: absolute;
-            width: 7px;
-            height: 7px;
-            background: var(--color-eye);
-            border-radius: 50%;
-            top: 12px;
-            left: 6px;
-            box-shadow: 0 0 8px var(--color-eye); /* Resplandor rojo */
-        }
-
-        /* Colmillos (Corregidos: posición y tamaño) */
-        .fangs {
-            position: absolute;
-            /* Ajustados para estar pegados debajo del frente del tórax */
-            top: 28px; 
-            left: -4px;
-            z-index: 10; /* Detrás del tórax pero delante de las patas de fondo */
-        }
-        .fang {
-            position: absolute;
-            width: 0;
-            height: 0;
-            border-left: 3px solid transparent;
-            border-right: 3px solid transparent;
-            /* Colmillos más cortos y afilados */
-            border-top: 12px solid var(--color-abdomen);
-            transform-origin: top center;
-        }
-        .fang1 { left: 0px; transform: rotate(10deg); }
-        .fang2 { left: 7px; transform: rotate(0deg); }
-
-
-        /* --- PATAS (Con definición mejorada) --- */
-        /* Contenedores para profundidad 3D */
-        .legs-back {
-            position: absolute;
-            top: 38px; /* Punto de nacimiento central */
-            left: 18px;
-            z-index: 5; /* Lo más atrás */
-            /* Oscurecer patas traseras para profundidad */
-            filter: brightness(0.7) contrast(1.2); 
-        }
-        
-        .legs-front {
-            position: absolute;
-            top: 38px;
-            left: 18px;
-            z-index: 15; /* Lo más adelante */
-        }
-
-        .leg {
-            position: absolute;
-            top: 0;
-            transform-origin: 0 0;
-        }
-
-        /* Segmentos de pata con BORDES para definición */
-        .femur {
-            position: absolute;
-            width: 45px;
-            height: 8px;
-            background-color: var(--color-legs);
+        canvas {
+            /* Mantenemos baja resolución interna (320x180) para el efecto pixelado perfecto */
+            width: 960px;
+            height: 540px;
+            image-rendering: pixelated; /* El filtro mágico */
+            border: 6px solid #2a2a4a;
             border-radius: 4px;
-            border: var(--leg-definition); /* Borde clave */
-            transform-origin: 4px 50%;
-            left: 0;
-            top: 0;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.9);
+            background-color: #000;
         }
 
-        .tibia {
-            position: absolute;
-            width: 65px;
-            height: 6px;
-            background-color: var(--color-legs);
-            border-radius: 3px 100% 100% 3px; /* Punta afilada */
-            border: var(--leg-definition); /* Borde clave */
-            transform-origin: 4px 50%;
-            left: 40px;
-            top: 1px;
-        }
-
-        /* Distribución de las 6 patas */
-        /* Patas traseras (fondo) */
-        .B1 { left: -8px; }
-        .B2 { left: 12px; }
-        .B3 { left: 32px; }
-        /* Patas delanteras (frente) */
-        .F1 { left: -2px; }
-        .F2 { left: 18px; }
-        .F3 { left: 38px; }
-
-        .instructions {
-            position: absolute;
-            bottom: 50px;
-            color: #777;
-            font-family: 'Arial', sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-size: 0.75rem;
-            width: 100%;
-            text-align: center;
-            opacity: 0.8;
+        p {
+            margin-top: 20px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
 
-    <div id="scene">
-        <div class="spider-rig" id="spiderRig">
-            
-            <div class="legs-back">
-                <div class="leg B1"><div class="femur"><div class="tibia"></div></div></div>
-                <div class="leg B2"><div class="femur"><div class="tibia"></div></div></div>
-                <div class="leg B3"><div class="femur"><div class="tibia"></div></div></div>
-            </div>
-
-            <div class="body-container">
-                <div class="thorax">
-                    <div class="eye-profile"></div>
-                     <div class="fangs">
-                        <div class="fang fang1" id="fang1"></div>
-                        <div class="fang fang2" id="fang2"></div>
-                    </div>
-                </div>
-                <div class="abdomen"></div>
-            </div>
-
-            <div class="legs-front">
-                <div class="leg F1"><div class="femur"><div class="tibia"></div></div></div>
-                <div class="leg F2"><div class="femur"><div class="tibia"></div></div></div>
-                <div class="leg F3"><div class="femur"><div class="tibia"></div></div></div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="instructions">Click para atacar</div>
+    <canvas id="gameCanvas" width="320" height="180"></canvas>
+    <p>Usa ⬅️ y ➡️ para caminar. [Sube el volumen mentalmente]</p>
 
     <script>
-        // Referencias DOM
-        const spiderRig = document.getElementById('spiderRig');
-        const femurs = document.querySelectorAll('.femur');
-        const tibias = document.querySelectorAll('.tibia');
-        const fang1 = document.getElementById('fang1');
-        const fang2 = document.getElementById('fang2');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-        // Variables de estado
-        let time = 0;
-        const speed = 0.08;
-        let isAttacking = false;
-        let attackPhase = 0;
+        // Desactivar suavizado por seguridad (aunque CSS 'pixelated' suele bastar)
+        ctx.imageSmoothingEnabled = false;
 
-        // Desfases para 6 patas. Patrón alterno trípode para estabilidad visual.
-        // Grupo A: B1, B3, F2 | Grupo B: B2, F1, F3
-        const legOffsets = [
-            0, Math.PI, 0,           // B1, B2, B3
-            Math.PI, 0, Math.PI      // F1, F2, F3
-        ];
+        // Estado del personaje
+        const player = {
+            x: 160,
+            y: 145, // Nivel del suelo ajustado
+            speed: 1.1,
+            facingRight: true,
+            isWalking: false,
+            animationTime: 0,
+            score: 0
+        };
 
-        // Ángulos base del fémur para abanicar las patas
-        const baseFemurAngles = [-35, -65, -95, -25, -55, -85];
+        const keys = { ArrowLeft: false, ArrowRight: false };
 
-        // --- Bucle Principal ---
-        function animate() {
-            if (!isAttacking) {
-                time += speed;
-            }
+        window.addEventListener('keydown', (e) => { if (keys.hasOwnProperty(e.code)) keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.code)) keys[e.code] = false; });
 
-            // "Bobbing" (rebote) del cuerpo más pesado
-            const bodyBob = isAttacking ? 0 : Math.sin(time * 4) * 2.5;
-            const attackTransform = getAttackTransform();
-            
-            // Aplicamos movimiento al rig completo
-            spiderRig.style.transform = `translate(calc(-50% + ${attackTransform.x}px), calc(-100% + ${bodyBob + attackTransform.y}px)) rotate(${-attackTransform.rot}deg)`;
+        let cloudPos = 0;
+        let worldTime = 0;
 
-            // --- Cinemática de Patas ---
-            for (let i = 0; i < 6; i++) {
-                const currentPhase = time + legOffsets[i];
+        // --- Funciones de Dibujo ---
 
-                // Ciclos de movimiento (swing = péndulo, lift = levantar)
-                let swing = Math.cos(currentPhase); 
-                let lift = Math.max(0, Math.sin(currentPhase));
-
-                let targetFemurAngle = baseFemurAngles[i];  
-                let targetTibiaAngle = 135; // Ángulo base de rodilla
-
-                // Modificadores durante el ataque
-                if (isAttacking) {
-                    if (i === 0 || i === 3) { 
-                        // Patas delanteras (B1 y F1) se levantan como guadañas
-                        targetFemurAngle = -110 - (35 * attackPhase); 
-                        targetTibiaAngle = 130 - (90 * attackPhase); 
-                        swing = 0; lift = 0;
-                    } else { 
-                        // Las demás se agachan para estabilizar
-                        targetFemurAngle += (25 * attackPhase); 
-                        targetTibiaAngle += (25 * attackPhase);
-                        swing = 0; lift = 0;
-                    }
-                }
-                
-                // Cálculo final aplicando los ciclos
-                // Lift afecta más a la rodilla para que el pie suba recto
-                const finalFemurAngle = targetFemurAngle + (swing * 22) - (lift * 20);
-                const finalTibiaAngle = targetTibiaAngle - (lift * 35);
-
-                femurs[i].style.transform = `rotate(${finalFemurAngle}deg)`;
-                tibias[i].style.transform = `rotate(${finalTibiaAngle}deg)`;
-            }
-
-            requestAnimationFrame(animate);
+        // Dibuja una brizna de pasto curva
+        function drawGrassBlade(x, y, height, shade) {
+            ctx.strokeStyle = shade;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            // Curva cuadrática para el movimiento
+            ctx.quadraticCurveTo(x + Math.sin(worldTime*0.05 + x*0.1)*2, y - height/2, x + Math.sin(worldTime*0.05 + x*0.1)*3, y - height);
+            ctx.stroke();
         }
 
-        // --- Lógica de Ataque ---
-        function getAttackTransform() {
-            // Estado normal de los colmillos
-            if (!isAttacking) {
-                fang1.style.transform = 'rotate(10deg)';
-                fang2.style.transform = 'rotate(0deg)';
-                return { x: 0, y: 0, rot: 0 };
-            }
-            
-            // Movimiento del cuerpo durante el ataque
-            const lungeX = 90 * attackPhase; // Estocada larga
-            const lungeY = 15 * attackPhase; // Se agacha un poco
-            const rotation = 12 * attackPhase; // Se inclina hacia arriba
+        // Dibuja una roca texturizada con curvas
+        function drawRock(x, y, r, colorBase, colorSombra) {
+            ctx.fillStyle = colorBase;
+            ctx.beginPath();
+            // Una roca no es un círculo, es irregular curva
+            ctx.moveTo(x - r, y);
+            ctx.quadraticCurveTo(x - r*0.8, y - r*1.2, x, y - r);
+            ctx.quadraticCurveTo(x + r*1.2, y - r*0.8, x + r, y);
+            ctx.quadraticCurveTo(x + r*0.8, y + r*0.5, x, y + r*0.3);
+            ctx.quadraticCurveTo(x - r*1.2, y + r*0.2, x - r, y);
+            ctx.fill();
 
-            // Animación de los colmillos (se abren agresivamente)
-            fang1.style.transform = `rotate(${10 - 50 * attackPhase}deg)`;
-            fang2.style.transform = `rotate(${0 - 40 * attackPhase}deg)`;
-
-            return { x: lungeX, y: lungeY, rot: rotation };
+            // Textura de grieta
+            ctx.strokeStyle = colorSombra;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x - r/2, y - r/2);
+            ctx.lineTo(x + r/4, y);
+            ctx.lineTo(x - r/4, y + r/3);
+            ctx.stroke();
         }
 
-        function triggerAttack() {
-            if (isAttacking) return;
-            isAttacking = true;
-            attackPhase = 0;
+        function drawBackground() {
+            worldTime++;
 
-            const attackDuration = 250; 
-            const startTime = performance.now();
+            // Cielo (Atardecer pixelado)
+            let gradient = ctx.createLinearGradient(0, 0, 0, 100);
+            gradient.addColorStop(0, '#1a1a2e'); // Espacio oscuro
+            gradient.addColorStop(0.5, '#16213e'); // Azul oscuro
+            gradient.addColorStop(1, '#0f3460'); // Azul brillante
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, 100);
 
-            // Función de easing para un ataque rápido y elástico
-            function performAttackStep(currentTime) {
-                const elapsed = currentTime - startTime;
-                const progress = Math.min(elapsed / attackDuration, 1);
-
-                 if (progress < 0.5) {
-                     // Fase de ida rápida (seno)
-                     attackPhase = Math.sin(progress * Math.PI); 
-                 } else {
-                     // Fase de retorno con rebote suave
-                      attackPhase = (1 - Math.sin((progress - 0.5) * Math.PI)) * 1.1; 
-                 }
-
-                if (progress < 1) {
-                    requestAnimationFrame(performAttackStep);
-                } else {
-                    isAttacking = false;
-                    attackPhase = 0;
+            // Estrellas titilantes
+            ctx.fillStyle = '#FFF';
+            for(let i=0; i<30; i++) {
+                if(Math.random() > 0.98) {
+                    ctx.fillRect((i*17)%canvas.width, (i*11)%80, 1, 1);
                 }
             }
-            requestAnimationFrame(performAttackStep);
+
+            // Nubes complejas y curvas
+            cloudPos += 0.05;
+            if (cloudPos > canvas.width + 50) cloudPos = -50;
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            function drawCloud(cx, cy) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, 10, 0, Math.PI*2);
+                ctx.arc(cx+10, cy-5, 8, 0, Math.PI*2);
+                ctx.arc(cx+20, cy, 10, 0, Math.PI*2);
+                ctx.arc(cx+10, cy+5, 8, 0, Math.PI*2);
+                ctx.fill();
+            }
+            drawCloud(cloudPos, 30);
+            drawCloud(cloudPos + 180, 50);
+
+            // Montañas curvas con texturas
+            // Montaña lejana
+            ctx.fillStyle = '#2d4059';
+            ctx.beginPath();
+            ctx.moveTo(0, 145);
+            ctx.quadraticCurveTo(100, 20, 220, 145);
+            ctx.fill();
+            // Nieve curva en el pico
+            ctx.fillStyle = '#8e9aaf';
+            ctx.beginPath(); ctx.moveTo(90, 45); ctx.quadraticCurveTo(100, 30, 110, 45); ctx.lineTo(105, 50); ctx.lineTo(100, 47); ctx.lineTo(95, 50); ctx.fill();
+
+            // Montaña cercana con textura de roca
+            ctx.fillStyle = '#1f4068';
+            ctx.beginPath();
+            ctx.moveTo(150, 145);
+            ctx.quadraticCurveTo(250, 50, 320, 110);
+            ctx.lineTo(320, 145);
+            ctx.fill();
+            // Textura de grietas en la montaña
+            ctx.strokeStyle = '#16213e'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(220, 90); ctx.lineTo(230, 100); ctx.lineTo(225, 110); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(260, 80); ctx.lineTo(255, 95); ctx.stroke();
+
+            // Suelo de pasto (texturado brizna por brizna)
+            ctx.fillStyle = '#1b5e20'; // Base oscura
+            ctx.fillRect(0, 135, canvas.width, 10);
+            for(let i=0; i<canvas.width; i+=4) {
+                let h = 4 + Math.sin(i*0.5)*1.5;
+                drawGrassBlade(i, 135, h, i%8===0 ? '#4caf50' : '#2e7d32');
+            }
+
+            // Camino de tierra principal
+            ctx.fillStyle = '#5d4037';
+            ctx.fillRect(0, 145, canvas.width, canvas.height - 145);
+            // Textura del camino (grava curva)
+            ctx.fillStyle = '#3e2723';
+            for(let i=0; i<30; i++) {
+                ctx.beginPath(); ctx.arc((i*13)%canvas.width, 150+(i*7)%25, 1+Math.random()*1, 0, Math.PI*2); ctx.fill();
+            }
+            // Rocas en el camino
+            drawRock(50, 160, 6, '#795548', '#3e2723');
+            drawRock(250, 170, 8, '#6d4c41', '#3e2723');
         }
 
-        document.body.addEventListener('mousedown', triggerAttack);
-        document.body.addEventListener('touchstart', triggerAttack, {passive: true});
+        // Dibuja al personaje DETALLADO CON CURVAS
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+
+            if (!player.facingRight) ctx.scale(-1, 1);
+
+            const bounce = player.isWalking ? Math.sin(player.animationTime * 0.5) * 1.5 : 0;
+            const legSwing = player.isWalking ? Math.sin(player.animationTime * 0.4) * 6 : 0;
+            const armSwing = player.isWalking ? Math.sin(player.animationTime * 0.4) * 5 : 0;
+            
+            // Animación de la capa ondulante curva
+            const capeTime = worldTime * 0.15;
+
+            // --- SOMBRA (Elíptica) ---
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath(); ctx.ellipse(0, 2, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+
+            // --- CAPA DETALLADA Y CURVA (Atrás) ---
+            // Dibujamos la capa usando curvas bézier para que ondule
+            ctx.fillStyle = '#880e4f'; // Base oscura
+            ctx.beginPath();
+            ctx.moveTo(-5, -28 + bounce); // Hombro
+            ctx.bezierCurveTo(-15 + Math.sin(capeTime)*3, -25 + bounce, -20 + Math.sin(capeTime+1)*5, -10 + bounce, -12 + Math.sin(capeTime+2)*4, 0 + bounce); // Borde exterior ondulante
+            ctx.lineTo(0, -10 + bounce); // Cierre cintura
+            ctx.fill();
+            
+            // Brillo de la capa
+            ctx.fillStyle = '#c2185b';
+            ctx.beginPath();
+            ctx.moveTo(-4, -28 + bounce);
+            ctx.bezierCurveTo(-10 + Math.sin(capeTime)*2, -26 + bounce, -15 + Math.sin(capeTime+1)*3, -12 + bounce, -10 + Math.sin(capeTime+2)*3, -5 + bounce);
+            ctx.lineTo(0, -12 + bounce);
+            ctx.fill();
+
+            // --- BRAZO Y ESPADA TRASERA ---
+            ctx.fillStyle = '#37474f';
+            // Brazo curvo (usemos un arco gordo)
+            ctx.lineWidth = 4; ctx.strokeStyle = '#37474f'; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(-2 - armSwing, -20 + bounce); ctx.lineTo(-4 - armSwing*1.2, -8 + bounce); ctx.stroke();
+            // Espada detallada
+            rect(-5 - armSwing*1.2, -10 + bounce, 7, 2, '#ffa000'); // Guarda dorada
+            rect(-3 - armSwing*1.2, -8 + bounce, 3, 16, '#b0bec5'); // Hoja plateada
+            rect(-2 - armSwing*1.2, 0 + bounce, 1, 8, '#fff'); // Brillo hoja
+
+            // --- PIERNA TRASERA (Curva) ---
+            ctx.fillStyle = '#263238'; // Muslo oscuro
+            ctx.beginPath(); ctx.ellipse(-3 + legSwing, -10 + bounce/2, 3, 6, 0.1, 0, Math.PI*2); ctx.fill();
+            // Bota curva
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath(); ctx.moveTo(-5 + legSwing, -4); ctx.quadraticCurveTo(-3 + legSwing, 4, 1 + legSwing, 3); ctx.lineTo(-1 + legSwing, -4); ctx.fill();
+
+            // --- CUERPO (Armadura Anatómica Curva) ---
+            // Peto redondeado
+            let armorGrad = ctx.createRadialGradient(0, -20+bounce, 2, 0, -20+bounce, 10);
+            armorGrad.addColorStop(0, '#90a4ae'); armorGrad.addColorStop(1, '#546e7a');
+            ctx.fillStyle = armorGrad;
+            ctx.beginPath();
+            ctx.moveTo(-7, -26 + bounce);
+            ctx.quadraticCurveTo(0, -32 + bounce, 7, -26 + bounce); // Hombros
+            ctx.quadraticCurveTo(8, -18 + bounce, 6, -10 + bounce); // Costado
+            ctx.quadraticCurveTo(0, -8 + bounce, -6, -10 + bounce); // Cintura
+            ctx.quadraticCurveTo(-8, -18 + bounce, -7, -26 + bounce);
+            ctx.fill();
+            
+            // Remaches curvos dorados
+            ctx.fillStyle = '#ffca28';
+            ctx.beginPath(); ctx.arc(-4, -22 + bounce, 1, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(4, -22 + bounce, 1, 0, Math.PI*2); ctx.fill();
+
+            // --- CABEZA (Casco Curvo con Brillos) ---
+            // Casco base curva
+            ctx.fillStyle = '#607d8b';
+            ctx.beginPath();
+            ctx.moveTo(-7, -32 + bounce);
+            ctx.quadraticCurveTo(0, -42 + bounce, 7, -32 + bounce); // Cúpula curva
+            ctx.lineTo(6, -26 + bounce); ctx.lineTo(-6, -26 + bounce); ctx.fill();
+            // Brillo casco
+            ctx.fillStyle = '#b0bec5';
+            ctx.beginPath(); ctx.moveTo(-3, -37 + bounce); ctx.quadraticCurveTo(0, -39 + bounce, 3, -37 + bounce); ctx.lineTo(2, -34+bounce); ctx.fill();
+            
+            // Penacho curvo (Rojo ondeante)
+            ctx.fillStyle = '#d32f2f';
+            ctx.beginPath();
+            ctx.moveTo(-2, -38 + bounce);
+            ctx.bezierCurveTo(-8, -45 + bounce + Math.sin(worldTime*0.2)*2, -12, -35 + bounce, -8, -32 + bounce);
+            ctx.fill();
+
+            // Visor (En forma de T curva)
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.moveTo(-4, -31 + bounce); ctx.lineTo(4, -31 + bounce); ctx.lineTo(3, -29 + bounce);
+            ctx.quadraticCurveTo(0, -28 + bounce, -3, -29 + bounce); ctx.fill();
+            ctx.fillRect(0, -31 + bounce, 1, 5); // Línea vertical visor
+
+            // Ojo brillante (Curvo)
+            ctx.fillStyle = '#64dd17';
+            ctx.beginPath(); ctx.ellipse(2.5, -30 + bounce, 1.5, 1, 0, 0, Math.PI*2); ctx.fill();
+
+            // Hombrera Delantera (Pauldrón Redondeado)
+            ctx.fillStyle = '#90a4ae';
+            ctx.beginPath(); ctx.arc(6, -26 + bounce, 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#fff'; // Brillo hombrera
+            ctx.beginPath(); ctx.arc(7, -27 + bounce, 1.5, 0, Math.PI*2); ctx.fill();
+
+            // --- PIERNA DELANTERA (Curva) ---
+            ctx.fillStyle = '#455a64'; // Muslo claro
+            ctx.beginPath(); ctx.ellipse(-3 - legSwing, -10 + bounce/2, 3.5, 6.5, -0.1, 0, Math.PI*2); ctx.fill();
+            // Bota curva detallada
+            ctx.fillStyle = '#263238';
+            ctx.beginPath(); ctx.moveTo(-6 - legSwing, -4); ctx.quadraticCurveTo(-3 - legSwing, 6, 3 - legSwing, 4); ctx.lineTo(0 - legSwing, -4); ctx.fill();
+            // Suela bota
+            ctx.fillStyle = '#000'; ctx.fillRect(-5 - legSwing, 3, 6, 1);
+
+            // --- BRAZO DELANTERO (Escudo Redondeado Complejo) ---
+            ctx.fillStyle = '#78909c';
+            ctx.lineWidth = 4; ctx.strokeStyle = '#78909c';
+            ctx.beginPath(); ctx.moveTo(5 + armSwing, -20 + bounce); ctx.lineTo(7 + armSwing*1.1, -10 + bounce); ctx.stroke();
+            
+            // Escudo con forma curva (Heater Shield curvo)
+            ctx.fillStyle = '#1565c0'; // Azul base
+            ctx.beginPath();
+            ctx.moveTo(3 + armSwing*1.1, -22 + bounce);
+            ctx.lineTo(13 + armSwing*1.1, -22 + bounce); // Top plano
+            ctx.quadraticCurveTo(15 + armSwing*1.1, -12 + bounce, 8 + armSwing*1.1, -2 + bounce); // Punta curva
+            ctx.quadraticCurveTo(1 + armSwing*1.1, -12 + bounce, 3 + armSwing*1.1, -22 + bounce);
+            ctx.fill();
+            
+            // Borde dorado curvo del escudo
+            ctx.strokeStyle = '#ffb300'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(3 + armSwing*1.1, -22 + bounce); ctx.lineTo(13 + armSwing*1.1, -22 + bounce);
+            ctx.quadraticCurveTo(15 + armSwing*1.1, -12 + bounce, 8 + armSwing*1.1, -2 + bounce);
+            ctx.quadraticCurveTo(1 + armSwing*1.1, -12 + bounce, 3 + armSwing*1.1, -22 + bounce);
+            ctx.stroke();
+
+            // Emblema Cruz Curva Blanca
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(7 + armSwing*1.1, -19 + bounce, 2, 12);
+            ctx.fillRect(4 + armSwing*1.1, -14 + bounce, 8, 2);
+
+            ctx.restore();
+        }
+
+        // Dibuja TEXTO UI a baja resolución (se pixelará)
+        function drawUI() {
+            ctx.fillStyle = '#FFF';
+            // Usamos una fuente monospace del sistema que cargue rápido
+            ctx.font = 'bold 10px Courier New';
+            ctx.textAlign = 'left';
+            
+            // Texto con sombra para contraste
+            ctx.fillStyle = '#000';
+            ctx.fillText('PUNTOS: ' + player.score, 11, 16);
+            ctx.fillStyle = '#fdd835'; // Dorado
+            ctx.fillText('PUNTOS: ' + player.score, 10, 15);
+
+            ctx.fillStyle = '#000';
+            ctx.fillText('MUNDO 1-1', canvas.width - 64, 16);
+            ctx.fillStyle = '#FFF';
+            ctx.fillText('MUNDO 1-1', canvas.width - 65, 15);
+        }
+
+        // Función auxiliar simple
+        function rect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+        }
+
+        // Bucle Principal
+        function update() {
+            player.isWalking = false;
+
+            if (keys.ArrowLeft) {
+                player.x -= player.speed;
+                player.facingRight = false;
+                player.isWalking = true;
+            }
+            if (keys.ArrowRight) {
+                player.x += player.speed;
+                player.facingRight = true;
+                player.isWalking = true;
+            }
+
+            // Límites pantalla y sumar puntos
+            if (player.x < 15) player.x = 15;
+            if (player.x > canvas.width - 15) {
+                player.x = 15; // Volver al inicio
+                player.score += 100;
+            }
+
+            if (player.isWalking) player.animationTime++;
+            else player.animationTime = 0;
+
+            // Renderizado
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            drawPlayer();
+            drawUI();
+
+            requestAnimationFrame(update);
+        }
 
         // Iniciar
-        animate();
-
+        update();
     </script>
 </body>
 </html>

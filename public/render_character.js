@@ -68,7 +68,9 @@ window.drawCharacter = function(charData, isLocal) {
     if (isLocal) {
         isClimbing = charData.isClimbing && !charData.isGrounded;
         isJumping = !charData.isGrounded && !isClimbing;
-        isRunning = Math.abs(charData.vx || 0) > 0.1 && !isJumping && !isClimbing;
+        const isMovingH = Math.abs(charData.vx || 0) > 0.1 && !isJumping && !isClimbing;
+        isRunning = isMovingH && !!(charData.isSprinting);
+        window._charIsWalking = isMovingH && !isRunning; // flag para animación caminata
         charData.renderAnimTime = charData.animTime; 
     } else {
         isClimbing = charData.isClimbing || false;
@@ -89,9 +91,15 @@ window.drawCharacter = function(charData, isLocal) {
     if (isJumping) {
         legR = -0.5; kneeR = 0.8; legL = 0.3; kneeL = 0.1; armR = -2.5; elbowR = -0.2; armL = -1.5; elbowL = -0.5; torsoR = 0.1; headR = -0.2; bob = -4;
     } else if (isRunning) {
+        // Sprint: pasos amplios y rápidos
         legR = Math.sin(time) * 1.0; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 1.5); legL = Math.sin(time + Math.PI) * 1.0; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 1.5);
         armR = Math.cos(time) * 1.0; elbowR = -0.2 + Math.sin(time)*0.4; armL = Math.cos(time + Math.PI) * 1.0; elbowL = -0.2 + Math.sin(time + Math.PI)*0.4;
         torsoR = 0.15; headR = -0.05; bob = Math.abs(Math.sin(time * 2)) * 3;
+    } else if (window._charIsWalking) {
+        // Caminata: pasos más cortos y suaves, sin torso inclinado
+        legR = Math.sin(time) * 0.55; kneeR = Math.max(0, Math.sin(time - Math.PI/2) * 0.7); legL = Math.sin(time + Math.PI) * 0.55; kneeL = Math.max(0, Math.sin(time + Math.PI/2) * 0.7);
+        armR = Math.cos(time) * 0.45; elbowR = -0.1 + Math.sin(time)*0.15; armL = Math.cos(time + Math.PI) * 0.45; elbowL = -0.1 + Math.sin(time + Math.PI)*0.15;
+        torsoR = 0.04; headR = 0; bob = Math.abs(Math.sin(time * 2)) * 1.2;
     } else {
         let idleTime = window.game.frameCount * 0.03; torsoR = Math.sin(idleTime) * 0.02; headR = Math.sin(idleTime - 1) * 0.03; armR = 0.1 + Math.sin(idleTime) * 0.03; armL = -0.1 - Math.sin(idleTime) * 0.03; elbowR = -0.1; elbowL = -0.1; bob = Math.sin(idleTime) * 1;
     }

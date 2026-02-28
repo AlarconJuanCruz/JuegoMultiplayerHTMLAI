@@ -93,6 +93,112 @@ window.draw = function() {
     if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) { for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) { window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), midY, bgW, bgMidH); } }
     if (bgDimAlpha > 0.04) { window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`; window.ctx.fillRect(0, midY, W, bgMidH); }
 
+    // ── Capa parallax frontal: colinas procedurales bioma-aware ───────────────
+    {
+        const fgScrollX = -(window.camera.x * 0.32) % W;
+        const fgParallax = Math.max(-50, Math.min(50, -camYOffset * 0.12));
+        const fgBaseY  = window.game.groundLevel - 90 + fgParallax;
+        const C = window.ctx;
+
+        // Determinar bioma del centro de pantalla
+        const camCenterX  = window.camera.x + W / 2;
+        const dStartFg    = (window.game.desertStart || 2600) + (window.game.shoreX || 0);
+        const dWidthFg    = window.game.desertWidth || 800;
+        let desertBlend = camCenterX > dStartFg + dWidthFg ? 1
+                        : camCenterX > dStartFg ? (camCenterX - dStartFg) / dWidthFg : 0;
+
+        // Función colina bosque
+        function fgHillY(sx) {
+            const wx = (sx - fgScrollX) * 0.004 + 3.7;
+            return fgBaseY
+                - Math.sin(wx * 1.0) * 38
+                - Math.sin(wx * 2.3 + 1.1) * 22
+                - Math.sin(wx * 0.47 + 2.5) * 15
+                - Math.sin(wx * 3.7 + 0.8) * 10
+                - Math.abs(Math.sin(wx * 0.9 + 1.8)) * 18;
+        }
+        // Función duna desierto
+        function fgDuneY(sx) {
+            const wx2 = (sx - fgScrollX) * 0.003 + 7.2;
+            return fgBaseY
+                - Math.abs(Math.sin(wx2 * 0.8)) * 45
+                - Math.abs(Math.sin(wx2 * 1.7 + 0.9)) * 25
+                - Math.sin(wx2 * 0.4 + 2.1) * 12;
+        }
+        // Y más alto visible (para anclar el gradiente)
+        let minY = H;
+        for (let sx = 0; sx <= W; sx += 12) {
+            const y = desertBlend < 1 ? fgHillY(sx) : fgDuneY(sx);
+            if (y < minY) minY = y;
+        }
+        minY -= 10;
+
+        // ── Bosque ────────────────────────────────────────────────────────────
+        if (desertBlend < 1) {
+            // Colores sólidos día/noche
+            const topCol  = darkness > 0.5 ? [14, 28, 10]  : [32, 62, 18];
+            const midCol  = darkness > 0.5 ? [10, 22,  7]  : [24, 48, 12];
+            const botCol  = darkness > 0.5 ? [ 6, 14,  4]  : [16, 32,  8];
+            const grad = C.createLinearGradient(0, minY, 0, H);
+            grad.addColorStop(0.0, `rgba(${topCol},1)`);
+            grad.addColorStop(0.3, `rgba(${midCol},1)`);
+            grad.addColorStop(1.0, `rgba(${botCol},1)`);
+
+            C.save();
+            C.globalAlpha = 1 - desertBlend * 0.9;
+            C.fillStyle = grad;
+            C.beginPath();
+            C.moveTo(0, H);
+            for (let sx = 0; sx <= W + 4; sx += 4) C.lineTo(sx, fgHillY(sx));
+            C.lineTo(W, H);
+            C.closePath();
+            C.fill();
+            // Borde iluminado (borde superior de la colina)
+            C.strokeStyle = darkness > 0.5 ? 'rgba(50,100,28,0.7)' : 'rgba(80,160,40,0.65)';
+            C.lineWidth = 2;
+            C.beginPath();
+            for (let sx = 0; sx <= W + 4; sx += 4)
+                sx === 0 ? C.moveTo(sx, fgHillY(sx)) : C.lineTo(sx, fgHillY(sx));
+            C.stroke();
+            C.restore();
+        }
+
+        // ── Desierto ──────────────────────────────────────────────────────────
+        if (desertBlend > 0) {
+            const topCol  = darkness > 0.5 ? [52, 36, 12]  : [90, 65, 22];
+            const midCol  = darkness > 0.5 ? [40, 27,  8]  : [72, 50, 16];
+            const botCol  = darkness > 0.5 ? [26, 18,  4]  : [50, 34,  8];
+            const grad2 = C.createLinearGradient(0, minY, 0, H);
+            grad2.addColorStop(0.0, `rgba(${topCol},1)`);
+            grad2.addColorStop(0.35, `rgba(${midCol},1)`);
+            grad2.addColorStop(1.0, `rgba(${botCol},1)`);
+
+            C.save();
+            C.globalAlpha = desertBlend;
+            C.fillStyle = grad2;
+            C.beginPath();
+            C.moveTo(0, H);
+            for (let sx = 0; sx <= W + 4; sx += 4) C.lineTo(sx, fgDuneY(sx));
+            C.lineTo(W, H);
+            C.closePath();
+            C.fill();
+            // Borde iluminado dunas
+            C.strokeStyle = darkness > 0.5 ? 'rgba(140,100,40,0.65)' : 'rgba(200,160,70,0.6)';
+            C.lineWidth = 2;
+            C.beginPath();
+            for (let sx = 0; sx <= W + 4; sx += 4)
+                sx === 0 ? C.moveTo(sx, fgDuneY(sx)) : C.lineTo(sx, fgDuneY(sx));
+            C.stroke();
+            C.restore();
+        }
+
+        // Oscurecer de noche
+        if (bgDimAlpha > 0.04) {
+            C.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.5})`;
+            C.fillRect(0, minY - 4, W, H - minY + 4);
+        }
+    }
+
 
     const z = window.game.zoom || 1;
     window.ctx.save();
@@ -215,7 +321,7 @@ window.draw = function() {
             } else if (b.type === 'bed') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x, b.y + 20, 30, 10); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x, b.y + 20, 4, 10); window.ctx.fillRect(b.x + 26, b.y + 20, 4, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(b.x + 2, b.y + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(b.x + 12, b.y + 16, 18, 4);
             } else if (b.type === 'grave') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px Inter, sans-serif'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px "Pixelify Sans"'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
             } else if (b.type === 'barricade') {
                 window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#bdc3c7'; window.ctx.beginPath(); window.ctx.moveTo(b.x + 5, b.y + 24); window.ctx.lineTo(b.x + 2, b.y + 5); window.ctx.lineTo(b.x + 10, b.y + 24); window.ctx.moveTo(b.x + 12, b.y + 24); window.ctx.lineTo(b.x + 15, b.y + 2); window.ctx.lineTo(b.x + 18, b.y + 24); window.ctx.moveTo(b.x + 20, b.y + 24); window.ctx.lineTo(b.x + 28, b.y + 8); window.ctx.lineTo(b.x + 25, b.y + 24); window.ctx.fill();
             } else if (b.type === 'ladder') {
@@ -306,7 +412,7 @@ window.draw = function() {
                 C.fillStyle = 'rgba(0,0,0,0.7)';
                 C.beginPath(); C.roundRect(bx + 6, by + 2, 18, 10, 3); C.fill();
                 C.fillStyle = hasArrows ? '#f0c020' : '#888';
-                C.font = 'bold 7px monospace';
+                C.font = 'bold 7px "Pixelify Sans"';
                 C.textAlign = 'center';
                 C.fillText(`🎯${b.arrows||0}`, bx + 15, by + 10);
                 C.textAlign = 'left';
@@ -495,16 +601,53 @@ window.draw = function() {
         let desertAlpha = colCenterX > _dStart + _dWidth ? 1 : (colCenterX > _dStart ? (colCenterX - _dStart) / _dWidth : 0);
 
         if (desertAlpha < 1 && darkness < 0.8) {
-            window.ctx.globalAlpha = (1 - desertAlpha) * 0.75; window.ctx.fillStyle = 'rgba(70,110,30,0.8)';
-            const seed = Math.sin(px * 0.0173) * 0.5 + 0.5; const grassH = 5 + seed * 7;
-            window.ctx.fillRect(px + seed * (step - 4), gY - grassH, 2, grassH);
-            if (seed > 0.3) window.ctx.fillRect(px + seed * (step - 10) + 4, gY - grassH * 0.65, 2, grassH * 0.65);
-            window.ctx.globalAlpha = 1;
+            // Briznas de pasto curvas animadas (estilo pixel art)
+            const wt = (window.game.frameCount || 0) * 0.04;
+            window.ctx.globalAlpha = (1 - desertAlpha) * 0.9;
+            window.ctx.lineWidth = 1;
+            window.ctx.lineCap = 'round';
 
+            const seed  = Math.sin(px * 0.0173) * 0.5 + 0.5;
+            const seed2 = Math.sin(px * 0.0531 + 1.2) * 0.5 + 0.5;
+
+            // Brizna principal
+            const h1  = 4 + seed * 6;
+            const wx1 = Math.sin(wt + px * 0.11) * 2;
+            window.ctx.strokeStyle = seed > 0.5 ? '#4caf50' : '#2e7d32';
+            window.ctx.beginPath();
+            window.ctx.moveTo(px + seed * (step - 4), gY);
+            window.ctx.quadraticCurveTo(
+                px + seed * (step - 4) + wx1,
+                gY - h1 * 0.5,
+                px + seed * (step - 4) + wx1 * 1.5,
+                gY - h1
+            );
+            window.ctx.stroke();
+
+            // Brizna secundaria (más corta, diferente color)
+            if (seed2 > 0.3) {
+                const h2  = 3 + seed2 * 4;
+                const wx2 = Math.sin(wt * 1.1 + px * 0.09 + 0.8) * 1.5;
+                window.ctx.strokeStyle = '#388e3c';
+                window.ctx.beginPath();
+                window.ctx.moveTo(px + seed2 * (step - 10) + 4, gY);
+                window.ctx.quadraticCurveTo(
+                    px + seed2 * (step - 10) + 4 + wx2,
+                    gY - h2 * 0.5,
+                    px + seed2 * (step - 10) + 4 + wx2 * 1.5,
+                    gY - h2
+                );
+                window.ctx.stroke();
+            }
+
+            window.ctx.globalAlpha = 1;
+        }
+
+        if (desertAlpha < 1) {
             // ── Detalles del bosque: hongos y flores ─────────────────────────
             const dStart2 = (window.game.desertStart || 2600) + window.game.shoreX;
             const inForestZone = colCenterX > window.game.shoreX + 200 && colCenterX < dStart2 - 200;
-            if (inForestZone && darkness < 0.7) {
+            if (inForestZone) {
                 const fSeed1 = Math.sin(px * 0.0531 + 7.3) * 0.5 + 0.5;
                 const fSeed2 = Math.sin(px * 0.0871 + 2.1) * 0.5 + 0.5;
                 const fSeed3 = Math.sin(px * 0.1237 + 4.7) * 0.5 + 0.5;
@@ -555,33 +698,31 @@ window.draw = function() {
         }
 
         // ── Detalles del desierto: huesos y ramitas ───────────────────────────
-        if (desertAlpha > 0.3 && darkness < 0.75) {
+        if (desertAlpha > 0.3) {
             const dSeed1 = Math.sin(px * 0.0712 + 1.9) * 0.5 + 0.5;
             const dSeed2 = Math.sin(px * 0.1183 + 5.5) * 0.5 + 0.5;
             const dSeed3 = Math.sin(px * 0.0443 + 3.2) * 0.5 + 0.5;
             const C = window.ctx;
             C.globalAlpha = desertAlpha * 0.8;
 
-            // Hueso (aparece cada ~150px) → subir umbral a 0.93
-            if (dSeed1 > 0.93) {
+            // Hueso (umbral 0.97 → muy poco frecuente)
+            if (dSeed1 > 0.97) {
                 const bx2 = px + dSeed2 * step * 0.8;
-                const bAng = (dSeed3 - 0.5) * 0.8; // ligera rotación
+                const bAng = (dSeed3 - 0.5) * 0.8;
                 C.save();
                 C.translate(bx2, gY - 2);
                 C.rotate(bAng);
                 C.fillStyle = '#d4cdb8';
-                // Hueso horizontal: dos esferas y un palo
                 C.fillRect(-7, -1.5, 14, 3);
                 C.beginPath(); C.arc(-7, 0, 3.5, 0, Math.PI * 2); C.fill();
                 C.beginPath(); C.arc( 7, 0, 3.5, 0, Math.PI * 2); C.fill();
-                // Detalle oscuro
                 C.fillStyle = '#b8b0a0';
                 C.fillRect(-5, -1, 10, 2);
                 C.restore();
             }
 
-            // Ramita seca (aparece cada ~90px) → subir umbral a 0.88
-            if (dSeed2 > 0.88 && dSeed1 <= 0.93) {
+            // Ramita seca (umbral 0.96 → muy poco frecuente)
+            if (dSeed2 > 0.96 && dSeed1 <= 0.97) {
                 const tx = px + dSeed3 * step * 0.5 + 3;
                 C.strokeStyle = '#8B7355';
                 C.lineWidth = 1.5;
@@ -589,7 +730,6 @@ window.draw = function() {
                 C.moveTo(tx, gY);
                 C.lineTo(tx + 3 + dSeed1 * 8, gY - 5 - dSeed2 * 7);
                 C.stroke();
-                // Ramitas secundarias
                 C.lineWidth = 1;
                 C.strokeStyle = '#7a6545';
                 C.beginPath();
@@ -883,7 +1023,7 @@ window.draw = function() {
 
                 // Nombre del enemigo (solo hostiles, solo si dañado o recién golpeado)
                 if (isHostile && (pct < 1 || timeSinceHit < 2000)) {
-                    C.font = 'bold 6px monospace';
+                    C.font = 'bold 6px "Pixelify Sans"';
                     C.fillStyle = 'rgba(255,255,255,0.9)';
                     C.textAlign = 'center';
                     C.shadowColor = 'rgba(0,0,0,0.9)';
@@ -1069,21 +1209,21 @@ window.draw = function() {
         window.ctx.globalAlpha = Math.max(0, Math.min(1, dt.life));
         window.ctx.textAlign = 'center';
         if (dt.color === 'melee') {
-            window.ctx.font = 'bold 15px Inter, sans-serif';
+            window.ctx.font = 'bold 13px "Press Start 2P"';
             window.ctx.strokeStyle = 'rgba(140,0,0,0.95)';
             window.ctx.lineWidth = 3;
             window.ctx.strokeText(dt.text, dt.x, dt.y);
             window.ctx.fillStyle = '#ffffff';
             window.ctx.fillText(dt.text, dt.x, dt.y);
         } else if (dt.color === 'miss') {
-            window.ctx.font = 'italic bold 13px Inter, sans-serif';
+            window.ctx.font = 'bold 10px "Press Start 2P"';
             window.ctx.strokeStyle = 'rgba(0,0,0,0.7)';
             window.ctx.lineWidth = 2.5;
             window.ctx.strokeText(dt.text, dt.x, dt.y);
             window.ctx.fillStyle = '#bbbbbb';
             window.ctx.fillText(dt.text, dt.x, dt.y);
         } else {
-            window.ctx.font = 'bold 15px Inter, sans-serif';
+            window.ctx.font = 'bold 13px "Press Start 2P"';
             window.ctx.fillStyle = dt.color;
             window.ctx.fillText(dt.text, dt.x, dt.y);
         }
@@ -1206,7 +1346,7 @@ window.draw = function() {
         if (!isLocal) {
             const col = playerColor(charData.name);
             window.ctx.fillStyle = col;
-            window.ctx.font = 'bold 12px Inter, sans-serif';
+            window.ctx.font = 'bold 12px "Pixelify Sans"';
             window.ctx.textAlign = 'center';
             window.ctx.shadowColor = 'rgba(0,0,0,0.9)';
             window.ctx.shadowBlur = 4;
@@ -1215,7 +1355,7 @@ window.draw = function() {
         }
 
         if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
-            window.ctx.font = 'bold 13px Inter, sans-serif';
+            window.ctx.font = 'bold 13px "Pixelify Sans"';
             const tW = window.ctx.measureText(charData.chatText).width;
             const boxW = tW + 20;
             const boxH = 26;
@@ -1273,14 +1413,14 @@ window.draw = function() {
             window.ctx.shadowColor = 'rgba(0,0,0,0.8)';
             window.ctx.shadowBlur = 3;
             if (!isLocal) {
-                window.ctx.font = 'bold 10px Inter, sans-serif';
+                window.ctx.font = 'bold 10px "Pixelify Sans"';
                 window.ctx.fillStyle = col;
                 window.ctx.fillText(nameLabel + ':', bx + 6 + window.ctx.measureText(nameLabel + ':').width/2, by + 10);
-                window.ctx.font = 'bold 13px Inter, sans-serif';
+                window.ctx.font = 'bold 13px "Pixelify Sans"';
                 window.ctx.fillStyle = '#fff';
                 window.ctx.fillText(charData.chatText, pCX, by + boxH - 6);
             } else {
-                window.ctx.font = 'bold 13px Inter, sans-serif';
+                window.ctx.font = 'bold 13px "Pixelify Sans"';
                 window.ctx.fillStyle = '#fff';
                 window.ctx.fillText(charData.chatText, pCX, by + boxH/2 + 5);
             }
@@ -1318,7 +1458,7 @@ window.draw = function() {
         C.setTransform(1, 0, 0, 1, 0, 0);
         const scale = dpr; // todo en píxeles físicos
         const boxH = (isStairMode ? 92 : 72) * scale;
-        C.font = `${11 * scale}px Inter, sans-serif`;
+        C.font = `${11 * scale}px "Pixelify Sans"`;
         const line1 = 'Modo: Escalón   |   R → cambiar   |   Clic → construir (2 madera)';
         const line2 = 'Caminar sobre el escalón para subir automáticamente';
         const measuredW = Math.max(C.measureText(line1).width, C.measureText(line2).width);
@@ -1333,10 +1473,10 @@ window.draw = function() {
         C.globalAlpha = 1;
         C.textAlign = 'center';
         const cx = tutX + boxW / 2;
-        C.font = `bold ${12 * scale}px Inter, sans-serif`;
+        C.font = `bold ${12 * scale}px "Pixelify Sans"`;
         C.fillStyle = '#f0c040';
         C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18 * scale);
-        C.font = `${11 * scale}px Inter, sans-serif`;
+        C.font = `${11 * scale}px "Pixelify Sans"`;
         C.fillStyle = '#ddd';
         const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón' };
         C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 madera)`, cx, tutY + 36 * scale);
@@ -1392,7 +1532,7 @@ window.draw = function() {
 
                 window.ctx.rotate(-angle);
                 window.ctx.fillStyle = '#fff';
-                window.ctx.font = 'bold 11px Inter, sans-serif';
+                window.ctx.font = 'bold 11px "Pixelify Sans"';
                 window.ctx.textAlign = 'center';
                 window.ctx.textBaseline = 'middle';
                 const rivalName = rival.name ? rival.name.substring(0,8) : '?';
@@ -1408,7 +1548,7 @@ window.draw = function() {
                 window.ctx.fill();
                 window.ctx.globalAlpha = 1;
                 window.ctx.fillStyle = '#ffaaaa';
-                window.ctx.font = 'bold 10px Inter, sans-serif';
+                window.ctx.font = 'bold 10px "Pixelify Sans"';
                 window.ctx.textAlign = 'center';
                 window.ctx.textBaseline = 'middle';
                 window.ctx.fillText(`⚔ ${dist}m`, rSX, tagY + tagH/2);

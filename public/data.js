@@ -11,6 +11,7 @@ window.getEl = function (id) { return document.getElementById(id); };
 
 window.canvas = document.getElementById('gameCanvas');
 window.ctx    = window.canvas.getContext('2d');
+window.ctx.imageSmoothingEnabled = false;
 
 // ─── Sprites ─────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,9 @@ window.player = {
     x: 250, y: 100, width: 24, height: 40,
     vx: 0, vy: 0,
     baseSpeed: 2.8, baseJump: -7.2, baseHp: 100, baseHunger: 100,
-    speed: 2.8, jumpPower: -7.2,
+    walkSpeed: 1.4,   // velocidad caminata (default)
+    runSpeed:  2.8,   // velocidad corriendo (shift)
+    speed: 1.4, jumpPower: -7.2,
     hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
     baseDamage: { hand: 9, torch: 10, hammer: 15, pickaxe: 15, axe: 25, sword: 60 },
     level: 1, xp: 0, maxXp: 100, statPoints: 0,
@@ -202,6 +205,8 @@ window.checkRectIntersection = function (x1, y1, w1, h1, x2, y2, w2, h2) {
 
 /** Marca un objeto como "golpeado" durante 150 ms */
 window.setHit = function (t) {
+    // Asegurar maxHp para que drawCracks funcione
+    if (t.hp !== undefined && !t.maxHp) t.maxHp = t.hp;
     t.isHit = true;
     t.lastHitTime = Date.now();
     setTimeout(() => { t.isHit = false; }, 150);
@@ -230,5 +235,9 @@ window.spawnParticles = function (x, y, color, count, speed = 1) {
 
 /** Agrega un texto de daño flotante */
 window.spawnDamageText = function (x, y, text, color = '#ff4444') {
-    window.damageTexts.push({ x, y, text, life: 1.0, color });
+    // Redondear números de daño para evitar decimales
+    const cleanText = typeof text === 'string'
+        ? text.replace(/-?\d+\.\d+/g, n => Math.round(parseFloat(n)).toString())
+        : String(Math.round(text));
+    window.damageTexts.push({ x, y, text: cleanText, life: 1.0, color });
 };
