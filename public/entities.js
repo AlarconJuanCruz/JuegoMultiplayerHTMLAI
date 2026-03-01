@@ -426,18 +426,42 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 if (gAhead < gHere - window.game.blockSize * 1.2) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
             }
 
-            // Desatascar — si está stuck mucho tiempo (ej: contra torreta inaccesible) abandona
+            // ── Desatascar: atacar bloque obstructor ──────────────────────────
             if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
-                if (ent.stuckFrames > 18 && isGrounded) ent.vy = ent.type === 'zombie' ? -7 : -9;
-                if (ent.stuckFrames > 65) {
+                if (ent.stuckFrames > 10 && isGrounded) ent.vy = ent.type === 'zombie' ? -7 : -9;
+
+                // Buscar bloque destructible que está bloqueando el paso
+                if (ent.stuckFrames > 20 && ent.attackCooldown <= 0) {
+                    const bs = window.game.blockSize;
+                    const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
+                    const checkY = ent.y + ent.height / 2;
+                    const obstacle = window.blocks.find(b => {
+                        if (b.type === 'ladder' || b.type === 'stair') return false;
+                        const bh = b.type === 'door' ? bs * 2 : bs;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               checkY >= b.y && checkY <= b.y + bh;
+                    });
+                    if (obstacle) {
+                        const dmg = ent.damage * 0.6;
+                        obstacle.hp = (obstacle.hp || obstacle.maxHp || 100) - dmg;
+                        window.setHit(obstacle);
+                        window.spawnParticles(obstacle.x + bs/2, obstacle.y + bs/2, '#c8a050', 3, 0.4);
+                        if (obstacle.hp <= 0) window.destroyBlockLocally(obstacle);
+                        else window.sendWorldUpdate('hit_block', { x: obstacle.x, y: obstacle.y, dmg });
+                        ent.attackCooldown = ent.type === 'zombie' ? 90 : 60;
+                        ent.stuckFrames = Math.max(0, ent.stuckFrames - 15); // no resetear del todo
+                    }
+                }
+
+                if (ent.stuckFrames > 80) {
                     ent.aiState = 'roam'; ent.roamDir = -dirX;
                     ent.roamT   = 80; ent.ignorePlayer = 80; ent.stuckFrames = 0;
                 }
             } else { ent.stuckFrames = 0; }
 
-            // Melee
-            if (minDist < 40 && ent.attackCooldown <= 0 && !target.inBackground && !target.isDead) {
+            // ── Melee al jugador ──────────────────────────────────────────────
+            if (minDist < 40 && ent.attackCooldown <= 0 && !target.isDead) {
                 if (target === window.player) {
                     window.damagePlayer(ent.damage, ent.name);
                 } else if (target && target.type === 'turret') {
@@ -447,7 +471,28 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                     if (target.hp <= 0) window.destroyBlockLocally(target);
                     else window.sendWorldUpdate('hit_block', { x: target.x, y: target.y, dmg: ent.damage });
                 }
-                ent.attackCooldown = ent.type === 'zombie' ? 150 : 80; // araña ataca más seguido
+                ent.attackCooldown = ent.type === 'zombie' ? 150 : 80;
+            }
+
+            // ── Si el jugador está elevado: atacar bloques bajo sus pies ──────
+            const playerElevated = target.y < ent.y - window.game.blockSize * 1.5;
+            if (playerElevated && ent.attackCooldown <= 0 && Math.abs(target.x - ent.x) < 60) {
+                const bs = window.game.blockSize;
+                // Buscar bloque de suelo/plataforma debajo del jugador
+                const support = window.blocks.find(b => {
+                    if (b.type === 'ladder' || b.type === 'stair') return false;
+                    return Math.abs((b.x + bs/2) - (target.x + (target.width||20)/2)) < bs &&
+                           b.y > ent.y && b.y < target.y + 10;
+                });
+                if (support) {
+                    const dmg = ent.damage * 0.5;
+                    support.hp = (support.hp || support.maxHp || 100) - dmg;
+                    window.setHit(support);
+                    window.spawnParticles(support.x + bs/2, support.y, '#c8a050', 3, 0.4);
+                    if (support.hp <= 0) window.destroyBlockLocally(support);
+                    else window.sendWorldUpdate('hit_block', { x: support.x, y: support.y, dmg });
+                    ent.attackCooldown = ent.type === 'zombie' ? 120 : 70;
+                }
             }
 
         } else { // idle
@@ -613,7 +658,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         } else if (ent.wolfState === 'stalk') {
             // Acercarse cautelosamente hasta ~100px, manteniendo manada junta
             const dirX    = target.x > ent.x ? 1 : -1;
-            const stalkSpd = 1.1 * packBonus;
+            const stalkSpd = 0.75 * packBonus;
 
             if (minDist > 100) {
                 ent.vx = dirX * stalkSpd;
@@ -665,7 +710,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 ent.vx *= 0.85;
             } else {
                 const dirX      = ent.wolfChargeDir || (target.x > ent.x ? 1 : -1);
-                const chargeSpd = (2.0 + nearMates.length * 0.2) * packBonus;
+                const chargeSpd = (1.4 + nearMates.length * 0.15) * packBonus;
                 ent.vx = dirX * chargeSpd;
 
                 // Salto de obstáculo durante la carga
@@ -690,8 +735,8 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                     const dx    = tgtX - entCX;
                     const dy    = tgtY - entFY;                 // negativo = jugador está más arriba
 
-                    // Velocidad horizontal del salto: un poco más rápido que la carga
-                    const leapVX = dirX * Math.min(Math.abs(dx) * 0.25 + chargeSpd + 1.5, 9);
+                    // Velocidad horizontal del salto: moderada
+                    const leapVX = dirX * Math.min(Math.abs(dx) * 0.2 + chargeSpd + 0.8, 6);
 
                     // Tiempo estimado hasta alcanzar la X del jugador
                     const t     = Math.abs(dx) / Math.max(Math.abs(leapVX), 0.5);

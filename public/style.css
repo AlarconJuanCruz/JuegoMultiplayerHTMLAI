@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 /* ============================================
    VARIABLES Y RESET
@@ -23,8 +23,8 @@
     --text-dim:    #5a6475;
     --text-bright: #eef2ff;
 
-    --font-display: 'Pixelify Sans', monospace;
-    --font-ui:      'Pixelify Sans', monospace;
+    --font-display: 'VT323', monospace;
+    --font-ui:      'VT323', monospace;
 
     --blur: none;
     --radius-sm: 0px;
@@ -47,7 +47,7 @@ body {
     background: var(--bg-deep);
     color: var(--text-main);
     font-family: var(--font-ui);
-    font-size: 11px;
+    font-size: 24px;
     line-height: 1.8;
     display: flex;
     align-items: center;
@@ -104,7 +104,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     background: rgba(5, 9, 15, 0.95);
     border: 2px solid var(--border-dim);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     white-space: nowrap;
     color: var(--text-main);
     text-shadow: 1px 1px 0 #000;
@@ -125,7 +125,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 2px solid rgba(245, 200, 66, 0.35);
     color: var(--gold);
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 22px;
     letter-spacing: 0.1em;
     pointer-events: none;
     text-shadow: 0 0 8px rgba(245,200,66,0.6), 1px 1px 0 #000;
@@ -143,7 +143,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 .bar-label {
     display: flex;
     justify-content: space-between;
-    font-size: 9px;
+    font-size: 20px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-dim);
@@ -175,7 +175,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 2px solid rgba(255,255,255,0.1);
     color: var(--text-main);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     padding: 5px 8px;
     cursor: pointer;
     transition: var(--t);
@@ -196,7 +196,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     top: -4px; right: -4px;
     background: var(--gold);
     color: #000;
-    font-size: 9px;
+    font-size: 20px;
     font-weight: 900;
     width: 12px; height: 12px;
     align-items: center;
@@ -239,7 +239,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     cursor: pointer;
     color: var(--text-main);
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     text-align: center;
     transition: var(--t);
     user-select: none;
@@ -272,7 +272,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     padding: 4px 8px;
     margin-bottom: 3px;
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     color: var(--text-main);
     text-shadow: 1px 1px 0 #000;
     border-right: 2px solid var(--green);
@@ -308,7 +308,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 .entity-info {
     color: var(--text-main);
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     display: flex;
     justify-content: space-between;
     margin-bottom: 3px;
@@ -334,7 +334,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     padding: 6px 14px;
     border: 2px solid rgba(255,255,255,0.12);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     text-shadow: 1px 1px 0 #000;
     color: #fff;
     z-index: 200;
@@ -347,7 +347,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     padding: 1px 5px;
     font-weight: 800;
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     text-shadow: none;
     margin: 0 2px;
     display: inline-block;
@@ -375,7 +375,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 }
 .menu-title {
     font-family: var(--font-display);
-    font-size: 14px;
+    font-size: 36px;
     letter-spacing: 0.06em;
     text-align: center;
     color: var(--gold);
@@ -387,7 +387,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     text-align: center;
     color: var(--text-dim);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     letter-spacing: 0.15em;
     text-transform: uppercase;
     margin-bottom: 20px;
@@ -399,7 +399,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 2px solid rgba(255,255,255,0.1);
     color: var(--text-bright);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     outline: none;
     transition: var(--t);
     margin-bottom: 10px;
@@ -420,7 +420,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 2px solid rgba(61,220,132,0.25);
     color: var(--green);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
@@ -445,7 +445,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 .action-btn.mini {
     width: auto;
     padding: 4px 8px;
-    font-size: 9px;
+    font-size: 20px;
     margin-bottom: 0;
 }
 
@@ -476,7 +476,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 }
 .window-header h3 {
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 22px;
     letter-spacing: 0.1em;
     color: var(--gold);
     text-shadow: 1px 1px 0 #000, 0 0 12px rgba(245,200,66,0.3);
@@ -487,7 +487,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     color: var(--red);
     width: 22px; height: 22px;
     cursor: pointer;
-    font-size: 9px;
+    font-size: 20px;
     display: flex; align-items: center; justify-content: center;
     transition: var(--t);
     font-family: var(--font-ui);
@@ -549,7 +549,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     position: absolute;
     bottom: 1px; right: 3px;
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     color: #fff;
     text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
 }
@@ -563,7 +563,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     padding: 4px 8px;
     border: 2px solid rgba(245,200,66,0.3);
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     white-space: nowrap;
     z-index: 9999;
     pointer-events: none;
@@ -584,7 +584,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
    ============================================ */
 .stat-header {
     font-family: var(--font-display);
-    font-size: 10px;
+    font-size: 21px;
     letter-spacing: 0.1em;
     color: var(--gold);
     margin-bottom: 10px;
@@ -599,7 +599,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     padding: 5px 0;
     border-bottom: 1px solid rgba(255,255,255,0.05);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     color: var(--text-main);
 }
 .stat-row:last-child { border-bottom: none; }
@@ -615,7 +615,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     color: var(--green);
     width: 18px; height: 18px;
     cursor: pointer;
-    font-size: 10px;
+    font-size: 21px;
     line-height: 1;
     transition: var(--t);
     margin-left: 4px;
@@ -646,11 +646,11 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
 }
 .craft-title {
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     color: var(--text-bright);
     text-shadow: 1px 1px 0 #000;
 }
-.req-text { font-size: 9px; color: var(--text-dim); }
+.req-text { font-size: 20px; color: var(--text-dim); }
 .req-text-ok { color: var(--green) !important; }
 .craft-actions { display: flex; gap: 4px; }
 
@@ -672,7 +672,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
    ============================================ */
 #placement-overlay {
     font-family: var(--font-display);
-    font-size: 11px;
+    font-size: 22px;
     letter-spacing: 0.08em;
     color: var(--gold);
     text-shadow: 2px 2px 0 #000, 0 0 16px rgba(245,200,66,0.5);
@@ -684,7 +684,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
    ============================================ */
 #game-tips {
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 21px;
     color: var(--text-main);
     line-height: 2.0;
     padding: 12px 14px !important;
@@ -696,7 +696,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 1px solid rgba(245,200,66,0.3);
     color: var(--gold);
     padding: 1px 5px;
-    font-size: 9px;
+    font-size: 20px;
     letter-spacing: 0.04em;
 }
 
@@ -710,7 +710,7 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     border: 2px solid rgba(245,200,66,0.35);
     padding: 8px 10px;
     font-family: var(--font-ui);
-    font-size: 9px;
+    font-size: 20px;
     color: var(--text-main);
     line-height: 2.0;
     z-index: 99999;
@@ -719,19 +719,19 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
     box-shadow: 3px 3px 0 rgba(0,0,0,0.8);
     text-shadow: 1px 1px 0 #000;
 }
-#stat-tooltip strong { color: var(--gold); display: block; margin-bottom: 4px; font-size: 10px; }
+#stat-tooltip strong { color: var(--gold); display: block; margin-bottom: 4px; font-size: 21px; }
 
 /* ============================================
    PANTALLA DE CARGA / DEATH HUD extra
    ============================================ */
 #death-screen h2 {
     font-family: var(--font-display);
-    font-size: 13px;
+    font-size: 20px;
     letter-spacing: 0.06em;
     text-shadow: 2px 2px 0 #000;
 }
 #death-screen p, #death-screen div {
-    font-size: 10px;
+    font-size: 21px;
     line-height: 2.0;
 }
 
@@ -748,19 +748,5 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; 
    ============================================ */
 ::selection { background: rgba(245,200,66,0.3); color: #fff; }
 
-/* ============================================
-   SEED / MISC INLINE OVERRIDES
-   ============================================ */
-[style*="font-size:15px"],
-[style*="font-size: 15px"] { font-size: 8px !important; }
-[style*="font-size:13px"],
-[style*="font-size: 13px"] { font-size: 7px !important; }
-[style*="font-size:12px"],
-[style*="font-size: 12px"] { font-size: 7px !important; }
-[style*="font-size:11px"],
-[style*="font-size: 11px"] { font-size: 6px !important; }
-[style*="font-size:10px"],
-[style*="font-size: 10px"] { font-size: 6px !important; }
-[style*="font-size:9px"],
-[style*="font-size: 9px"]  { font-size: 6px !important; }
+/* inline font overrides removed — VT323 uses large sizes */
 

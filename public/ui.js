@@ -353,6 +353,7 @@ window.copyInviteLink = function() {
 
 window.leaveServer = function() {
     if (confirm('¿Salir del servidor y volver al menú?')) {
+        if (window.stopMusic) window.stopMusic();
         if (window.socket) window.socket.disconnect();
         window.location.reload();
     }
@@ -790,13 +791,29 @@ window.updateEntityHUD = function() {
     const camRight = window.camera.x + (window._canvasLogicW || 1280);
     let html = '';
     window.entities.forEach(ent => {
+        if (ent.isDead) return;
         const inView = ent.x + ent.width > camLeft && ent.x < camRight;
         if (!inView) return;
-        const hpPercent = (ent.hp / ent.maxHp) * 100;
-        const recentlyHit = Date.now() - (ent.lastHitTime || 0) < 2000;
-        const color = ent.type === 'spider' ? '#ff4444' : (ent.type === 'zombie' ? '#228b22' : (ent.type === 'archer' ? '#8e44ad' : (ent.type === 'wolf' ? '#e67e22' : '#ffaa00')));
-        const pulse = recentlyHit ? 'style="animation: hpPulse 0.3s ease-out;"' : '';
-        html += `<div class="entity-bar-container"><div class="entity-info"><span>${ent.name} (Nv. ${ent.level})</span><span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div><div class="entity-hp-bg"><div class="entity-hp-fill" ${pulse} style="width: ${hpPercent}%; background: ${color}"></div></div></div>`;
+        const timeSinceHit = Date.now() - (ent.lastHitTime || 0);
+        const isChasing = ent.aiState === 'chase' || ent.aiState === 'kite' ||
+                          ent.wolfState === 'charge' || ent.wolfState === 'stalk';
+        // Solo mostrar si: fue golpeado hace menos de 4s O está en estado agresivo activo
+        const shouldShow = timeSinceHit < 4000 || isChasing;
+        if (!shouldShow) return;
+
+        const hpPercent = Math.max(0, Math.min(100, (ent.hp / ent.maxHp) * 100));
+        const color = ent.type === 'spider' ? '#e74c3c'
+                    : ent.type === 'zombie' ? '#2ecc71'
+                    : ent.type === 'archer' ? '#9b59b6'
+                    : ent.type === 'wolf'   ? '#e67e22'
+                    : '#f1c40f';
+        const recentHit = timeSinceHit < 300;
+        const animStyle = recentHit ? 'animation:hpPulse 0.3s ease-out;' : '';
+        html += `<div class="entity-bar-container">` +
+            `<div class="entity-info"><span>${ent.name} Nv.${ent.level}</span>` +
+            `<span>${Math.max(0, Math.floor(ent.hp))}/${ent.maxHp}</span></div>` +
+            `<div class="entity-hp-bg"><div class="entity-hp-fill" style="width:${hpPercent}%;background:${color};${animStyle}"></div></div>` +
+            `</div>`;
     });
     window.getEl('entity-hud').innerHTML = html;
 };
@@ -900,11 +917,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.body.appendChild(gt);
 
+    const STAT_TOOLTIPS = {
+        str: `<div style="font-size:13px;line-height:1.7;">
+                <div style="color:#f0c040;font-size:14px;margin-bottom:4px;">💪 Fuerza</div>
+                <div>⚔️ +2 daño melee por punto</div>
+                <div>🪓 +10% velocidad de minería</div>
+                <div>📦 +5 capacidad de carga</div>
+              </div>`,
+        agi: `<div style="font-size:13px;line-height:1.7;">
+                <div style="color:#40d0f0;font-size:14px;margin-bottom:4px;">⚡ Agilidad</div>
+                <div>⚡ Melee más rápido (–6 frames por punto)</div>
+                <div>🏹 Carga del arco más rápida (+18%/pto)</div>
+                <div>🎯 Menos probabilidad de MISS (–2%/pto)</div>
+                <div>💨 +0.5 velocidad de movimiento</div>
+              </div>`,
+        vit: `<div style="font-size:13px;line-height:1.7;">
+                <div style="color:#f04040;font-size:14px;margin-bottom:4px;">❤️ Vitalidad</div>
+                <div>❤️ +20 HP máximo por punto</div>
+                <div>💊 Regeneración de vida más rápida</div>
+                <div>🛡️ Reduce daño recibido levemente</div>
+              </div>`,
+        sta: `<div style="font-size:13px;line-height:1.7;">
+                <div style="color:#f09040;font-size:14px;margin-bottom:4px;">🥩 Stamina</div>
+                <div>🍖 +20 hambre máxima por punto</div>
+                <div>⏳ Hambre se consume más lento</div>
+                <div>🔄 Recuperación de energía más rápida</div>
+              </div>`,
+        int: `<div style="font-size:13px;line-height:1.7;">
+                <div style="color:#a040f0;font-size:14px;margin-bottom:4px;">🧠 Intelecto</div>
+                <div>🔨 Desbloquea recetas avanzadas</div>
+                <div>✨ +5% XP obtenida por punto</div>
+                <div>🗺️ Mayor rango de interacción</div>
+              </div>`,
+    };
+
     document.addEventListener('mouseover', (e) => {
-        let target = e.target.closest('.inv-slot, .tool-slot');
-        if (target && target.dataset.tooltip) {
-            gt.innerHTML = target.dataset.tooltip;
+        const slot = e.target.closest('.inv-slot, .tool-slot');
+        if (slot && slot.dataset.tooltip) {
+            gt.innerHTML = slot.dataset.tooltip;
             gt.style.display = 'block';
+            gt.style.whiteSpace = 'nowrap';
+            return;
+        }
+        const statRow = e.target.closest('[data-stat-tooltip]');
+        if (statRow) {
+            const key = statRow.dataset.statTooltip;
+            if (STAT_TOOLTIPS[key]) {
+                gt.innerHTML = STAT_TOOLTIPS[key];
+                gt.style.display = 'block';
+                gt.style.whiteSpace = 'normal';
+                gt.style.minWidth = '220px';
+            }
         }
     });
     
@@ -917,7 +980,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     document.addEventListener('mouseout', (e) => {
-        let target = e.target.closest('.inv-slot, .tool-slot');
-        if (target) gt.style.display = 'none';
+        const slot = e.target.closest('.inv-slot, .tool-slot');
+        const statRow = e.target.closest('[data-stat-tooltip]');
+        if (slot || statRow) {
+            gt.style.display = 'none';
+            gt.style.whiteSpace = 'nowrap';
+            gt.style.minWidth = '';
+        }
     });
 });

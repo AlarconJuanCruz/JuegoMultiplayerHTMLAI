@@ -136,9 +136,9 @@ window.draw = function() {
         // ── Bosque ────────────────────────────────────────────────────────────
         if (desertBlend < 1) {
             // Colores sólidos día/noche
-            const topCol  = darkness > 0.5 ? [14, 28, 10]  : [32, 62, 18];
-            const midCol  = darkness > 0.5 ? [10, 22,  7]  : [24, 48, 12];
-            const botCol  = darkness > 0.5 ? [ 6, 14,  4]  : [16, 32,  8];
+            const topCol  = darkness > 0.5 ? [50, 90, 36]  : [72, 135, 45];
+            const midCol  = darkness > 0.5 ? [38, 68, 24]  : [56, 106, 32];
+            const botCol  = darkness > 0.5 ? [24, 46, 14]  : [40,  78, 20];
             const grad = C.createLinearGradient(0, minY, 0, H);
             grad.addColorStop(0.0, `rgba(${topCol},1)`);
             grad.addColorStop(0.3, `rgba(${midCol},1)`);
@@ -153,21 +153,15 @@ window.draw = function() {
             C.lineTo(W, H);
             C.closePath();
             C.fill();
-            // Borde iluminado (borde superior de la colina)
-            C.strokeStyle = darkness > 0.5 ? 'rgba(50,100,28,0.7)' : 'rgba(80,160,40,0.65)';
-            C.lineWidth = 2;
-            C.beginPath();
-            for (let sx = 0; sx <= W + 4; sx += 4)
-                sx === 0 ? C.moveTo(sx, fgHillY(sx)) : C.lineTo(sx, fgHillY(sx));
-            C.stroke();
+
             C.restore();
         }
 
         // ── Desierto ──────────────────────────────────────────────────────────
         if (desertBlend > 0) {
-            const topCol  = darkness > 0.5 ? [52, 36, 12]  : [90, 65, 22];
-            const midCol  = darkness > 0.5 ? [40, 27,  8]  : [72, 50, 16];
-            const botCol  = darkness > 0.5 ? [26, 18,  4]  : [50, 34,  8];
+            const topCol  = darkness > 0.5 ? [115, 84, 36] : [175, 135, 58];
+            const midCol  = darkness > 0.5 ? [ 92, 66, 24] : [142, 104, 40];
+            const botCol  = darkness > 0.5 ? [ 64, 46, 14] : [105,  74, 24];
             const grad2 = C.createLinearGradient(0, minY, 0, H);
             grad2.addColorStop(0.0, `rgba(${topCol},1)`);
             grad2.addColorStop(0.35, `rgba(${midCol},1)`);
@@ -182,13 +176,7 @@ window.draw = function() {
             C.lineTo(W, H);
             C.closePath();
             C.fill();
-            // Borde iluminado dunas
-            C.strokeStyle = darkness > 0.5 ? 'rgba(140,100,40,0.65)' : 'rgba(200,160,70,0.6)';
-            C.lineWidth = 2;
-            C.beginPath();
-            for (let sx = 0; sx <= W + 4; sx += 4)
-                sx === 0 ? C.moveTo(sx, fgDuneY(sx)) : C.lineTo(sx, fgDuneY(sx));
-            C.stroke();
+
             C.restore();
         }
 
@@ -321,7 +309,7 @@ window.draw = function() {
             } else if (b.type === 'bed') {
                 window.ctx.fillStyle = b.isHit ? '#ff4444' : '#8B4513'; window.ctx.fillRect(b.x, b.y + 20, 30, 10); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#5C4033'; window.ctx.fillRect(b.x, b.y + 20, 4, 10); window.ctx.fillRect(b.x + 26, b.y + 20, 4, 10); window.ctx.fillStyle = '#e0e0e0'; window.ctx.fillRect(b.x + 2, b.y + 16, 10, 4); window.ctx.fillStyle = '#c0392b'; window.ctx.fillRect(b.x + 12, b.y + 16, 18, 4);
             } else if (b.type === 'grave') {
-                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 8px "Pixelify Sans"'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
+                window.ctx.fillStyle = b.isHit ? '#ff4444' : '#7f8c8d'; window.ctx.fillRect(b.x + 12, b.y + 5, 6, 25); window.ctx.fillRect(b.x + 5, b.y + 12, 20, 6); window.ctx.fillStyle = '#fff'; window.ctx.font = 'bold 18px "VT323"'; window.ctx.textAlign = 'center'; window.ctx.fillText("RIP", b.x + 15, b.y + 17);
             } else if (b.type === 'barricade') {
                 window.ctx.fillStyle = '#5D4037'; window.ctx.fillRect(b.x + 2, b.y + 24, 26, 6); window.ctx.fillStyle = b.isHit ? '#ff4444' : '#bdc3c7'; window.ctx.beginPath(); window.ctx.moveTo(b.x + 5, b.y + 24); window.ctx.lineTo(b.x + 2, b.y + 5); window.ctx.lineTo(b.x + 10, b.y + 24); window.ctx.moveTo(b.x + 12, b.y + 24); window.ctx.lineTo(b.x + 15, b.y + 2); window.ctx.lineTo(b.x + 18, b.y + 24); window.ctx.moveTo(b.x + 20, b.y + 24); window.ctx.lineTo(b.x + 28, b.y + 8); window.ctx.lineTo(b.x + 25, b.y + 24); window.ctx.fill();
             } else if (b.type === 'ladder') {
@@ -412,7 +400,7 @@ window.draw = function() {
                 C.fillStyle = 'rgba(0,0,0,0.7)';
                 C.beginPath(); C.roundRect(bx + 6, by + 2, 18, 10, 3); C.fill();
                 C.fillStyle = hasArrows ? '#f0c020' : '#888';
-                C.font = 'bold 7px "Pixelify Sans"';
+                C.font = 'bold 18px "VT323"';
                 C.textAlign = 'center';
                 C.fillText(`🎯${b.arrows||0}`, bx + 15, by + 10);
                 C.textAlign = 'left';
@@ -600,7 +588,7 @@ window.draw = function() {
         const _dStart = (window.game.desertStart || 2600) + window.game.shoreX; const _dWidth = window.game.desertWidth || 800;
         let desertAlpha = colCenterX > _dStart + _dWidth ? 1 : (colCenterX > _dStart ? (colCenterX - _dStart) / _dWidth : 0);
 
-        if (desertAlpha < 1 && darkness < 0.8) {
+        if (desertAlpha < 1 && darkness < 0.8 && colCenterX > (window.game.shoreX || 0) + 20) {
             // Briznas de pasto curvas animadas (estilo pixel art)
             const wt = (window.game.frameCount || 0) * 0.04;
             window.ctx.globalAlpha = (1 - desertAlpha) * 0.9;
@@ -615,7 +603,7 @@ window.draw = function() {
             const wx1 = Math.sin(wt + px * 0.11) * 2;
             window.ctx.strokeStyle = seed > 0.5 ? '#4caf50' : '#2e7d32';
             window.ctx.beginPath();
-            window.ctx.moveTo(px + seed * (step - 4), gY);
+            window.ctx.moveTo(px + seed * (step - 4), gY + 3);
             window.ctx.quadraticCurveTo(
                 px + seed * (step - 4) + wx1,
                 gY - h1 * 0.5,
@@ -624,18 +612,35 @@ window.draw = function() {
             );
             window.ctx.stroke();
 
-            // Brizna secundaria (más corta, diferente color)
-            if (seed2 > 0.3) {
+            // Brizna secundaria — umbral 0.1 para más densidad
+            if (seed2 > 0.1) {
                 const h2  = 3 + seed2 * 4;
                 const wx2 = Math.sin(wt * 1.1 + px * 0.09 + 0.8) * 1.5;
                 window.ctx.strokeStyle = '#388e3c';
                 window.ctx.beginPath();
-                window.ctx.moveTo(px + seed2 * (step - 10) + 4, gY);
+                window.ctx.moveTo(px + seed2 * (step - 10) + 4, gY + 3);
                 window.ctx.quadraticCurveTo(
                     px + seed2 * (step - 10) + 4 + wx2,
                     gY - h2 * 0.5,
                     px + seed2 * (step - 10) + 4 + wx2 * 1.5,
                     gY - h2
+                );
+                window.ctx.stroke();
+            }
+
+            // Brizna terciaria — más corta y fina, muy densa
+            const seed3 = Math.sin(px * 0.0812 + 3.3) * 0.5 + 0.5;
+            if (seed3 > 0.15) {
+                const h3  = 2 + seed3 * 3;
+                const wx3 = Math.sin(wt * 0.9 + px * 0.13 + 1.6) * 1.2;
+                window.ctx.strokeStyle = seed3 > 0.6 ? '#1b5e20' : '#43a047';
+                window.ctx.beginPath();
+                window.ctx.moveTo(px + seed3 * (step - 6) + 2, gY + 3);
+                window.ctx.quadraticCurveTo(
+                    px + seed3 * (step - 6) + 2 + wx3,
+                    gY - h3 * 0.5,
+                    px + seed3 * (step - 6) + 2 + wx3 * 1.3,
+                    gY - h3
                 );
                 window.ctx.stroke();
             }
@@ -659,18 +664,18 @@ window.draw = function() {
                     const mx = px + fSeed2 * step * 0.7;
                     const isRed = fSeed3 > 0.5;
                     const stemH = 5 + fSeed2 * 4;
-                    // Tallo — base pegada al suelo (+2 para enterrar ligeramente)
+                    // Tallo — base +4 para enterrar más en el suelo
                     C.fillStyle = '#e8dcc8';
-                    C.fillRect(mx + 2, gY - stemH + 2, 4, stemH);
-                    // Sombrero
+                    C.fillRect(mx + 2, gY - stemH + 3, 4, stemH);
+                    // Sombrero — también bajado 4px
                     C.fillStyle = isRed ? '#c0392b' : '#8B4513';
                     C.beginPath();
-                    C.ellipse(mx + 4, gY - stemH + 3, 7, 5, 0, Math.PI, 0);
+                    C.ellipse(mx + 4, gY - stemH + 4, 7, 5, 0, Math.PI, 0);
                     C.fill();
                     // Puntitos blancos
                     C.fillStyle = 'rgba(255,255,255,0.75)';
-                    C.beginPath(); C.arc(mx + 2, gY - stemH + 1, 1.2, 0, Math.PI * 2); C.fill();
-                    C.beginPath(); C.arc(mx + 6, gY - stemH + 2, 0.9, 0, Math.PI * 2); C.fill();
+                    C.beginPath(); C.arc(mx + 2, gY - stemH + 2, 1.2, 0, Math.PI * 2); C.fill();
+                    C.beginPath(); C.arc(mx + 6, gY - stemH + 3, 0.9, 0, Math.PI * 2); C.fill();
                 }
 
                 // Flor → umbral 0.91
@@ -1023,7 +1028,7 @@ window.draw = function() {
 
                 // Nombre del enemigo (solo hostiles, solo si dañado o recién golpeado)
                 if (isHostile && (pct < 1 || timeSinceHit < 2000)) {
-                    C.font = 'bold 6px "Pixelify Sans"';
+                    C.font = 'bold 18px "VT323"';
                     C.fillStyle = 'rgba(255,255,255,0.9)';
                     C.textAlign = 'center';
                     C.shadowColor = 'rgba(0,0,0,0.9)';
@@ -1346,7 +1351,7 @@ window.draw = function() {
         if (!isLocal) {
             const col = playerColor(charData.name);
             window.ctx.fillStyle = col;
-            window.ctx.font = 'bold 12px "Pixelify Sans"';
+            window.ctx.font = 'bold 22px "VT323"';
             window.ctx.textAlign = 'center';
             window.ctx.shadowColor = 'rgba(0,0,0,0.9)';
             window.ctx.shadowBlur = 4;
@@ -1355,7 +1360,7 @@ window.draw = function() {
         }
 
         if (charData.chatExpires && Date.now() < charData.chatExpires && charData.chatText) {
-            window.ctx.font = 'bold 13px "Pixelify Sans"';
+            window.ctx.font = 'bold 23px "VT323"';
             const tW = window.ctx.measureText(charData.chatText).width;
             const boxW = tW + 20;
             const boxH = 26;
@@ -1413,14 +1418,14 @@ window.draw = function() {
             window.ctx.shadowColor = 'rgba(0,0,0,0.8)';
             window.ctx.shadowBlur = 3;
             if (!isLocal) {
-                window.ctx.font = 'bold 10px "Pixelify Sans"';
+                window.ctx.font = 'bold 18px "VT323"';
                 window.ctx.fillStyle = col;
                 window.ctx.fillText(nameLabel + ':', bx + 6 + window.ctx.measureText(nameLabel + ':').width/2, by + 10);
-                window.ctx.font = 'bold 13px "Pixelify Sans"';
+                window.ctx.font = 'bold 23px "VT323"';
                 window.ctx.fillStyle = '#fff';
                 window.ctx.fillText(charData.chatText, pCX, by + boxH - 6);
             } else {
-                window.ctx.font = 'bold 13px "Pixelify Sans"';
+                window.ctx.font = 'bold 23px "VT323"';
                 window.ctx.fillStyle = '#fff';
                 window.ctx.fillText(charData.chatText, pCX, by + boxH/2 + 5);
             }
@@ -1458,7 +1463,7 @@ window.draw = function() {
         C.setTransform(1, 0, 0, 1, 0, 0);
         const scale = dpr; // todo en píxeles físicos
         const boxH = (isStairMode ? 92 : 72) * scale;
-        C.font = `${11 * scale}px "Pixelify Sans"`;
+        C.font = `${11 * scale}px "VT323"`;
         const line1 = 'Modo: Escalón   |   R → cambiar   |   Clic → construir (2 madera)';
         const line2 = 'Caminar sobre el escalón para subir automáticamente';
         const measuredW = Math.max(C.measureText(line1).width, C.measureText(line2).width);
@@ -1473,10 +1478,10 @@ window.draw = function() {
         C.globalAlpha = 1;
         C.textAlign = 'center';
         const cx = tutX + boxW / 2;
-        C.font = `bold ${12 * scale}px "Pixelify Sans"`;
+        C.font = `bold ${12 * scale}px "VT323"`;
         C.fillStyle = '#f0c040';
         C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18 * scale);
-        C.font = `${11 * scale}px "Pixelify Sans"`;
+        C.font = `${11 * scale}px "VT323"`;
         C.fillStyle = '#ddd';
         const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón' };
         C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 madera)`, cx, tutY + 36 * scale);
@@ -1532,7 +1537,7 @@ window.draw = function() {
 
                 window.ctx.rotate(-angle);
                 window.ctx.fillStyle = '#fff';
-                window.ctx.font = 'bold 11px "Pixelify Sans"';
+                window.ctx.font = 'bold 20px "VT323"';
                 window.ctx.textAlign = 'center';
                 window.ctx.textBaseline = 'middle';
                 const rivalName = rival.name ? rival.name.substring(0,8) : '?';
@@ -1548,7 +1553,7 @@ window.draw = function() {
                 window.ctx.fill();
                 window.ctx.globalAlpha = 1;
                 window.ctx.fillStyle = '#ffaaaa';
-                window.ctx.font = 'bold 10px "Pixelify Sans"';
+                window.ctx.font = 'bold 18px "VT323"';
                 window.ctx.textAlign = 'center';
                 window.ctx.textBaseline = 'middle';
                 window.ctx.fillText(`⚔ ${dist}m`, rSX, tagY + tagH/2);

@@ -102,6 +102,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
 
     let menu = window.getEl('main-menu'); if(menu) menu.style.display = 'none'; let ui = window.getEl('ui-layer'); if(ui) ui.style.display = 'block';
     window.game.isRunning = true; window.game.isMultiplayer = multiplayer;
+    if (window.startMusic) window.startMusic();
 
     // --- CÓDIGO NUEVO: Mostrar el botón de Sala si es multijugador ---
     let btnServerMenu = window.getEl('btn-server-menu');
@@ -459,6 +460,31 @@ window.addEventListener('keydown', (e) => {
         if (e.key === 'e' || e.key === 'E') {
             const pCX = window.player.x + window.player.width / 2, pCY = window.player.y + window.player.height / 2;
             
+            // ── Escalera: engancharse con E ───────────────────────────────────
+            if (!window.player.isClimbing && !window.player.isDead) {
+                const bs = window.game.blockSize;
+                const nearLadder = window.blocks.find(b =>
+                    b.type === 'ladder' &&
+                    Math.abs(pCX - (b.x + bs / 2)) < bs * 0.9 &&
+                    pCY > b.y - bs * 0.5 &&
+                    pCY < b.y + bs * 1.5
+                );
+                if (nearLadder) {
+                    // Centrar jugador horizontalmente en la escalera
+                    window.player.x = nearLadder.x + bs / 2 - window.player.width / 2;
+                    window.player.isClimbing = true;
+                    window.player.vy = 0;
+                    window.player.vx = 0;
+                    window.player._climbLadderX = nearLadder.x; // fijar X de la escalera
+                    return;
+                }
+            }
+            // ── Soltar escalera con E ─────────────────────────────────────────
+            if (window.player.isClimbing) {
+                window.player.isClimbing = false;
+                return;
+            }
+
             let arrowToPick = window.stuckArrows.find(sa => Math.hypot(pCX - sa.x, pCY - sa.y) < 60);
             if (arrowToPick) {
                 if (window.canAddItem('arrows', 1)) {
@@ -767,6 +793,15 @@ window.attemptAction = function() {
 window.addEventListener('mousedown', (e) => {
     if (!window.game || !window.game.isRunning || !window.player || window.player.isDead || document.querySelector('.window-menu.open')) return;
     if (e.target.closest('#global-chat-log') || e.target.closest('.log-msg') || e.target.closest('#chat-container')) return;
+    // No atacar al clickear cualquier elemento de UI interactivo
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select') ||
+        e.target.closest('#top-controls') || e.target.closest('#server-info') ||
+        e.target.closest('#server-menu-panel') || e.target.closest('#pvp-player-panel') ||
+        e.target.closest('#ui-layer button') || e.target.tagName === 'BUTTON' ||
+        e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' ||
+        e.target.closest('.toggle-btn') || e.target.closest('.action-btn') ||
+        e.target.closest('#interaction-prompt') || e.target.closest('#hud-bars') ||
+        e.target.closest('#toolbar-container') || e.target.closest('.tab-btn')) return;
 
     if (e.button === 0) {
         if (!window.keys) window.keys = {};
@@ -1110,14 +1145,16 @@ function update() {
         const _isSprinting = !!(window.keys?.shift) && window.player.hunger > 0 && !window.player.isClimbing;
         // Actualizar velocidad según si corre o camina
         const _baseAgi     = window.player.stats?.agi || 0;
-        const _walkSpd     = (window.player.walkSpeed || 1.4) + _baseAgi * 0.1;
-        const _runSpd      = (window.player.runSpeed  || 2.8) + _baseAgi * 0.5;
+        const _walkSpd     = (window.player.walkSpeed || 1.1) + _baseAgi * 0.12;
+        const _runSpd      = (window.player.runSpeed  || 2.8) + _baseAgi * 0.6;
+        // AGI reduce también el coste de stamina al correr
+        const _staminaDrain = Math.max(0.0005, 0.002 - _baseAgi * 0.0002);
         window.player.speed = _isSprinting ? _runSpd : _walkSpd;
         window.player.isSprinting = _isSprinting;
 
         // Animación: caminar más viva (×1.8), correr más rápida (×2.8)
         if (Math.abs(window.player.vx) > 0.3 && window.player.isGrounded) {
-            const animMult = _isSprinting ? 2.8 : 2.2;
+            const animMult = _isSprinting ? 2.1 : 2.2;
             window.player.animTime += Math.abs(window.player.vx) * 0.025 * animMult;
         } else {
             window.player.animTime = 0;
@@ -1134,27 +1171,56 @@ function update() {
         // ── Escalera ──────────────────────────────────────────────────────────
         const _onLadder = !window.player.isDead && window.isOnLadder();
 
-        if (_onLadder) {
-            if (!window.player.isClimbing) {
-                if (window.player.vy > 1.5 || window.keys?.w || window.keys?.jumpPressed)
-                    window.player.isClimbing = true;
-            }
-            if (window.player.isClimbing) {
-                if (window.keys?.w)        window.player.vy = -2.5;
-                else if (window.keys?.s)   window.player.vy =  2.5;
-                else                       window.player.vy =  0;
-                if (window.keys && (window.keys.a || window.keys.d) && !window.keys.w && !window.keys.s) {
-                    window.player.isClimbing = false;
-                    window.player.vy = -2.0;
+        if (window.player.isClimbing) {
+            if (!_onLadder) {
+                // Salió de la zona de la escalera — soltar
+                window.player.isClimbing = false;
+                window.player.vy += window.game.gravity;
+            } else {
+                // Mantener jugador centrado horizontalmente en su escalera
+                const bs = window.game.blockSize;
+                const ladderX = window.player._climbLadderX;
+                if (ladderX !== undefined) {
+                    window.player.x = ladderX + bs / 2 - window.player.width / 2;
                 }
+                window.player.vx = 0;
+
+                // Movimiento vertical
+                if (window.keys?.w)      window.player.vy = -2.2;
+                else if (window.keys?.s) window.player.vy =  2.2;
+                else                     window.player.vy =  0;
+
                 window.player.isGrounded = false;
                 window.player.isJumping  = false;
                 window.player.coyoteTime = 10;
-            } else {
-                window.player.vy += window.game.gravity;
+
+                // Detectar tope superior: W presionado y la cabeza del jugador superó el bloque más alto
+                if (window.keys?.w) {
+                    const bs2 = window.game.blockSize;
+                    const pCX = window.player.x + window.player.width / 2;
+                    // Encontrar el escalón más alto de esta columna de escalera
+                    const ladderCol = window.blocks.filter(b =>
+                        b.type === 'ladder' &&
+                        Math.abs(pCX - (b.x + bs2 / 2)) < bs2 * 0.9
+                    );
+                    if (ladderCol.length > 0) {
+                        const topLadderY = Math.min(...ladderCol.map(b => b.y));
+                        // Si la cabeza del jugador está por encima (o al nivel) del escalón más alto
+                        if (window.player.y <= topLadderY + 4) {
+                            window.player.isClimbing = false;
+                            window.player.vy = -6;
+                            window.player.isJumping = true;
+                            if (window.playSound) window.playSound('jump');
+                        }
+                    }
+                }
+
+                // Detectar fondo: si S y está en suelo → soltar
+                if (window.keys?.s && window.player.isGrounded) {
+                    window.player.isClimbing = false;
+                }
             }
         } else {
-            if (window.player.isClimbing) window.player.isClimbing = false;
             window.player.vy += window.game.gravity;
         }
         const _isClimbing = window.player.isClimbing && _onLadder;
@@ -1192,11 +1258,11 @@ function update() {
 
         // ── Drenaje de stamina al correr (cada frame) ─────────────────────────
         if (window.player.isSprinting && Math.abs(window.player.vx) > 0.3 && !window.player.isDead) {
-            window.player.hunger = Math.max(0, window.player.hunger - 0.008);
+            window.player.hunger = Math.max(0, window.player.hunger - _staminaDrain);
             if (window.player.hunger <= 0) {
                 // Sin stamina: forzar caminata
                 window.player.isSprinting = false;
-                window.player.speed = (window.player.walkSpeed || 1.4) + (_baseAgi * 0.1);
+                window.player.speed = _walkSpd;
             }
             if (window.game.frameCount % 30 === 0 && window.updateUI) window.updateUI();
         }
@@ -1487,7 +1553,25 @@ function update() {
         const hoveringArrow = window.stuckArrows.find(sa => Math.hypot(pCX - sa.x, pCY - sa.y) < 60);
 
         if (promptEl && textEl) {
-            if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
+            // ── Prompt escalera ───────────────────────────────────────────────
+            const pCX2 = window.player.x + window.player.width / 2;
+            const pCY2 = window.player.y + window.player.height / 2;
+            const bs2  = window.game.blockSize;
+            const nearLadderPrompt = !window.player.isDead && !window.player.isClimbing && window.blocks.some(b =>
+                b.type === 'ladder' &&
+                Math.abs(pCX2 - (b.x + bs2 / 2)) < bs2 * 0.9 &&
+                pCY2 > b.y - bs2 * 0.5 &&
+                pCY2 < b.y + bs2 * 1.5
+            );
+            const onLadderClimbing = window.player.isClimbing;
+
+            if (nearLadderPrompt) {
+                promptEl.style.display = 'block';
+                textEl.innerHTML = `Presiona <span class="key-btn">E</span> para usar la <span style="color:#C19A6B;">escalera</span>`;
+            } else if (onLadderClimbing) {
+                promptEl.style.display = 'block';
+                textEl.innerHTML = `<span class="key-btn">W</span> subir &nbsp; <span class="key-btn">S</span> bajar &nbsp; <span class="key-btn">E</span> soltar`;
+            } else if (interactables.length > 0 && !document.querySelector('.window-menu.open') && !window.player.isDead) {
                 const h = interactables[0];
                 if (h.type !== 'bed') {
                     const tName = { box: 'Caja', campfire: 'Fogata', grave: 'Tumba', door: 'Puerta' }[h.type] || h.type;
@@ -1688,9 +1772,25 @@ function update() {
 }
 
 window.gameLoop = function () {
-    if (window.game && window.game.isRunning) update();
-    if (typeof window.draw === 'function') window.draw();
+    if (window.game && window.game.isRunning && !document.hidden) update();
+    if (typeof window.draw === 'function' && !document.hidden) window.draw();
     requestAnimationFrame(window.gameLoop);
 };
+
+// Pausar lógica cuando el tab está oculto para evitar que el tiempo se acelere al volver
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && window.game && window.game.isRunning) {
+        // Resetear cooldowns sensibles al tiempo para evitar rafagas al volver
+        if (window.player) {
+            window.player.attackCooldown = Math.max(window.player.attackCooldown || 0, 0);
+            window.player._prevVy = 0;
+        }
+        // Dar un frame de gracia antes de retomar
+        if (window.keys) {
+            window.keys.mouseLeft = false;
+            window.keys.jumpPressed = false;
+        }
+    }
+});
 
 window.addEventListener('DOMContentLoaded', () => { window.gameLoop(); });
