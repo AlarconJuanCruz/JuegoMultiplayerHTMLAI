@@ -990,8 +990,9 @@ window.draw = function() {
         C.fillText('🔨 MODO CONSTRUIR', cx, tutY + 18 * scale);
         C.font = `${11 * scale}px Inter, sans-serif`;
         C.fillStyle = '#ddd';
-        const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón' };
-        C.fillText(`Modo: ${modeNames[window.player.buildMode]}   |   R → cambiar   |   Clic → construir (2 madera)`, cx, tutY + 36 * scale);
+        const modeNames = { block: 'Bloque', door: 'Puerta', stair: 'Escalón', dirt_block: 'Bloque de Tierra' };
+        const modeCost = window.player.buildMode === 'dirt_block' ? '2 tierra' : window.player.buildMode === 'door' ? '4 madera' : '2 madera';
+        C.fillText(`Modo: ${modeNames[window.player.buildMode]||window.player.buildMode}   |   R → cambiar   |   Clic → construir (${modeCost})`, cx, tutY + 36 * scale);
         if (isStairMode) {
             C.fillStyle = '#88ccff';
             C.fillText(`T → espejo  (${window.player.stairMirror ? '◀ sube a la izquierda' : '▶ sube a la derecha'})`, cx, tutY + 54 * scale);

@@ -198,10 +198,14 @@ window.generateWorldSector = function (startX, endX) {
  * @param {number}  pCY   centro Y del jugador
  */
 window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
+    const _camW  = window._canvasLogicW || 1280;
+    const _cullX = (window.camera ? window.camera.x : pCX - _camW/2) - _camW * 0.6;
+    const _cullR = _cullX + _camW * 2.2;
+
     for (let i = window.entities.length - 1; i >= 0; i--) {
         const ent = window.entities[i];
 
-        // ── Muerte diferida (puede ocurrir si hp cayó a 0 sin pasar por tryHit) ──
+        // ── Muerte diferida ──
         if (ent.hp <= 0) {
             window.killedEntities.push(ent.id);
             window.sendWorldUpdate('kill_entity', { id: ent.id });
@@ -209,6 +213,18 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
             window.killEntityLoot(ent);
             window.entities.splice(i, 1);
             if (window.updateUI) window.updateUI();
+            continue;
+        }
+
+        // ── Culling: skip físico/IA si está lejos de la cámara ──
+        if (ent.x + ent.width < _cullX || ent.x > _cullR) {
+            const _gYc = window.getGroundY ? window.getGroundY(ent.x + ent.width/2) : 9999;
+            const _eColC = Math.floor((ent.x + ent.width*0.5) / window.game.blockSize);
+            const _eCDc  = window.getTerrainCol ? window.getTerrainCol(_eColC) : null;
+            const _eTopC = (_eCDc && _eCDc.type !== 'hole') ? _eCDc.topY : (window.game.baseGroundLevel||510);
+            if ((ent.y + ent.height) < _eTopC + window.game.blockSize * 1.5 && _gYc < (window.game.baseGroundLevel||510) + 500) {
+                ent.y = _gYc - ent.height; ent.vy = 0;
+            }
             continue;
         }
 
@@ -222,16 +238,26 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
         // ── Física ──
         const lastX = ent.x;
         ent.x += ent.vx;
-        const hitWall = window.checkEntityCollisions(ent, 'x');
+        const hitWall = window.checkEntityCollisions(ent, 'x') |
+                        (window.checkEntityUGCollisions ? window.checkEntityUGCollisions(ent, 'x') : false);
         if (ent.x < window.game.shoreX + 2000) { ent.x = window.game.shoreX + 2000; ent.vx = Math.abs(ent.vx); }
 
         ent.vy += window.game.gravity;
         ent.y  += ent.vy;
         window.checkEntityCollisions(ent, 'y');
+        if (window.checkEntityUGCollisions) window.checkEntityUGCollisions(ent, 'y');
 
         const entGY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
-        if (ent.y + ent.height >= entGY) { ent.y = entGY - ent.height; ent.vy = 0; }
-        else if (ent.vy >= 0 && ent.y + ent.height >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
+        // Solo snap superficial cuando la entidad está cerca de la superficie.
+        // Bajo tierra, la gravedad y checkEntityCollisions la mantienen en el suelo de la cueva.
+        const _eCol = Math.floor((ent.x + ent.width * 0.5) / window.game.blockSize);
+        const _eCD  = window.getTerrainCol ? window.getTerrainCol(_eCol) : null;
+        const _eTopY = (_eCD && _eCD.type !== 'hole') ? _eCD.topY : (window.game.baseGroundLevel || 510);
+        const _eFeetNear = (ent.y + ent.height) < _eTopY + window.game.blockSize * 1.5;
+        if (_eFeetNear) {
+            if (ent.y + ent.height >= entGY)      { ent.y = entGY - ent.height; ent.vy = 0; }
+            else if (ent.vy >= 0 && ent.y + ent.height >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
+        }
 
         window.applyStairPhysicsEntity(ent);
 
@@ -322,7 +348,18 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
 
         // ── Huida de antorcha ─────────────────────────────────────────────────
         const repelTorch = isHoldingTorch && minDist < 250 && ent.level <= 3 && target === window.player;
-        if (repelTorch) {
+        // Antorchas clavadas: ahuyentan a monstruos cuyo nivel ≤ nivel del jugador + 2
+        const _playerLevel = window.player?.level || 1;
+        let _placedTorchRepel = false;
+        if (!repelTorch && window.blocks) {
+            for (const _ptb of window.blocks) {
+                if (_ptb.type !== 'placed_torch') continue;
+                const _ptDist = Math.hypot((ent.x + ent.width/2) - (_ptb.x + (window.game?.blockSize||64)/2),
+                                           (ent.y + ent.height/2) - (_ptb.y + (window.game?.blockSize||64)/2));
+                if (_ptDist < 200 && ent.level <= _playerLevel + 2) { _placedTorchRepel = true; break; }
+            }
+        }
+        if (repelTorch || _placedTorchRepel) {
             ent.aiState  = 'flee'; ent.fleeCool = 90;
             ent.vx = ent.x > targetCX ? 1.8 : -1.8;
             ent.ignorePlayer = 60;
@@ -429,6 +466,47 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             // ── Desatascar: atacar bloque obstructor ──────────────────────────
             if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
+
+                // Detectar si hay un escalón pequeño o puerta inmediatamente adelante
+                if (ent.stuckFrames > 4 && isGrounded) {
+                    const bs     = window.game.blockSize;
+                    const feetY  = ent.y + ent.height;
+                    const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
+
+                    // ¿Hay un bloque cuyo techo está ≤ 1 bloque sobre el suelo actual? → salto de escalón
+                    const stepBlock = window.blocks.find(b => {
+                        if (b.type === 'ladder') return false;
+                        const bh = b.type === 'door' ? bs * 2 : bs;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
+                    });
+                    if (stepBlock) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
+
+                    // ¿Hay una puerta cerrada? → intentar abrir o saltar por encima
+                    const doorBlock = window.blocks.find(b => {
+                        if (b.type !== 'door' || b.open) return false;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               ent.y + ent.height >= b.y && ent.y <= b.y + bs * 2;
+                    });
+                    if (doorBlock) {
+                        // Zombies y lobos intentan romperla
+                        if (ent.attackCooldown <= 0 && (ent.type === 'zombie' || ent.type === 'wolf')) {
+                            const dmg = ent.damage * 0.7;
+                            doorBlock.hp = (doorBlock.hp || doorBlock.maxHp || 100) - dmg;
+                            window.setHit(doorBlock);
+                            window.spawnParticles(doorBlock.x + bs/2, doorBlock.y + bs, '#c8a050', 3, 0.4);
+                            if (doorBlock.hp <= 0) window.destroyBlockLocally(doorBlock);
+                            else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
+                            ent.attackCooldown = ent.type === 'zombie' ? 80 : 55;
+                            ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
+                        } else if (ent.stuckFrames > 15) {
+                            // Si no puede romperla, intenta saltar por encima
+                            ent.vy = -11;
+                            ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
+                        }
+                    }
+                }
+
                 if (ent.stuckFrames > 10 && isGrounded) ent.vy = ent.type === 'zombie' ? -7 : -9;
 
                 // Buscar bloque destructible que está bloqueando el paso
@@ -568,6 +646,22 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             // Desatascar
             if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && Math.abs(ent.vx) > 0.05)) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
+
+                // Detectar escalón pequeño
+                if (ent.stuckFrames > 4 && isGrounded) {
+                    const bs     = window.game.blockSize;
+                    const mvDir  = ent.vx >= 0 ? 1 : -1;
+                    const feetY  = ent.y + ent.height;
+                    const checkX = ent.x + (mvDir > 0 ? ent.width + 4 : -4);
+                    const stepBlock = window.blocks.find(b => {
+                        if (b.type === 'ladder') return false;
+                        const bh = b.type === 'door' ? bs * 2 : bs;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
+                    });
+                    if (stepBlock) { ent.vy = -7; ent.stuckFrames = 0; }
+                }
+
                 if (ent.stuckFrames > 20 && isGrounded) ent.vy = -7;
                 if (ent.stuckFrames > 55) {
                     ent.ignorePlayer = 60; ent.stuckFrames = 0;
@@ -614,9 +708,20 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
 
         const aggroRange  = isNight ? 750 : 420;
         const repelTorch  = isHoldingTorch && minDist < 240 && target === window.player;
+        // Antorchas clavadas también ahuyentan lobos si nivel ≤ player+2
+        const _pLvlW = window.player?.level || 1;
+        let _ptRepelWolf = false;
+        if (!repelTorch && window.blocks) {
+            for (const _ptb2 of window.blocks) {
+                if (_ptb2.type !== 'placed_torch') continue;
+                const _ptd2 = Math.hypot((ent.x+ent.width/2)-(_ptb2.x+(window.game?.blockSize||64)/2),
+                                          (ent.y+ent.height/2)-(_ptb2.y+(window.game?.blockSize||64)/2));
+                if (_ptd2 < 200 && ent.level <= _pLvlW + 2) { _ptRepelWolf = true; break; }
+            }
+        }
 
         // ── Huida del fuego (override de cualquier estado) ──────────────────
-        if (repelTorch) {
+        if (repelTorch || _ptRepelWolf) {
             ent.wolfState      = 'cooldown';
             ent.wolfStateTimer = 120;
             ent.ignorePlayer   = 120;
@@ -676,12 +781,49 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             // Desatascar — con abandon si lleva demasiado tiempo bloqueado
             if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
+
+                // Detectar escalón pequeño adelante → saltar inmediatamente
+                if (ent.stuckFrames > 3 && isGrounded) {
+                    const bs     = window.game.blockSize;
+                    const dirX   = target.x > ent.x ? 1 : -1;
+                    const feetY  = ent.y + ent.height;
+                    const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
+                    const stepBlock = window.blocks.find(b => {
+                        if (b.type === 'ladder') return false;
+                        const bh = b.type === 'door' ? bs * 2 : bs;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
+                    });
+                    if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; }
+
+                    // Puerta → intentar romperla (lobo) o saltar por encima
+                    const dirX2  = target.x > ent.x ? 1 : -1;
+                    const doorBlock = window.blocks.find(b => {
+                        if (b.type !== 'door' || b.open) return false;
+                        return checkX >= b.x && checkX <= b.x + bs &&
+                               ent.y + ent.height >= b.y && ent.y <= b.y + bs * 2;
+                    });
+                    if (doorBlock && ent.attackCooldown <= 0) {
+                        const dmg = ent.damage * 0.6;
+                        doorBlock.hp = (doorBlock.hp || doorBlock.maxHp || 100) - dmg;
+                        window.setHit(doorBlock);
+                        window.spawnParticles(doorBlock.x + bs/2, doorBlock.y + bs, '#c8a050', 3, 0.4);
+                        if (doorBlock.hp <= 0) window.destroyBlockLocally(doorBlock);
+                        else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
+                        ent.attackCooldown = 55;
+                        ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
+                    } else if (doorBlock && ent.stuckFrames > 15) {
+                        ent.vy = -12; ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
+                    }
+                }
+
                 if (ent.stuckFrames > 10 && isGrounded) { ent.vy = -10; }
                 if (ent.stuckFrames > 70) {
                     // Abandonar target, retroceder y revaluar
                     ent.wolfState      = 'cooldown';
                     ent.wolfStateTimer = 60;
-                    ent.vx             = -dirX * 1.5;
+                    const dX           = target.x > ent.x ? 1 : -1;
+                    ent.vx             = -dX * 1.5;
                     ent.stuckFrames    = 0;
                     ent.ignorePlayer   = 60;
                 }
@@ -716,6 +858,21 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 // Salto de obstáculo durante la carga
                 if ((hitWall || Math.abs(ent.x - lastX) < 0.1) && isGrounded) {
                     ent.stuckFrames = (ent.stuckFrames || 0) + 1;
+
+                    // Detectar escalón → saltar inmediatamente sin contar stuckFrames
+                    if (ent.stuckFrames > 2) {
+                        const bs     = window.game.blockSize;
+                        const feetY  = ent.y + ent.height;
+                        const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
+                        const stepBlock = window.blocks.find(b => {
+                            if (b.type === 'ladder') return false;
+                            const bh = b.type === 'door' ? bs * 2 : bs;
+                            return checkX >= b.x && checkX <= b.x + bs &&
+                                   b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
+                        });
+                        if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; }
+                    }
+
                     if (ent.stuckFrames > 8)  { ent.vy = -9; }
                     if (ent.stuckFrames > 55) {
                         ent.wolfState = 'cooldown'; ent.wolfStateTimer = 45;

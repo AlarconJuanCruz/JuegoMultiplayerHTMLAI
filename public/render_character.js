@@ -67,7 +67,10 @@ window.drawCharacter = function(charData, isLocal) {
     
     if (isLocal) {
         isClimbing = charData.isClimbing && !charData.isGrounded;
-        isJumping = !charData.isGrounded && !isClimbing;
+        // Require significant vertical velocity to show jumping animation.
+        // This prevents the jump pose flickering when walking down stairs
+        // (where isGrounded briefly becomes false between stair snaps).
+        isJumping = !charData.isGrounded && !isClimbing && (charData.vy || 0) > 2.5;
         const isMovingH = Math.abs(charData.vx || 0) > 0.1 && !isJumping && !isClimbing;
         isRunning = isMovingH && !!(charData.isSprinting);
         window._charIsWalking = isMovingH && !isRunning; // flag para animación caminata
@@ -141,7 +144,7 @@ window.drawCharacter = function(charData, isLocal) {
     if (!isClimbing) {
     if (charData.activeTool === 'torch') {
         armR = -Math.PI / 2.5; elbowR = -0.3; 
-    } else if (charData.activeTool === 'bow' && charData.isAiming) {
+    } else if ((charData.activeTool === 'bow' || charData.activeTool === 'molotov') && charData.isAiming) {
         aimAngle = Math.atan2(targetY - (pCY - 42 - bob), isFacingR ? (targetX - pCX) : -(targetX - pCX));
         armR = aimAngle - Math.PI/2; elbowR = 0; armL = aimAngle - Math.PI/2 + 0.3; elbowL = -1.5; torsoR = aimAngle * 0.2; headR = aimAngle * 0.3;
     } else if (charData.attackFrame > 0) {
@@ -175,10 +178,64 @@ window.drawCharacter = function(charData, isLocal) {
         window.ctx.rotate(Math.PI/2); window.ctx.strokeStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.lineWidth = 3; window.ctx.beginPath(); window.ctx.arc(0, 0, 15, -Math.PI/2.5, Math.PI/2.5); window.ctx.stroke();
         let pull = charData.isAiming ? ((charData.chargeLevel || 0) / 100) * 15 : 0; window.ctx.strokeStyle = '#eee'; window.ctx.lineWidth = 1; window.ctx.beginPath(); window.ctx.moveTo(4.6, -14.2); window.ctx.lineTo(4.6 - pull, 0); window.ctx.lineTo(4.6, 14.2); window.ctx.stroke();
         if (charData.isCharging && (isLocal ? charData.inventory.arrows > 0 : true)) { window.ctx.fillStyle = '#eee'; window.ctx.fillRect(4.6 - pull, -1, 20 + pull, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(4.6 - pull + 20 + pull, -2, 4, 4); }
-    } else if (!isClimbing && charData.activeTool === 'torch') {
-        window.ctx.rotate(Math.PI/2); window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513'; window.ctx.fillRect(-2, -20, 4, 25); let fSize = 5 + Math.random() * 3;
-        window.ctx.fillStyle = charData.inBackground ? '#888' : '#e67e22'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize, 0, Math.PI*2); window.ctx.fill();
-        window.ctx.fillStyle = charData.inBackground ? '#aaa' : '#f1c40f'; window.ctx.beginPath(); window.ctx.arc(0, -22, fSize*0.6, 0, Math.PI*2); window.ctx.fill();
+    } else if (!isClimbing && charData.activeTool === 'molotov') {
+        // Botella molotov en mano
+        const C2 = window.ctx;
+        const hasMolotov = isLocal ? (charData.inventory.molotov || 0) > 0 : true;
+        if (hasMolotov) {
+            const charge = (charData.chargeLevel || 0) / 100;
+            // Rotate bottle when charging (wind-up)
+            if (charData.isCharging) {
+                C2.rotate(-0.6 - charge * 0.9);
+            } else if (charData.isAiming) {
+                C2.rotate(-0.5);
+            } else {
+                C2.rotate(Math.PI / 2);
+            }
+            // Bottle body - green glass
+            C2.fillStyle = '#2d6b1e';
+            C2.beginPath();
+            C2.roundRect(-5, -16, 10, 18, [3, 3, 5, 5]);
+            C2.fill();
+            // Glass highlight
+            C2.fillStyle = 'rgba(120,220,80,0.35)';
+            C2.fillRect(-3, -15, 3, 8);
+            // Bottle neck
+            C2.fillStyle = '#1e4a12';
+            C2.beginPath();
+            C2.roundRect(-2.5, -23, 5, 8, 2);
+            C2.fill();
+            // Wick/flame at top
+            const flickerSize = 3.5 + Math.sin((window.game?.frameCount || 0) * 0.28 + (charData.phase || 0)) * 1.2;
+            C2.fillStyle = '#ff7700';
+            C2.beginPath();
+            C2.ellipse(0, -25, flickerSize, flickerSize * 1.4, 0, 0, Math.PI * 2);
+            C2.fill();
+            C2.fillStyle = '#ffee44';
+            C2.beginPath();
+            C2.ellipse(0, -26, flickerSize * 0.55, flickerSize * 0.85, 0, 0, Math.PI * 2);
+            C2.fill();
+        }
+    } else if (!isClimbing && (charData.activeTool === 'torch' || charData.activeTool === 'torch_item')) {
+        // Palito de antorcha — llama solo si torchLit
+        const _lit = charData.torchLit;
+        const _fc = window.game?.frameCount || 0;
+        const _tf = _lit ? (0.9 + Math.sin(_fc * 0.21 + (charData.x||0)*0.001) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04) : 1;
+        const fSize = 5 * _tf;
+        window.ctx.rotate(Math.PI/2);
+        // Palo
+        window.ctx.fillStyle = charData.inBackground ? '#4a250a' : '#8B4513';
+        window.ctx.fillRect(-2, -20, 4, 25);
+        // Punta de la antorcha (mecha con trapo)
+        window.ctx.fillStyle = charData.inBackground ? '#5a3010' : '#a0522d';
+        window.ctx.fillRect(-3, -22, 6, 5);
+        if (_lit) {
+            // Llama encendida
+            window.ctx.fillStyle = charData.inBackground ? '#888' : '#e67e22';
+            window.ctx.beginPath(); window.ctx.arc(0, -22, fSize, 0, Math.PI*2); window.ctx.fill();
+            window.ctx.fillStyle = charData.inBackground ? '#aaa' : '#f1c40f';
+            window.ctx.beginPath(); window.ctx.arc(0, -22, fSize*0.6, 0, Math.PI*2); window.ctx.fill();
+        }
     } else if (!isClimbing && charData.activeTool && charData.activeTool !== 'hand') {
         window.ctx.rotate(Math.PI/2); 
         if (charData.activeTool === 'axe' || charData.activeTool === 'hammer' || charData.activeTool === 'pickaxe') {

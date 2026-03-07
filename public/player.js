@@ -4,23 +4,29 @@ window.useTool = function() {
     if (window.player.activeTool === 'hand') return;
     const tool = window.player.activeTool;
     const maxDur = window.toolMaxDurability[tool];
-    if (!maxDur) return; 
-    
-    if (typeof window.player.toolHealth[tool] !== 'number' || isNaN(window.player.toolHealth[tool])) {
+    if (!maxDur) return;
+
+    // Si la salud de la herramienta no existe, es NaN, o es 0/negativa al inicio
+    // de un uso (herramienta recién fabricada sin reset), reiniciar al máximo
+    if (typeof window.player.toolHealth[tool] !== 'number'
+        || isNaN(window.player.toolHealth[tool])
+        || window.player.toolHealth[tool] <= 0) {
         window.player.toolHealth[tool] = maxDur;
     }
-    
+
     window.player.toolHealth[tool]--;
-    
+
     if(window.renderToolbar) window.renderToolbar();
-    
+
     if (window.player.toolHealth[tool] <= 0) {
         let availIdx = window.player.availableTools.indexOf(tool);
         if(availIdx > -1) window.player.availableTools.splice(availIdx, 1);
 
         window.spawnDamageText(window.player.x + window.player.width/2, window.player.y - 20, `¡${window.toolDefs[tool].name} Rota!`, '#ff4444');
         window.player.toolbar[window.player.activeSlot] = null;
-        window.selectToolbarSlot(0); 
+        // Limpiar la salud para que la próxima fabricación empiece desde cero
+        delete window.player.toolHealth[tool];
+        window.selectToolbarSlot(0);
         if(window.updateUI) window.updateUI();
         if(window.renderToolbar) window.renderToolbar();
     }

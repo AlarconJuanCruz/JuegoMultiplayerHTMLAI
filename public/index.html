@@ -165,6 +165,31 @@
                                 <span id="vol-sfx-solo-val" style="font-family:var(--font-ui);font-size:17px;color:#5bb4f5;width:38px;text-align:right;">70%</span>
                             </div>
                         </div>
+                        <!-- Controles de gráficos -->
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+                            <div style="font-family:var(--font-display);font-size:16px;color:#5bb4f5;margin-bottom:10px;letter-spacing:0.06em;">🎨 GRÁFICOS</div>
+                            <div style="display:flex;gap:6px;">
+                                <button id="gfx-low" onclick="window.setGraphicsQuality('low')"
+                                    style="flex:1;padding:7px 4px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);
+                                           background:rgba(255,255,255,0.05);color:#8a9ab5;font-family:var(--font-ui);
+                                           font-size:16px;font-weight:700;cursor:pointer;transition:all 0.15s;">
+                                    ⚡ Bajo
+                                </button>
+                                <button id="gfx-medium" onclick="window.setGraphicsQuality('medium')"
+                                    style="flex:1;padding:7px 4px;border-radius:6px;border:1px solid rgba(91,180,245,0.35);
+                                           background:rgba(91,180,245,0.12);color:#5bb4f5;font-family:var(--font-ui);
+                                           font-size:16px;font-weight:700;cursor:pointer;transition:all 0.15s;">
+                                    ⚙️ Medio
+                                </button>
+                                <button id="gfx-high" onclick="window.setGraphicsQuality('high')"
+                                    style="flex:1;padding:7px 4px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);
+                                           background:rgba(255,255,255,0.03);color:#5a6475;font-family:var(--font-ui);
+                                           font-size:16px;font-weight:700;cursor:pointer;transition:all 0.15s;">
+                                    ✨ Alto
+                                </button>
+                            </div>
+                            <div id="gfx-desc" style="font-family:var(--font-ui);font-size:16px;color:#5a6475;margin-top:6px;min-height:14px;text-align:center;"></div>
+                        </div>
                         <button id="btn-single" class="action-btn" style="font-size:18px;padding:10px;margin-top:auto;">🕹️ Jugar Solo (Offline)</button>
                     </div>
 
@@ -270,7 +295,7 @@
                      background:rgba(5,10,16,0.92); backdrop-filter:blur(14px);
                      border:1px solid rgba(61,220,132,0.25); border-left:2px solid #3ddc84;
                      border-radius:8px; padding:6px 12px;
-                     font-family:var(--font-ui); font-size:21px; font-weight:600;
+                     font-family:var(--font-ui); font-size:17px; font-weight:600;
                      color:var(--text-main); letter-spacing:0.02em; white-space:nowrap;">
                     🟢 <span id="sv-ip" style="color:#3ddc84; font-weight:700;">Local</span>
                     <span style="color:rgba(255,255,255,0.2);">│</span>
@@ -279,7 +304,7 @@
                     <button onclick="window.togglePlayerList()"
                         style="background:linear-gradient(135deg,rgba(100,10,10,0.9),rgba(70,5,5,0.95));
                                color:#ff9090; border:1px solid rgba(200,50,50,0.4); border-radius:5px;
-                               padding:5px 11px; cursor:pointer; font-size:20px; font-weight:700;
+                               padding:5px 11px; cursor:pointer; font-size:16px; font-weight:700;
                                font-family:var(--font-ui); letter-spacing:0.02em; pointer-events:auto;"
                         onmouseover="this.style.background='linear-gradient(135deg,rgba(160,15,15,0.95),rgba(110,5,5,0.99))'"
                         onmouseout="this.style.background='linear-gradient(135deg,rgba(100,10,10,0.9),rgba(70,5,5,0.95))'">
@@ -296,14 +321,14 @@
                     <div style="padding:8px 12px 7px; border-bottom:1px solid rgba(180,40,40,0.2);
                                 display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-family:var(--font-display); font-size:18px; letter-spacing:0.1em;
-                                     color:#e07070; text-transform:uppercase; font-weight:700; font-size:20px;">⚔ Duelos PVP</span>
+                                     color:#e07070; text-transform:uppercase; font-weight:700;">⚔ Duelos PVP</span>
                         <button onclick="window.togglePlayerList()"
                             style="background:transparent; border:none; color:#555; cursor:pointer;
-                                   font-size:21px; line-height:1; padding:0 2px; pointer-events:auto;"
+                                   font-size:17px; line-height:1; padding:0 2px; pointer-events:auto;"
                             onmouseover="this.style.color='#e07070'" onmouseout="this.style.color='#555'">✕</button>
                     </div>
                     <div id="pvp-player-list-inner" style="padding:8px 10px; max-height:220px; overflow-y:auto;">
-                        <div style="color:#5a6475; font-size:20px; text-align:center; padding:14px 0;
+                        <div style="color:#5a6475; font-size:17px; text-align:center; padding:14px 0;
                                     font-family:var(--font-ui);">Sin jugadores en línea</div>
                     </div>
                 </div>
@@ -321,15 +346,15 @@
                  border:1px solid rgba(240,160,48,0.3);border-top:2px solid #f0a030;border-radius:10px;
                  min-width:270px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.85);">
                 <div style="padding:11px 16px 9px;border-bottom:1px solid rgba(240,160,48,0.12);display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-family:var(--font-display);font-size:22px;letter-spacing:0.06em;color:#f0a030;text-transform:uppercase;font-weight:700;">☰ Servidor</span>
-                    <button onclick="window.toggleServerMenu()" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:21px;padding:0 2px;pointer-events:auto;" onmouseover="this.style.color='#f0a030'" onmouseout="this.style.color='#555'">✕</button>
+                    <span style="font-family:var(--font-display);font-size:18px;letter-spacing:0.06em;color:#f0a030;text-transform:uppercase;font-weight:700;">☰ Servidor</span>
+                    <button onclick="window.toggleServerMenu()" style="background:transparent;border:none;color:#555;cursor:pointer;font-size:17px;padding:0 2px;pointer-events:auto;" onmouseover="this.style.color='#f0a030'" onmouseout="this.style.color='#555'">✕</button>
                 </div>
-                <div id="server-menu-info" style="padding:9px 16px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:var(--font-ui);font-size:20px;color:#5a6475;line-height:1.8;"></div>
+                <div id="server-menu-info" style="padding:9px 16px;border-bottom:1px solid rgba(255,255,255,0.05);font-family:var(--font-ui);font-size:16px;color:#5a6475;line-height:1.8;"></div>
                 <div style="padding:10px 12px;display:flex;flex-direction:column;gap:7px;">
-                    <button onclick="window.copyInviteLink()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(61,220,132,0.3);background:rgba(61,220,132,0.08);color:#3ddc84;font-family:var(--font-ui);font-size:20px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
+                    <button onclick="window.copyInviteLink()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(61,220,132,0.3);background:rgba(61,220,132,0.08);color:#3ddc84;font-family:var(--font-ui);font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
                         🔗 Copiar Link de Invitación
                     </button>
-                    <div id="invite-link-display" style="display:none;background:rgba(0,0,0,0.45);border:1px solid rgba(61,220,132,0.2);border-radius:6px;padding:8px 10px;font-family:monospace;font-size:18px;color:#3ddc84;word-break:break-all;line-height:1.5;"></div>
+                    <div id="invite-link-display" style="display:none;background:rgba(0,0,0,0.45);border:1px solid rgba(61,220,132,0.2);border-radius:6px;padding:8px 10px;font-family:monospace;font-size:16px;color:#3ddc84;word-break:break-all;line-height:1.5;"></div>
                     <!-- Controles de volumen in-game -->
                     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:7px;padding:10px 12px;margin-top:2px;">
                         <div style="font-family:var(--font-display);font-size:15px;color:#f0a030;margin-bottom:8px;letter-spacing:0.05em;">🔊 AUDIO</div>
@@ -348,7 +373,7 @@
                             <span id="vol-sfx-ig-val" style="font-family:var(--font-ui);font-size:16px;color:#5bb4f5;width:34px;text-align:right;">70%</span>
                         </div>
                     </div>
-                    <button onclick="window.leaveServer()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(220,60,60,0.3);background:rgba(220,60,60,0.07);color:#e07070;font-family:var(--font-ui);font-size:20px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
+                    <button onclick="window.leaveServer()" style="width:100%;padding:10px 14px;border-radius:7px;border:1px solid rgba(220,60,60,0.3);background:rgba(220,60,60,0.07);color:#e07070;font-family:var(--font-ui);font-size:16px;font-weight:700;cursor:pointer;letter-spacing:0.02em;pointer-events:auto;">
                         🚪 Salir del Servidor
                     </button>
                 </div>
@@ -366,7 +391,7 @@
                         <span id="stat-notif" class="stat-notif">!</span>
                     </div>
                     <button class="toggle-btn" onclick="window.toggleMenu('crafting')">⚒️ Crafteo</button>
-                    <button id="btn-server-menu" class="toggle-btn" onclick="window.toggleServerMenu()" style="display:none; color:#f0a030; border-color:rgba(240,160,48,0.35); background:linear-gradient(180deg,rgba(28,16,4,0.85),rgba(18,10,2,0.9));">☰ Sala</button>
+                    <button id="btn-settings-menu" class="toggle-btn" onclick="window.toggleServerMenu()" style="color:#8ab4f8; border-color:rgba(138,180,248,0.3); background:linear-gradient(180deg,rgba(8,14,28,0.85),rgba(4,8,18,0.9));">☰ Menú</button>
                     <button id="btn-help" class="toggle-btn" style="padding: 5px 8px;">?</button>
                 </div>
 
@@ -405,7 +430,7 @@
                               backdrop-filter: blur(14px);
                               color: #eef2ff;
                               font-family: var(--font-ui);
-                              font-size: 20px; font-weight: 500;
+                              font-size: 16px; font-weight: 500;
                               outline: none; text-align: center;
                               box-shadow: 0 8px 28px rgba(0,0,0,0.7), 0 0 0 3px rgba(61,220,132,0.07);">
             </div>
@@ -413,11 +438,11 @@
             <div id="interaction-prompt"><span id="prompt-text"></span></div>
 
             <div id="placement-overlay"
-                 style="display:none; position:absolute; top:60%; left:50%;
+                 style="display:none; position:absolute; top:67%; left:50%;
                         transform:translate(-50%,-50%); text-align:center; pointer-events:none;">
                 MODO UBICACIÓN
                 <br>
-                <span style="font-family: var(--font-ui); font-size: 18px; font-weight:500; color:#5a6475; letter-spacing:0.06em;">
+                <span style="font-family: var(--font-ui); font-size: 20px; font-weight:500; color:#5a6475; letter-spacing:0.06em;">
                     Clic Izq: Colocar &nbsp;·&nbsp; Clic Der: Cancelar
                 </span>
             </div>
@@ -445,7 +470,7 @@
                 </div>
                 <div class="inv-split">
                     <div class="inv-left">
-                        <div style="font-size:18px; color:#5a6475; margin-bottom:8px; text-align:center; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">
+                        <div style="font-size:16px; color:#5a6475; margin-bottom:8px; text-align:center; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">
                             Mochila — arrastra al cinturón
                         </div>
                         <div id="inventory-grid"></div>
@@ -498,18 +523,18 @@
                 </div>
                 <div class="inv-split">
                     <div class="inv-left">
-                        <div style="font-size:18px; color:#5a6475; margin-bottom:8px; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Tu mochila</div>
+                        <div style="font-size:16px; color:#5a6475; margin-bottom:8px; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Tu mochila</div>
                         <div class="inv-grid" id="box-player-grid"></div>
                     </div>
                     <div class="inv-right">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <div style="font-size:18px; color:#5a6475; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Contenido</div>
-                            <button id="btn-take-all-box" class="action-btn mini" style="font-size:18px; padding:3px 8px;" onclick="window.takeAllFromBox()">Agarrar todo</button>
+                            <div style="font-size:16px; color:#5a6475; font-family:var(--font-ui); letter-spacing:0.08em; text-transform:uppercase;">Contenido</div>
+                            <button id="btn-take-all-box" class="action-btn mini" style="font-size:16px; padding:3px 8px;" onclick="window.takeAllFromBox()">Agarrar todo</button>
                         </div>
                         <div class="inv-grid" id="box-storage-grid"></div>
                     </div>
                 </div>
-                <div style="font-size:18px; color:#5a6475; text-align:center; margin-top:8px; font-family:var(--font-ui);">
+                <div style="font-size:16px; color:#5a6475; text-align:center; margin-top:8px; font-family:var(--font-ui);">
                     🖱️ Clic = mover 1 &nbsp;·&nbsp; Clic derecho = mover 10
                 </div>
             </div>
@@ -571,12 +596,16 @@
                 <input type="text" id="craft-search" class="search-bar" placeholder="🔍 Buscar receta…">
                 <div id="craft-list">
                     <div id="tab-herramientas">
-                        <div class="craft-item" data-name="antorcha luz">
+                        <div class="craft-item" data-name="antorcha luz torch">
                             <div class="craft-header">
                                 <span class="craft-title">🔥 Antorcha</span>
-                                <span id="req-torch" class="req-text"></span>
+                                <span id="req-torch" class="req-text">5 Mad. + 2 Tela = x1</span>
                             </div>
-                            <button id="btn-craft-torch" class="action-btn mini">Fabricar · 5 Mad. + 2 Tela</button>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                              <button id="btn-craft-torch"  class="action-btn mini">×1</button>
+                              <button id="btn-craft-torch3" class="action-btn mini">×3</button>
+                              <button id="btn-craft-torch5" class="action-btn mini">×5</button>
+                            </div>
                         </div>
                         <div class="craft-item" data-name="hacha">
                             <div class="craft-header">
@@ -676,7 +705,7 @@
                                 <span class="craft-title">🏹 Torreta</span>
                                 <span id="req-turret" class="req-text"></span>
                             </div>
-                            <div style="font-size:18px; color:#888; margin-bottom:6px; font-family:var(--font-ui);">
+                            <div style="font-size:16px; color:#888; margin-bottom:6px; font-family:var(--font-ui);">
                                 Dispara flechas automáticamente. Cargala con [E].
                             </div>
                             <button id="btn-craft-turret" class="action-btn mini">Fabricar · 60 Mad. + 20 Pie.</button>
@@ -694,7 +723,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 10px; background:rgba(0,0,0,0.3); border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                     <span style="font-weight:600;">🎯 Flechas cargadas</span>
                     <strong id="turret-arrow-count" style="color:var(--gold); min-width:30px; text-align:center;">0</strong>
-                    <span style="font-size:18px; color:#666;">/ 50</span>
+                    <span style="font-size:16px; color:#666;">/ 50</span>
                 </div>
                 <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
                     <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('add1')">+1</button>
@@ -702,7 +731,7 @@
                     <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('add10')">+10</button>
                     <button class="action-btn mini" style="flex:1;" onclick="window.turretAction('addAll')">+ Todas</button>
                 </div>
-                <div style="font-size:18px; color:#5a6475; text-align:center; font-family:var(--font-ui);">
+                <div style="font-size:16px; color:#5a6475; text-align:center; font-family:var(--font-ui);">
                     Alcance: 420px · Cadencia: 3s · Daño: 18 · Cap: 50 flechas
                 </div>
             </div>
@@ -718,6 +747,56 @@
 </script>
 
 <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script>
+// Stubs tempranos para evitar errores de onclick antes de que ui.js cargue
+window.showMenuTab = window.showMenuTab || function(tab) {
+    var solo  = document.getElementById('panel-solo');
+    var multi = document.getElementById('panel-multi');
+    var tSolo = document.getElementById('tab-solo');
+    var tMulti= document.getElementById('tab-multi');
+    if (!solo || !multi) return;
+    solo.style.display  = tab === 'solo'  ? 'flex' : 'none';
+    multi.style.display = tab === 'multi' ? 'flex' : 'none';
+    if (tSolo)  tSolo.style.opacity  = tab === 'solo'  ? '1' : '0.5';
+    if (tMulti) tMulti.style.opacity = tab === 'multi' ? '1' : '0.5';
+};
+
+// ── Sistema de calidad gráfica ────────────────────────────────────────────────
+const _gfxDescs = {
+    low:    '⚡ Sin parallax ni efectos — máximo rendimiento',
+    medium: '⚙️ Parallax, pasto animado, lluvia, partículas',
+    high:   '✨ Bloom, niebla, color grading, pasto denso'
+};
+const _gfxActiveStyle = {
+    low:    { border:'rgba(240,200,60,0.45)',  bg:'rgba(240,200,60,0.12)',  color:'#f0c840' },
+    medium: { border:'rgba(91,180,245,0.45)',  bg:'rgba(91,180,245,0.12)',  color:'#5bb4f5' },
+    high:   { border:'rgba(61,220,132,0.45)',  bg:'rgba(61,220,132,0.12)',  color:'#3ddc84' }
+};
+const _gfxInactiveStyle = { border:'rgba(255,255,255,0.08)', bg:'rgba(255,255,255,0.03)', color:'#5a6475' };
+
+window.setGraphicsQuality = function(q) {
+    localStorage.setItem('gfxQuality', q);
+    if (window.game) window.game.graphicsQuality = q;
+    // Invalidar caché del parallax al cambiar calidad
+    if (window._bgParCache) { window._bgParCache = {}; window._bgParCacheFrame = {}; }
+    ['low','medium','high'].forEach(function(k) {
+        var btn = document.getElementById('gfx-' + k);
+        if (!btn) return;
+        var s = k === q ? _gfxActiveStyle[k] : _gfxInactiveStyle;
+        btn.style.borderColor  = s.border;
+        btn.style.background   = s.bg;
+        btn.style.color        = s.color;
+    });
+    var desc = document.getElementById('gfx-desc');
+    if (desc) desc.textContent = _gfxDescs[q] || '';
+};
+
+// Inicializar botones con el valor guardado
+document.addEventListener('DOMContentLoaded', function() {
+    var saved = localStorage.getItem('gfxQuality') || 'medium';
+    window.setGraphicsQuality(saved);
+});
+</script>
 <script src="data.js"></script>
 <script src="terrain.js"></script>
 <script src="inventory.js"></script>
@@ -745,6 +824,7 @@
     const THROTTLE = {
         hit_tree:130, hit_rock:110, hit_block:120, hit_entity:90,
         player_hit:180, arrow_shoot:80, arrow_stick:120, arrow_break:100,
+        throw_molotov:100, explosion:200,
         arrow_hit_flesh:100, door:350, pickup:70, craft:400,
         level_up:600, menu_open:200, build:180, eat:500,
         jump:250, land:200, enemy_die:200, tree_fall:300
@@ -779,7 +859,8 @@
     }
     function gain(vol, dur) {
         const g = _ctx.createGain();
-        g.gain.setValueAtTime(vol, _ctx.currentTime);
+        const v = vol * (typeof _sfxVol !== 'undefined' ? _sfxVol : 0.7);
+        g.gain.setValueAtTime(v, _ctx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.0001, _ctx.currentTime + dur);
         g.connect(_ctx.destination);
         return g;
@@ -874,6 +955,26 @@
             osc.connect(lpf); lpf.connect(g); src2.connect(g);
             osc.start(t); osc.stop(t+0.30); src2.start(t);
 
+        } else if (type === 'throw_molotov') {
+            // Sonido de lanzamiento: vidrio + whoosh
+            const buf=noise(0.18); const d=buf.getChannelData(0);
+            for (let i=0;i<d.length;i++){const s=i/_ctx.sampleRate; d[i]=d[i]*Math.exp(-s*28)*0.6+Math.sin(2*Math.PI*220*s)*Math.exp(-s*12)*0.3;}
+            const src=_ctx.createBufferSource(); src.buffer=buf;
+            const lpf=_ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1800;
+            src.connect(lpf); lpf.connect(gain(0.36,0.18)); src.start();
+
+        } else if (type === 'explosion') {
+            // Explosión molotov: ruido bajo + crackle
+            const dur=0.55; const buf2=noise(dur); const d2=buf2.getChannelData(0);
+            for (let i=0;i<d2.length;i++){const s=i/_ctx.sampleRate; d2[i]=d2[i]*Math.pow(1-s/dur,1.8)*0.9;}
+            const src2=_ctx.createBufferSource(); src2.buffer=buf2;
+            const lpf2=_ctx.createBiquadFilter(); lpf2.type='lowpass'; lpf2.frequency.value=420;
+            // Onda de choque baja
+            const osc2=_ctx.createOscillator(); osc2.type='sine';
+            osc2.frequency.setValueAtTime(90,t); osc2.frequency.exponentialRampToValueAtTime(28,t+0.45);
+            src2.connect(lpf2); lpf2.connect(gain(0.70,0.55)); src2.start();
+            osc2.connect(gain(0.55,0.45)); osc2.start(t); osc2.stop(t+0.45);
+
         } else if (type === 'build') {
             [0,0.07].forEach((delay,i)=>{
                 const buf=noise(0.10); const d=buf.getChannelData(0);
@@ -944,19 +1045,16 @@
     // ── Volumen global ─────────────────────────────────────────────────────
     let _sfxVol  = parseFloat(localStorage.getItem('sfx_vol')  ?? '0.7');
     let _musicVol= parseFloat(localStorage.getItem('music_vol') ?? '0.4');
-    let _masterGain = _ctx.createGain();
-    _masterGain.gain.value = _sfxVol;
-    _masterGain.connect(_ctx.destination);
 
-    // Redirigir gain() al masterGain para SFX
-    const _origGain = gain;
-    function gainSFX(vol, dur) {
+    // Redefinir gain() para que TODOS los sonidos respeten el volumen SFX
+    // (sobreescribe la función original del closure)
+    gain = function(vol, dur) {
         const g = _ctx.createGain();
         g.gain.setValueAtTime(vol * _sfxVol, _ctx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.0001, _ctx.currentTime + dur);
         g.connect(_ctx.destination);
         return g;
-    }
+    };
 
     window.setSFXVolume = function(v) {
         _sfxVol = Math.max(0, Math.min(1, v));

@@ -15,50 +15,138 @@ window.checkBlockCollisions = function (axis) {
     const p  = window.player;
     const bs = window.game.blockSize;
 
+    // ── 1. Bloques construidos (bloques colocados por jugadores) ────────────────
     for (const b of window.blocks) {
         if (
             (b.type === 'door' && b.open) ||
             b.type === 'box'      || b.type === 'campfire' ||
             b.type === 'bed'      || b.type === 'grave'    ||
-            b.type === 'barricade'|| b.type === 'ladder'
+            b.type === 'barricade'|| b.type === 'ladder'   ||
+            b.type === 'placed_torch'  // antorcha plantada: solo visual, sin colisión
         ) continue;
 
         const itemHeight = b.type === 'door' ? bs * 2 : bs;
 
-        // ── Escalones: solo colisionar en eje Y cuando el jugador viene cayendo
-        //    y su centro X está dentro del ancho del escalón
         if (b.type === 'stair') {
             if (axis !== 'y') continue;
-            if (p.vy <= 0) continue; // solo caída
+            if (p.vy <= 0) continue;
             const pCX = p.x + p.width / 2;
             if (pCX < b.x || pCX > b.x + bs) continue;
-            // Calcular altura de rampa en la posición del jugador
-            const relX = pCX - b.x;
-            const frac = b.facingRight ? (relX / bs) : (1 - relX / bs);
+            const relX  = pCX - b.x;
+            const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
             const rampY = b.y + bs - frac * bs;
-            // Solo detener si el jugador iba a cruzar la superficie de la rampa
-            if (p.y + p.height >= rampY && p.y + p.height <= rampY + p.vy + 4) {
-                p.y = rampY - p.height;
-                p.vy = 0;
-                p.isGrounded = true;
+            const footY = p.y + p.height;
+            if (footY >= rampY - 2 && footY <= rampY + p.vy + 6) {
+                p.y = rampY - p.height; p.vy = 0; p.isGrounded = true;
             }
             continue;
         }
 
-        // En eje Y usamos rectángulo más estrecho para evitar clip en esquinas
         const checkX = axis === 'y' ? p.x + 2   : p.x;
         const checkW = axis === 'y' ? p.width - 4 : p.width;
-
         if (!window.checkRectIntersection(checkX, p.y, checkW, p.height, b.x, b.y, bs, itemHeight)) continue;
 
         if (axis === 'x') {
-            if (p.y + p.height <= b.y + 14) continue;   // step-over sin clip
-            if (p.vx > 0)      p.x = b.x - p.width - 0.1;
-            else if (p.vx < 0) p.x = b.x + bs + 0.1;
-            p.vx = 0;
+            // Step-over para bloques construidos en superficie: permitir escalón de 1 bloque
+            // Solo cuando la diferencia de altura es pequeña Y el espacio encima está libre
+            const stepH = bs * 0.55;
+            const isStep = b.y >= p.y + p.height - stepH;
+            if (isStep) {
+                // Verificar que no hay bloque sólido encima (o sea, es un escalón real)
+                const hasAbove = window.blocks.some(ob =>
+                    ob !== b &&
+                    ob.type !== 'ladder' && ob.type !== 'stair' &&
+                    ob.type !== 'box'    && ob.type !== 'campfire' &&
+                    ob.type !== 'bed'    && !(ob.type === 'door' && ob.open) &&
+                    Math.abs(ob.x - b.x) < 2 && Math.abs(ob.y - (b.y - bs)) < 2
+                );
+                if (!hasAbove) {
+                    p.y = b.y - p.height; p.vy = 0; p.isGrounded = true;
+                } else {
+                    if (p.vx > 0)      p.x = b.x - p.width - 0.1;
+                    else if (p.vx < 0) p.x = b.x + bs + 0.1;
+                    p.vx = 0;
+                }
+            } else {
+                if (p.vx > 0)      p.x = b.x - p.width - 0.1;
+                else if (p.vx < 0) p.x = b.x + bs + 0.1;
+                p.vx = 0;
+            }
         } else {
             if (p.vy > 0) { p.y = b.y - p.height; p.vy = 0; p.isGrounded = true; }
             else if (p.vy < 0) { p.y = b.y + itemHeight + 0.1; p.vy = 0; }
+        }
+    }
+
+    // ── 2. Colisión con celdas UG (terreno subterráneo generado/minado) ─────────
+    //
+    // DISEÑO:
+    //   • Gate: columna CENTRAL del jugador.  Si los pies están en superficie, omitir.
+    //   • Eje Y cayendo: aterrizar cuando los pies cruzan el techo de la celda.
+    //     Solo si los pies están ≤ bs+vy debajo del techo (evita snap de celdas lejanas).
+    //   • Eje Y subiendo: rebotar cuando la CABEZA (p.y) toca la base de una celda.
+    //     Condición: p.y < cellY + bs (cabeza está por encima de la base de la celda).
+    //   • Eje X: bloquear si la celda cubre el torso (cellY < pFeetY - 2).
+    //     Ignora celdas de suelo para no bloquear el movimiento horizontal.
+    //
+    if (!window.getUGCellV || !window.getTerrainCol) return;
+
+    const _midCol = Math.floor((p.x + p.width * 0.5) / bs);
+    const _cdMid  = window.getTerrainCol(_midCol);
+    if (!_cdMid || _cdMid.type === 'hole') return;
+    const _surfY  = _cdMid.topY;
+
+    const pFeetY = p.y + p.height;
+    if (pFeetY <= _surfY + bs * 0.25) return;  // en superficie, snap se encarga
+
+    const UG_DEPTH = window.UG_MAX_DEPTH || 90;
+    const colL = Math.floor(p.x / bs);
+    const colR = Math.floor((p.x + p.width - 1) / bs);
+
+    for (let vc = colL; vc <= colR; vc++) {
+        const cd = window.getTerrainCol(vc);
+        if (!cd || cd.type === 'hole') continue;
+        const topY  = cd.topY;
+        const cellX = vc * bs;
+
+        const rowStart = Math.max(0, Math.floor((p.y - topY) / bs) - 1);
+        const rowEnd   = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs) + 1);
+        if (rowEnd < 0) continue;
+
+        for (let vr = rowStart; vr <= rowEnd; vr++) {
+            const mat = window.getUGCellV(vc, vr);
+            if (!mat || mat === 'air') continue;
+
+            const cellY = topY + vr * bs;
+            // Ignorar celdas por encima de la superficie de la columna central
+            if (cellY < _surfY) continue;
+
+            if (axis === 'x') {
+                // Solo bloquear si la celda cubre el torso (no el suelo)
+                if (cellY >= pFeetY - 2) continue;
+                if (!window.checkRectIntersection(p.x, p.y, p.width, p.height, cellX, cellY, bs, bs)) continue;
+                if (p.vx > 0) { p.x = cellX - p.width - 0.1; p.vx = 0; }
+                else if (p.vx < 0) { p.x = cellX + bs + 0.1; p.vx = 0; }
+
+            } else { // axis === 'y'
+                if (!window.checkRectIntersection(p.x + 2, p.y, p.width - 4, p.height, cellX, cellY, bs, bs)) continue;
+
+                if (p.vy >= 0) {
+                    // Cayendo / en suelo: aterrizar encima de la celda.
+                    // Solo si los pies ya pasaron el techo de la celda.
+                    if (pFeetY < cellY - 1) continue;
+                    p.y = cellY - p.height;
+                    p.vy = 0;
+                    p.isGrounded = true;
+                } else {
+                    // Subiendo: rebotar contra la BASE de la celda (techo).
+                    // La cabeza debe estar DENTRO de la celda (p.y < cellY + bs)
+                    // y no haber pasado al otro lado (p.y > cellY → ya dentro o saliendo).
+                    if (p.y >= cellY + bs) continue;  // celda está debajo de la cabeza, no es techo
+                    p.y  = cellY + bs + 0.1;
+                    p.vy = 0;
+                }
+            }
         }
     }
 };
@@ -108,7 +196,8 @@ window.checkEntityCollisions = function (ent, axis) {
         if (
             (b.type === 'door' && b.open) ||
             b.type === 'box'   || b.type === 'campfire' ||
-            b.type === 'bed'   || b.type === 'grave'
+            b.type === 'bed'   || b.type === 'grave'    ||
+            b.type === 'placed_torch'
         ) continue;
 
         const itemHeight = b.type === 'door' ? bs * 2 : bs;
@@ -171,6 +260,71 @@ window.checkEntityCollisions = function (ent, axis) {
     return hitWall;
 };
 
+// ─── Colisión entidades con celdas UG (piedra, tierra, carbón, etc.) ──────────
+//
+// Todos los materiales sólidos (stone, dirt, coal, sulfur, diamond, bedrock)
+// detienen a las entidades igual — sin importar el tipo.
+// Se llama inmediatamente después de checkEntityCollisions en el loop de entidades.
+//
+window.checkEntityUGCollisions = function (ent, axis) {
+    if (!window.getUGCellV || !window.getTerrainCol) return false;
+    const bs = window.game.blockSize;
+
+    // Gate: columna central de la entidad
+    const _midCol = Math.floor((ent.x + ent.width * 0.5) / bs);
+    const _cd     = window.getTerrainCol(_midCol);
+    if (!_cd || _cd.type === 'hole') return false;
+    const _surfY  = _cd.topY;
+
+    const eFeetY = ent.y + ent.height;
+    // Solo actuar cuando los pies están bajo la superficie
+    if (eFeetY <= _surfY + bs * 0.25) return false;
+
+    const UG_DEPTH = window.UG_MAX_DEPTH || 90;
+    const colL = Math.floor(ent.x / bs);
+    const colR = Math.floor((ent.x + ent.width - 1) / bs);
+    let hitWall = false;
+
+    for (let vc = colL; vc <= colR; vc++) {
+        const cd = window.getTerrainCol(vc);
+        if (!cd || cd.type === 'hole') continue;
+        const topY  = cd.topY;
+        const cellX = vc * bs;
+
+        const rowStart = Math.max(0, Math.floor((ent.y - topY) / bs) - 1);
+        const rowEnd   = Math.min(UG_DEPTH - 1, Math.floor((eFeetY - topY) / bs) + 1);
+        if (rowEnd < 0) continue;
+
+        for (let vr = rowStart; vr <= rowEnd; vr++) {
+            const mat = window.getUGCellV(vc, vr);
+            if (!mat || mat === 'air') continue;
+
+            const cellY = topY + vr * bs;
+            if (cellY < _surfY) continue;
+
+            if (axis === 'x') {
+                if (cellY >= eFeetY - 2) continue;  // celda de suelo, no pared
+                if (!window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, cellX, cellY, bs, bs)) continue;
+                if (ent.vx > 0) { ent.x = cellX - ent.width - 0.1; ent.vx *= -1; }
+                else if (ent.vx < 0) { ent.x = cellX + bs + 0.1; ent.vx *= -1; }
+                hitWall = true;
+            } else {
+                if (!window.checkRectIntersection(ent.x + 1, ent.y, ent.width - 2, ent.height, cellX, cellY, bs, bs)) continue;
+                if (ent.vy >= 0) {
+                    if (eFeetY < cellY - 1) continue;
+                    ent.y  = cellY - ent.height;
+                    ent.vy = 0;
+                } else {
+                    if (ent.y >= cellY + bs) continue;
+                    ent.y  = cellY + bs + 0.1;
+                    ent.vy = 0;
+                }
+            }
+        }
+    }
+    return hitWall;
+};
+
 // ─── Rampas de escalones ───────────────────────────────────────────────────────
 
 /** Aplica snap de rampa al jugador. Llamar tras checkBlockCollisions('y'). */
@@ -186,26 +340,28 @@ window.applyStairPhysicsPlayer = function () {
         const relX = pCX - b.x;
         if (relX < 0 || relX > bs) continue;
 
-        // El jugador tiene que estar dentro del rango vertical del bloque
-        if (p.y + p.height < b.y - 4)  continue;   // muy arriba
-        if (p.y > b.y + bs + 4)        continue;   // muy abajo
+        // Rango vertical: el pie del jugador debe estar cerca del bloque
+        if (p.y + p.height < b.y - 4)  continue;  // muy arriba del bloque
+        if (p.y > b.y + bs + 4)        continue;  // muy abajo del bloque
 
         const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
-        const rampY = b.y + bs - frac * bs;        // Y de la superficie en este punto
+        const rampY = b.y + bs - frac * bs;  // Y de la superficie de rampa
         const footY = p.y + p.height;
 
-        // Ventana de snap: el pie tiene que estar cerca de la superficie de la rampa
-        // Tolerancia superior ajustada (era bs*0.85, muy permisiva):
-        // - arriba: 6px para suavizar la subida
-        // - abajo: 12px para no penetrar al caer rápido
-        if (footY < rampY - 6 || footY > rampY + 12) continue;
+        // No snapear si el jugador salta hacia arriba (atravesaría el escalón)
+        if (p.vy < -1.5) continue;
 
-        // No aplicar snap si el jugador está saltando hacia arriba (evita pegar al techo)
-        if (p.vy < -1) continue;
+        // Ventana de snap: 
+        //   hacia arriba: 8px (jugador viene caminando plano y se sube a rampa)
+        //   hacia abajo: 28px (jugador desciende la rampa, puede acumular algo de vy)
+        const snapUp   = 8;
+        const snapDown = 28;
+        if (footY < rampY - snapUp)   continue;  // pie muy arriba
+        if (footY > rampY + snapDown) continue;  // pie muy abajo, pasó
 
         const newY = rampY - p.height;
 
-        // Verificar que no penetra en bloque sólido al hacer snap
+        // Verificar que no penetra en bloque sólido al snapear
         const blocked = window.blocks.some(d => {
             if (d === b) return false;
             if ((d.type === 'door' && d.open) || d.type === 'ladder' || d.type === 'stair') return false;
@@ -247,13 +403,16 @@ window.applyStairPhysicsEntity = function (ent) {
 
 /** @returns {boolean} */
 window.isOnLadder = function () {
-    const pCX = window.player.x + window.player.width / 2;
+    const p   = window.player;
+    const pCX = p.x + p.width / 2;
     const bs  = window.game.blockSize;
+    // Use center X with generous tolerance (±10px) so side-wall block pushes
+    // don't instantly drop the player off the ladder mid-climb.
     return window.blocks.some(b =>
         b.type === 'ladder' &&
-        pCX >= b.x && pCX <= b.x + bs &&
-        window.player.y + window.player.height > b.y &&
-        window.player.y < b.y + bs
+        pCX >= b.x - 10 && pCX <= b.x + bs + 10 &&
+        p.y + p.height > b.y - 6 &&
+        p.y < b.y + bs + 6
     );
 };
 
@@ -281,6 +440,7 @@ window.isAdjacentToBlockOrGround = function (x, y, w, h) {
     const bs          = window.game.blockSize;
     const groundGridY = Math.ceil((window.getGroundY ? window.getGroundY(x + w / 2) : window.game.groundLevel) / bs) * bs;
 
+    // Superficie: tocar el piso cuenta como adyacente
     if (y + h >= groundGridY) return true;
 
     for (const b of window.blocks) {
@@ -288,362 +448,158 @@ window.isAdjacentToBlockOrGround = function (x, y, w, h) {
         const bh = b.type === 'door' ? bs * 2 : bs;
         if (window.checkRectIntersection(x - 2, y - 2, w + 4, h + 4, b.x, b.y, bs, bh)) return true;
     }
+
+    // Underground: también contar celdas UG sólidas adyacentes
+    if (window.getUGCellV && window.getTerrainCol) {
+        // Comprobar las 4 celdas vecinas (arriba, abajo, izq, der)
+        const checkUGSolid = (wx, wy) => {
+            const col = Math.floor(wx / bs);
+            const cd2 = window.getTerrainCol(col);
+            if (!cd2 || cd2.type === 'hole') return false;
+            const row = Math.floor((wy - cd2.topY) / bs);
+            if (row < 0) return false;
+            const mat = window.getUGCellV(col, row);
+            return mat && mat !== 'air';
+        };
+        const cx = x + w / 2, cy = y + h / 2;
+        if (checkUGSolid(cx,       y - 1))     return true; // arriba
+        if (checkUGSolid(cx,       y + h + 1)) return true; // abajo
+        if (checkUGSolid(x - 1,    cy))         return true; // izquierda
+        if (checkUGSolid(x + w + 1, cy))        return true; // derecha
+    }
+
     return false;
 };
+
+// Devuelve true si la posición (x,y,w,h) está underground (bajo la topY del terreno).
+function _isUnderground(x, y, w, h) {
+    if (!window.getTerrainCol) return false;
+    const bs = window.game.blockSize;
+    const col = Math.floor((x + w / 2) / bs);
+    const cd  = window.getTerrainCol(col);
+    if (!cd || cd.type === 'hole') return false;
+    return y >= cd.topY;
+}
 
 /**
  * Valida si una celda es un lugar válido para colocar un bloque/objeto.
- * @param {number} x @param {number} y @param {number} w @param {number} h
- * @param {boolean} [requireAdjacency=true]
- * @param {boolean} [isStructure=false] — true para block/door/stair
- * @returns {boolean}
+ * Funciona tanto en superficie como underground (cuevas).
  */
 window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStructure = false) {
-    const bs          = window.game.blockSize;
-    const groundGridY = Math.ceil((window.getGroundY ? window.getGroundY(x + w / 2) : window.game.groundLevel) / bs) * bs;
-    const absMaxY     = window.game.baseGroundLevel + 3 * bs;
+    const bs = window.game.blockSize;
 
-    if (y > groundGridY)   return false;
-    if (y + h > absMaxY)   return false;
+    // ── Detección de contexto: ¿surface o underground? ──────────────────────
+    const underground = _isUnderground(x, y, w, h);
 
-    if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
+    if (!underground) {
+        // ── Reglas de SUPERFICIE (sin cambios) ──────────────────────────────
+        const groundGridY = Math.ceil((window.getGroundY ? window.getGroundY(x + w / 2) : window.game.groundLevel) / bs) * bs;
+        const absMaxY     = window.game.baseGroundLevel + 3 * bs;
 
-    if (window.game.isMultiplayer && window.otherPlayers) {
-        for (const id in window.otherPlayers) {
-            const op = window.otherPlayers[id];
-            if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width || 24, op.height || 40)) return false;
-        }
-    }
+        if (y > groundGridY)   return false;
+        if (y + h > absMaxY)   return false;
 
-    const isItem = !isStructure;
-    const isDoor = isStructure && h > bs;
-
-    if (isDoor) {
-        const gyL = Math.ceil((window.getGroundY ? window.getGroundY(x - bs / 2)      : window.game.groundLevel) / bs) * bs;
-        const gyR = Math.ceil((window.getGroundY ? window.getGroundY(x + bs + bs / 2) : window.game.groundLevel) / bs) * bs;
-        if (gyL < y + h || gyR < y + h) return false;
-        const lBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x - bs)) < 1 && b.y < y + h && b.y + bs > y);
-        const rBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x + bs)) < 1 && b.y < y + h && b.y + bs > y);
-        if (lBlocked && rBlocked) return false;
-    }
-
-    if (isItem || isDoor) {
-        const supported =
-            y + h >= groundGridY ||
-            window.blocks.some(b =>
-                (b.type === 'block' || b.type === 'ladder' || b.type === 'stair') &&
-                Math.abs(b.x - x) < 1 &&
-                Math.abs(b.y - (y + h)) < bs / 2
+        const isOnGround = Math.abs(y + h - groundGridY) < bs * 0.6;
+        if (isOnGround && window.getTerrainIsFlat) {
+            const isFlat = window.getTerrainIsFlat(x + w / 2);
+            const hasBlockBelow = window.blocks.some(b =>
+                (b.type === 'block' || b.type === 'stair') &&
+                Math.abs(b.x - x) < bs - 1 &&
+                Math.abs(b.y - (y + h)) < 4
             );
-        if (!supported) return false;
-    }
-
-    for (const b of window.blocks) {
-        if (b.type === 'ladder') continue;
-        const bh = b.type === 'door' ? bs * 2 : bs;
-        if (b.type === 'door' && !isDoor && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < 1) continue;
-        if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
-
-        const hAdj = Math.abs(x - (b.x - bs)) < 1 || Math.abs(x - (b.x + bs)) < 1;
-        const vOvl = y < b.y + bh && y + h > b.y;
-        if (hAdj && vOvl && (isDoor || b.type === 'door')) return false;
-        if (isDoor && b.type === 'door' && Math.abs(b.x - x) < 1 && (Math.abs(b.y - (y + h)) < 1 || Math.abs((b.y + bh) - y) < 1)) return false;
-        if (isItem && ['box','campfire','bed','grave','barricade'].includes(b.type) && Math.abs(b.x - x) < bs && Math.abs(b.y - (y + h)) < 1) return false;
-    }
-
-    for (const t of window.trees) {
-        const tFY = window.getGroundY ? window.getGroundY(t.x + t.width / 2) : (t.groundY || t.y + t.height);
-        const th  = t.isStump ? 80 : t.height;
-        if (window.checkRectIntersection(x, y, w, h, t.x, tFY - th, t.width, th)) return false;
-    }
-
-    for (const r of window.rocks) {
-        const rFY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
-        if (window.checkRectIntersection(x, y, w, h, r.x, rFY - r.height, r.width, r.height)) return false;
-    }
-
-    if (requireAdjacency && !window.isAdjacentToBlockOrGround(x, y, w, h)) return false;
-    return true;
-};
-// Extraído de game.js. Depende de: window.game, window.player, window.blocks,
-// window.trees, window.rocks, window.otherPlayers, window.getGroundY,
-// window.checkRectIntersection
-
-// ─── Colisiones jugador ────────────────────────────────────────────────────────
-
-/**
- * Resuelve colisiones del jugador contra bloques sólidos en un eje dado.
- * Llamar primero con 'x', luego mover en Y, luego con 'y'.
- * @param {'x'|'y'} axis
- */
-window.checkBlockCollisions = function (axis) {
-    if (window.player.inBackground) return;
-    const p  = window.player;
-    const bs = window.game.blockSize;
-
-    for (const b of window.blocks) {
-        if (
-            (b.type === 'door' && b.open) ||
-            b.type === 'box'      || b.type === 'campfire' ||
-            b.type === 'bed'      || b.type === 'grave'    ||
-            b.type === 'barricade'|| b.type === 'ladder'   ||
-            b.type === 'stair'
-        ) continue;
-
-        const itemHeight = b.type === 'door' ? bs * 2 : bs;
-        // En eje Y usamos rectángulo más estrecho para evitar clip en esquinas
-        const checkX = axis === 'y' ? p.x + 2   : p.x;
-        const checkW = axis === 'y' ? p.width - 4 : p.width;
-
-        if (!window.checkRectIntersection(checkX, p.y, checkW, p.height, b.x, b.y, bs, itemHeight)) continue;
-
-        if (axis === 'x') {
-            if (p.y + p.height <= b.y + 14) continue;   // step-over sin clip
-            if (p.vx > 0)      p.x = b.x - p.width - 0.1;
-            else if (p.vx < 0) p.x = b.x + bs + 0.1;
-            p.vx = 0;
-        } else {
-            if (p.vy > 0) { p.y = b.y - p.height; p.vy = 0; p.isGrounded = true; }
-            else if (p.vy < 0) { p.y = b.y + itemHeight + 0.1; p.vy = 0; }
+            if (!isFlat && !hasBlockBelow) return false;
         }
-    }
-};
 
-/**
- * Resuelve colisiones de una entidad contra bloques sólidos.
- * @param {object} ent
- * @param {'x'|'y'} axis
- * @returns {boolean} hitWall
- */
-window.checkEntityCollisions = function (ent, axis) {
-    let hitWall = false;
-    const bs = window.game.blockSize;
+        if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
+        if (window.game.isMultiplayer && window.otherPlayers) {
+            for (const id in window.otherPlayers) {
+                const op = window.otherPlayers[id];
+                if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width || 24, op.height || 40)) return false;
+            }
+        }
 
-    for (let i = window.blocks.length - 1; i >= 0; i--) {
-        const b = window.blocks[i];
-        if (
-            (b.type === 'door' && b.open) ||
-            b.type === 'box'   || b.type === 'campfire' ||
-            b.type === 'bed'   || b.type === 'grave'    ||
-            b.type === 'stair'
-        ) continue;
+        const isDoor = isStructure && h > bs;
+        const isItem = !isStructure;
 
-        const itemHeight = b.type === 'door' ? bs * 2 : bs;
-        if (!window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, b.x, b.y, bs, itemHeight)) continue;
+        if (isDoor) {
+            const gyL = Math.ceil((window.getGroundY ? window.getGroundY(x - bs / 2)      : window.game.groundLevel) / bs) * bs;
+            const gyR = Math.ceil((window.getGroundY ? window.getGroundY(x + bs + bs / 2) : window.game.groundLevel) / bs) * bs;
+            if (gyL < y + h || gyR < y + h) return false;
+            const lBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x - bs)) < 1 && b.y < y + h && b.y + bs > y);
+            const rBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x + bs)) < 1 && b.y < y + h && b.y + bs > y);
+            if (lBlocked && rBlocked) return false;
+        }
 
-        if (axis === 'x') {
-            if (ent.y + ent.height <= b.y + 12) continue;
-            if (ent.vx > 0)      { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; }
-            else if (ent.vx < 0) { ent.x = b.x + bs;        ent.vx *= -1; hitWall = true; }
+        if (isItem || isDoor) {
+            const supported =
+                y + h >= groundGridY ||
+                window.blocks.some(b =>
+                    (b.type === 'block' || b.type === 'ladder' || b.type === 'stair') &&
+                    Math.abs(b.x - x) < 1 &&
+                    Math.abs(b.y - (y + h)) < bs / 2
+                );
+            if (!supported) return false;
+        }
 
-            // Entidades atacan puertas
-            if ((ent.type === 'zombie' || ent.type === 'spider') && b.type === 'door') {
-                if (window.game.frameCount % 40 === 0) {
-                    b.hp -= 20;
-                    window.setHit(b);
-                    window.spawnParticles(b.x + 10, b.y + 10, '#ff4444', 5);
-                    if (b.hp <= 0) window.destroyBlockLocally(b);
-                    else window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 20 });
+        for (const b of window.blocks) {
+            if (b.type === 'ladder') continue;
+            const bh = b.type === 'door' ? bs * 2 : bs;
+            if (b.type === 'door' && !isDoor && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < 1) continue;
+            if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
+            const hAdj = Math.abs(x - (b.x - bs)) < 1 || Math.abs(x - (b.x + bs)) < 1;
+            const vOvl = y < b.y + bh && y + h > b.y;
+            if (hAdj && vOvl && (isDoor || b.type === 'door')) return false;
+            if (isDoor && b.type === 'door' && Math.abs(b.x - x) < 1 && (Math.abs(b.y - (y + h)) < 1 || Math.abs((b.y + bh) - y) < 1)) return false;
+            if (isItem && ['box','campfire','bed','grave','barricade'].includes(b.type) && Math.abs(b.x - x) < bs && Math.abs(b.y - (y + h)) < 1) return false;
+        }
+
+        for (const t of window.trees) {
+            const tFY = window.getGroundY ? window.getGroundY(t.x + t.width / 2) : (t.groundY || t.y + t.height);
+            const th  = t.isStump ? 80 : t.height;
+            if (window.checkRectIntersection(x, y, w, h, t.x, tFY - th, t.width, th)) return false;
+        }
+        for (const r of window.rocks) {
+            const rFY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
+            if (window.checkRectIntersection(x, y, w, h, r.x, rFY - r.height, r.width, r.height)) return false;
+        }
+
+        if (requireAdjacency && !window.isAdjacentToBlockOrGround(x, y, w, h)) return false;
+        return true;
+
+    } else {
+        // ── Reglas UNDERGROUND (dentro de cuevas) ───────────────────────────
+        // No puede solapar al jugador ni a otros jugadores
+        if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
+        if (window.game.isMultiplayer && window.otherPlayers) {
+            for (const id in window.otherPlayers) {
+                const op = window.otherPlayers[id];
+                if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width || 24, op.height || 40)) return false;
+            }
+        }
+
+        // No puede estar dentro de una celda UG sólida
+        if (window.getUGCellV && window.getTerrainCol) {
+            const col = Math.floor((x + w / 2) / bs);
+            const cd  = window.getTerrainCol(col);
+            if (cd && cd.type !== 'hole') {
+                const row = Math.floor((y - cd.topY) / bs);
+                if (row >= 0) {
+                    const mat = window.getUGCellV(col, row);
+                    if (mat && mat !== 'air') return false;
                 }
             }
-
-            // Entidades atacan barricadas y reciben daño
-            if ((ent.type === 'spider' || ent.type === 'zombie') && b.type === 'barricade') {
-                if (window.game.frameCount % 40 === 0) {
-                    const dmgB = ent.type === 'spider' ? 8 : 15;
-                    const dmgE = ent.type === 'spider' ? 6 : 4;
-                    b.hp -= dmgB; window.setHit(b);
-                    window.spawnParticles(b.x + 15, b.y + 15, '#ff4444', 4);
-                    if (b.hp <= 0) window.destroyBlockLocally(b);
-                    else window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: dmgB });
-                    ent.hp -= dmgE; window.setHit(ent);
-                    window.spawnParticles(ent.x + ent.width / 2, ent.y + ent.height / 2, '#ffa500', 3);
-                    window.spawnDamageText(ent.x + ent.width / 2, ent.y - 4, `-${dmgE}`, 'melee');
-                }
-                hitWall = true;
-            }
-        } else {
-            if (ent.vy > 0)      { ent.y = b.y - ent.height;    ent.vy = 0; }
-            else if (ent.vy < 0) { ent.y = b.y + itemHeight;    ent.vy = 0; }
         }
-    }
-    return hitWall;
-};
 
-// ─── Rampas de escalones ───────────────────────────────────────────────────────
-
-/** Aplica snap de rampa al jugador. Llamar tras checkBlockCollisions('y'). */
-window.applyStairPhysicsPlayer = function () {
-    if (window.player.isDead || window.player.inBackground) return;
-    const bs = window.game.blockSize;
-
-    for (const b of window.blocks) {
-        if (b.type !== 'stair') continue;
-        const relX = (window.player.x + window.player.width / 2) - b.x;
-        if (relX < 0 || relX > bs) continue;
-        if (window.player.y + window.player.height < b.y - 2) continue;
-        if (window.player.y > b.y + bs) continue;
-
-        const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
-        const rampY = b.y + bs - frac * bs;
-        const footY = window.player.y + window.player.height;
-
-        if (footY >= rampY - 4 && footY <= rampY + bs * 0.85) {
-            const newY = rampY - window.player.height;
-            const blocked = window.blocks.some(d =>
-                d.type === 'door' && !d.open &&
-                window.checkRectIntersection(window.player.x, newY, window.player.width, window.player.height, d.x, d.y, bs, bs * 2)
-            );
-            if (!blocked) {
-                window.player.y  = newY;
-                window.player.vy = 0;
-                window.player.isGrounded = true;
-            }
+        // No puede solapar bloques ya existentes
+        for (const b of window.blocks) {
+            if (b.type === 'ladder') continue;
+            const bh = b.type === 'door' ? bs * 2 : bs;
+            if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
         }
+
+        // Debe ser adyacente a celda UG sólida o bloque ya construido
+        if (requireAdjacency && !window.isAdjacentToBlockOrGround(x, y, w, h)) return false;
+
+        return true;
     }
-};
-
-/** Aplica snap de rampa a una entidad. */
-window.applyStairPhysicsEntity = function (ent) {
-    if (Math.abs(ent.vx) <= 0.05) return;
-    const bs = window.game.blockSize;
-
-    for (const b of window.blocks) {
-        if (b.type !== 'stair') continue;
-        const relX = (ent.x + ent.width / 2) - b.x;
-        if (relX < 0 || relX > bs) continue;
-        if (ent.y + ent.height < b.y - 2 || ent.y + ent.height > b.y + bs + 4) continue;
-
-        const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
-        const rampY = b.y + bs - frac * bs;
-        const footY = ent.y + ent.height;
-
-        if (footY >= rampY - 2 && footY <= rampY + bs * 0.8) {
-            ent.y  = rampY - ent.height;
-            ent.vy = 0;
-        }
-    }
-};
-
-// ─── Escalera ─────────────────────────────────────────────────────────────────
-
-/** @returns {boolean} */
-window.isOnLadder = function () {
-    const pCX = window.player.x + window.player.width / 2;
-    const bs  = window.game.blockSize;
-    return window.blocks.some(b =>
-        b.type === 'ladder' &&
-        pCX >= b.x && pCX <= b.x + bs &&
-        window.player.y + window.player.height > b.y &&
-        window.player.y < b.y + bs
-    );
-};
-
-// ─── Validación de placement ───────────────────────────────────────────────────
-
-/** @returns {boolean} */
-window.isOverlappingSolidBlock = function () {
-    const bs = window.game.blockSize;
-    for (const b of window.blocks) {
-        if (
-            (b.type === 'door' && b.open) ||
-            b.type === 'box'       || b.type === 'campfire' ||
-            b.type === 'bed'       || b.type === 'grave'    ||
-            b.type === 'barricade' || b.type === 'ladder'   ||
-            b.type === 'stair'
-        ) continue;
-        const h = b.type === 'door' ? bs * 2 : bs;
-        if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, bs, h)) return true;
-    }
-    return false;
-};
-
-/** @returns {boolean} */
-window.isAdjacentToBlockOrGround = function (x, y, w, h) {
-    const bs          = window.game.blockSize;
-    const groundGridY = Math.ceil((window.getGroundY ? window.getGroundY(x + w / 2) : window.game.groundLevel) / bs) * bs;
-
-    if (y + h >= groundGridY) return true;
-
-    for (const b of window.blocks) {
-        if (b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue;
-        const bh = b.type === 'door' ? bs * 2 : bs;
-        if (window.checkRectIntersection(x - 2, y - 2, w + 4, h + 4, b.x, b.y, bs, bh)) return true;
-    }
-    return false;
-};
-
-/**
- * Valida si una celda es un lugar válido para colocar un bloque/objeto.
- * @param {number} x @param {number} y @param {number} w @param {number} h
- * @param {boolean} [requireAdjacency=true]
- * @param {boolean} [isStructure=false] — true para block/door/stair
- * @returns {boolean}
- */
-window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStructure = false) {
-    const bs          = window.game.blockSize;
-    const groundGridY = Math.ceil((window.getGroundY ? window.getGroundY(x + w / 2) : window.game.groundLevel) / bs) * bs;
-    const absMaxY     = window.game.baseGroundLevel + 3 * bs;
-
-    if (y > groundGridY)   return false;
-    if (y + h > absMaxY)   return false;
-
-    if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
-
-    if (window.game.isMultiplayer && window.otherPlayers) {
-        for (const id in window.otherPlayers) {
-            const op = window.otherPlayers[id];
-            if (window.checkRectIntersection(x, y, w, h, op.x, op.y, op.width || 24, op.height || 40)) return false;
-        }
-    }
-
-    const isItem = !isStructure;
-    const isDoor = isStructure && h > bs;
-
-    if (isDoor) {
-        const gyL = Math.ceil((window.getGroundY ? window.getGroundY(x - bs / 2)      : window.game.groundLevel) / bs) * bs;
-        const gyR = Math.ceil((window.getGroundY ? window.getGroundY(x + bs + bs / 2) : window.game.groundLevel) / bs) * bs;
-        if (gyL < y + h || gyR < y + h) return false;
-        const lBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x - bs)) < 1 && b.y < y + h && b.y + bs > y);
-        const rBlocked = window.blocks.some(b => !['ladder','campfire','bed','grave'].includes(b.type) && Math.abs(b.x - (x + bs)) < 1 && b.y < y + h && b.y + bs > y);
-        if (lBlocked && rBlocked) return false;
-    }
-
-    if (isItem || isDoor) {
-        const supported =
-            y + h >= groundGridY ||
-            window.blocks.some(b =>
-                (b.type === 'block' || b.type === 'ladder' || b.type === 'stair') &&
-                Math.abs(b.x - x) < 1 &&
-                Math.abs(b.y - (y + h)) < bs / 2
-            );
-        if (!supported) return false;
-    }
-
-    for (const b of window.blocks) {
-        if (b.type === 'ladder') continue;
-        const bh = b.type === 'door' ? bs * 2 : bs;
-        if (b.type === 'door' && !isDoor && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < 1) continue;
-        if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
-
-        const hAdj = Math.abs(x - (b.x - bs)) < 1 || Math.abs(x - (b.x + bs)) < 1;
-        const vOvl = y < b.y + bh && y + h > b.y;
-        if (hAdj && vOvl && (isDoor || b.type === 'door')) return false;
-        if (isDoor && b.type === 'door' && Math.abs(b.x - x) < 1 && (Math.abs(b.y - (y + h)) < 1 || Math.abs((b.y + bh) - y) < 1)) return false;
-        if (isItem && ['box','campfire','bed','grave','barricade'].includes(b.type) && Math.abs(b.x - x) < bs && Math.abs(b.y - (y + h)) < 1) return false;
-    }
-
-    for (const t of window.trees) {
-        const tFY = window.getGroundY ? window.getGroundY(t.x + t.width / 2) : (t.groundY || t.y + t.height);
-        const th  = t.isStump ? 80 : t.height;
-        if (window.checkRectIntersection(x, y, w, h, t.x, tFY - th, t.width, th)) return false;
-    }
-
-    for (const r of window.rocks) {
-        const rFY = window.getGroundY ? window.getGroundY(r.x + r.width / 2) : (r.y + r.height);
-        if (window.checkRectIntersection(x, y, w, h, r.x, rFY - r.height, r.width, r.height)) return false;
-    }
-
-    if (requireAdjacency && !window.isAdjacentToBlockOrGround(x, y, w, h)) return false;
-    return true;
 };

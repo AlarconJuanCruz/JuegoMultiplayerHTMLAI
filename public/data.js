@@ -110,6 +110,10 @@ window.toolDefs = {
 window.itemDefs = {
     wood:          { name: 'Madera',            color: '#c19a6b', size: 12, maxStack: 500 },
     stone:         { name: 'Piedra',            color: '#999',    size: 10, maxStack: 500 },
+    dirt:          { name: 'Tierra',            color: '#7a5230', size: 10, maxStack: 500 },
+    coal:          { name: 'Carbón',            color: '#444',    size: 10, maxStack: 500 },
+    sulfur:        { name: 'Azufre',            color: '#c8b800', size: 10, maxStack: 200 },
+    diamond:       { name: 'Diamante',          color: '#7df9ff', size: 10, maxStack: 100 },
     meat:          { name: 'Carne Cruda',        color: '#ff5555', size: 10, maxStack: 100 },
     cooked_meat:   { name: 'Carne Asada',        color: '#c0392b', size: 11, maxStack: 100 },
     web:           { name: 'Tela Araña',         color: '#e0e0e0', size:  8, maxStack: 100 },
@@ -119,7 +123,9 @@ window.itemDefs = {
     bed_item:      { name: 'Cama',              color: '#8B0000', size: 16, maxStack:   1 },
     barricade_item:{ name: 'Barricada con Púas', color: '#8B4513', size: 14, maxStack:   5 },
     ladder_item:   { name: 'Escalera',          color: '#c8a86a', size: 14, maxStack:  20 },
-    turret_item:   { name: 'Torreta',            color: '#6b4c24', size: 14, maxStack:   3 }
+    turret_item:   { name: 'Torreta',            color: '#6b4c24', size: 14, maxStack:   3 },
+    molotov:       { name: '🍾 Molotov',          color: '#c0392b', size: 14, maxStack:  10 },
+    torch_item:    { name: 'Antorcha',           color: '#f39c12', size: 12, maxStack:  30 },
 };
 
 window.toolMaxDurability = {
@@ -133,7 +139,7 @@ window.player = {
     x: 250, y: 100, width: 24, height: 40,
     vx: 0, vy: 0,
     baseSpeed: 2.8, baseJump: -7.2, baseHp: 100, baseHunger: 100,
-    walkSpeed: 1.4,   // velocidad caminata (default)
+    walkSpeed: 1.2,   // velocidad caminata (default)
     runSpeed:  2.8,   // velocidad corriendo (shift)
     speed: 1.4, jumpPower: -7.2,
     hp: 100, maxHp: 100, hunger: 100, maxHunger: 100,
@@ -143,9 +149,11 @@ window.player = {
     isGrounded: false, coyoteTime: 0, isJumping: false,
     animTime: 0, jumpKeyReleased: true, isDead: false, bedPos: null,
     inventory: {
-        wood: 200, stone: 0, meat: 0, cooked_meat: 0, web: 10,
+        wood: 200, stone: 0, dirt: 0, coal: 0, sulfur: 0, diamond: 0,
+        meat: 0, cooked_meat: 0, web: 10,
         arrows: 0, boxes: 0, campfire_item: 0, bed_item: 0,
-        barricade_item: 0, ladder_item: 0, turret_item: 0
+        barricade_item: 0, ladder_item: 0, turret_item: 0,
+        molotov: 5, torch_item: 0
     },
     toolbar: ['hand', null, null, null, null, null],
     activeSlot: 0, activeTool: 'hand', availableTools: ['hand'],
@@ -174,6 +182,8 @@ window.removedRocks  = [];
 window.treeState     = {};
 window.killedEntities = [];
 window.stuckArrows   = [];
+window.fires         = [];      // { x, y, w, h, life, maxLife, intensity, fromBlock }
+window.scorchMarks   = [];      // { x, y, w, h, alpha, seed }
 window.currentOpenBox   = null;
 window.currentCampfire  = null;
 
@@ -240,4 +250,247 @@ window.spawnDamageText = function (x, y, text, color = '#ff4444') {
         ? text.replace(/-?\d+\.\d+/g, n => Math.round(parseFloat(n)).toString())
         : String(Math.round(text));
     window.damageTexts.push({ x, y, text: cleanText, life: 1.0, color });
+};
+
+// ─── Sistema Molotov / Fuego ───────────────────────────────────────────────────
+
+/**
+ * Crea un foco de fuego al impactar la molotov.
+ * Crea varias llamas y una marca de quemado en el suelo.
+ */
+window.spawnMolotovFire = function(impX, impY, isLocalPlayer) {
+    if (!isLocalPlayer) return;  // solo el dueño genera el fuego
+
+    const bs = window.game.blockSize;
+    // Radio de explosión: 2.5 bloques, escala leve con INT
+    const intBonus = (window.player.stats.int || 0) * 0.08;
+    const radius   = bs * (2.2 + intBonus);
+    // Fire duration: ~20s base (1200 frames) + int bonus. Scorch fades slower.
+    const fireDur  = 1200 + (window.player.stats.int || 0) * 60;
+
+    // Partículas de explosión
+    for (let i = 0; i < 22; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd   = 1.5 + Math.random() * 4;
+        window.particles.push({
+            x: impX, y: impY,
+            vx: Math.cos(angle) * spd,
+            vy: Math.sin(angle) * spd - 2,
+            life: 1.0, decay: 0.018 + Math.random() * 0.025,
+            color: Math.random() > 0.5 ? '#ff6600' : '#ffcc00',
+            size: 4 + Math.random() * 6
+        });
+    }
+    if (window.playSound) window.playSound('explosion');
+
+    // Marca de quemado en el suelo (scorch) — solo si impacta sobre terreno real
+    {
+        const groundY = window.getGroundY ? window.getGroundY(impX) : window.game.groundLevel;
+        const onGround = Math.abs(impY - groundY) < 30;
+        // Verificar que no hay un bloque sólido en el punto de impacto
+        const bs2 = window.game.blockSize;
+        const onBlock = window.blocks.some(b2 =>
+            b2.type !== 'ladder' && b2.type !== 'stair' &&
+            impX >= b2.x && impX <= b2.x + bs2 &&
+            impY >= b2.y && impY <= b2.y + bs2
+        );
+        if (onGround && !onBlock) {
+            window.scorchMarks.push({
+                x: impX - radius,
+                y: impY - 10,
+                w: radius * 2,
+                h: 22,
+                alpha: 0.80,
+                seed: Math.floor(impX * 7 + impY * 13) & 0xFFFF,
+                born: Date.now(),
+                lifetime: 150000 + Math.random() * 90000
+            });
+        }
+    }
+
+    // Crear focos de fuego en área: varios puntos dentro del radio
+    const fireCount = 6 + Math.floor(intBonus * 3);
+    for (let f = 0; f < fireCount; f++) {
+        const angle = (f / fireCount) * Math.PI * 2 + Math.random() * 0.8;
+        const dist  = radius * (0.2 + Math.random() * 0.85);
+        const fx    = impX + Math.cos(angle) * dist;
+        const fy    = window.getGroundY ? window.getGroundY(fx) : impY;
+        window.fires.push({
+            x: fx - 12, y: fy - 28,
+            w: 20 + Math.random() * 14,
+            h: 28 + Math.random() * 18,
+            life: fireDur * (0.6 + Math.random() * 0.6),
+            maxLife: fireDur,
+            intensity: 0.7 + Math.random() * 0.3,
+            seed: Math.floor(fx * 3 + fy * 7) & 0xFFFF,
+            phase: Math.random() * Math.PI * 2,   // para animación
+            damageTimer: 0
+        });
+        // Marca de quemado bajo cada foco
+        window.scorchMarks.push({
+            x: fx - 12, y: fy - 6,
+            w: 24 + Math.random() * 10,
+            h: 10 + Math.random() * 6,
+            alpha: 0.60 + Math.random() * 0.25,
+            seed: Math.floor(fx * 11 + fy * 5) & 0xFFFF,
+            born: Date.now(),
+            lifetime: 120000 + Math.random() * 60000
+        });
+    }
+
+    // Fuego central más grande
+    window.fires.push({
+        x: impX - 22, y: impY - 50,
+        w: 44, h: 50,
+        life: fireDur * 1.2,
+        maxLife: fireDur,
+        intensity: 1.0,
+        seed: Math.floor(impX * 5 + impY * 9) & 0xFFFF,
+        phase: 0,
+        damageTimer: 0
+    });
+};
+
+/**
+ * Actualiza los focos de fuego: reduce vida, daña entidades, daña bloques de madera.
+ * Llamar desde el loop principal.
+ */
+window.updateFires = function() {
+    const bs = window.game.blockSize;
+
+    for (let i = window.fires.length - 1; i >= 0; i--) {
+        const fire = window.fires[i];
+        fire.life--;
+        fire.phase += 0.12;
+        fire.damageTimer++;
+
+        // Emitir partículas de chispa ocasionales
+        if (Math.random() < 0.06 * fire.intensity) {
+            window.particles.push({
+                x: fire.x + fire.w * 0.3 + Math.random() * fire.w * 0.4,
+                y: fire.y + fire.h * 0.2,
+                vx: (Math.random() - 0.5) * 1.2,
+                vy: -(0.8 + Math.random() * 2.0),
+                life: 1.0, decay: 0.035 + Math.random() * 0.04,
+                color: Math.random() > 0.6 ? '#ff8800' : '#ffee44',
+                size: 1.5 + Math.random() * 2.5
+            });
+        }
+
+        // Daño cada 40 frames
+        if (fire.damageTimer >= 40) {
+            fire.damageTimer = 0;
+            const fireCX = fire.x + fire.w / 2;
+            const fireCY = fire.y + fire.h / 2;
+            const fireDmg = 8 + (window.player?.stats?.int || 0) * 1.5;
+
+            // Daño al jugador si está en el fuego
+            if (!window.player.isDead && !window.player.inBackground) {
+                const pCX = window.player.x + window.player.width / 2;
+                const pCY = window.player.y + window.player.height / 2;
+                if (Math.hypot(pCX - fireCX, pCY - fireCY) < fire.w * 0.8) {
+                    window.damagePlayer(fireDmg * 0.5, '🔥 Fuego');
+                }
+            }
+
+            // Daño a entidades en el fuego
+            for (const ent of window.entities) {
+                if (ent.hp <= 0) continue;
+                const eCX = ent.x + ent.width / 2;
+                const eCY = ent.y + ent.height / 2;
+                if (Math.hypot(eCX - fireCX, eCY - fireCY) < fire.w * 0.85) {
+                    ent.hp -= fireDmg;
+                    window.setHit(ent);
+                    window.spawnDamageText(eCX, ent.y - 8, '-' + Math.floor(fireDmg), '#ff6600');
+                    // Marca de quemado sobre la entidad
+                    if (Math.random() < 0.3) {
+                        window.scorchMarks.push({
+                            x: ent.x, y: ent.y + ent.height - 8,
+                            w: ent.width, h: 8,
+                            alpha: 0.4, seed: Math.floor(eCX * 3) & 0xFFFF,
+                            born: Date.now(), lifetime: 60000
+                        });
+                    }
+                    if (ent.hp <= 0) {
+                        window.killedEntities.push(ent.id);
+                        window.sendWorldUpdate('kill_entity', { id: ent.id });
+                        window.spawnParticles(eCX, ent.y, '#ff6600', 12, 1.2);
+                        // Si muere por fuego y es un animal con carne: drop carne cocinada
+                        const meatDroppers = new Set(['chicken', 'wolf', 'zombie']);
+                        if (meatDroppers.has(ent.type)) {
+                            // Calcular cuánta carne saldría normalmente
+                            const meatAmt = ent.type === 'chicken' ? 1
+                                          : ent.type === 'zombie'  ? 2
+                                          : 1 + Math.floor(Math.random() * 2);
+                            const xpAmt   = ent.type === 'chicken' ? 10
+                                          : ent.type === 'zombie'  ? 50 * ent.level
+                                          : 35 * ent.level;
+                            const item = {
+                                id: Math.random().toString(36).substring(2, 15),
+                                x: eCX, y: ent.y,
+                                vx: 0, vy: -1,
+                                type: 'cooked_meat', amount: meatAmt, life: 1.0
+                            };
+                            window.droppedItems.push(item);
+                            window.sendWorldUpdate('drop_item', { item });
+                            window.gainXP(xpAmt);
+                            // Partículas de vapor/humo al salir la carne
+                            for (let _s = 0; _s < 5; _s++) {
+                                window.particles.push({
+                                    x: eCX + (Math.random() - 0.5) * 14,
+                                    y: ent.y - 4 + Math.random() * 8,
+                                    vx: (Math.random() - 0.5) * 0.8,
+                                    vy: -(0.6 + Math.random() * 1.2),
+                                    life: 1.0, decay: 0.04 + Math.random() * 0.03,
+                                    color: '#c8a050',
+                                    size: 2 + Math.random() * 2
+                                });
+                            }
+                        } else {
+                            window.killEntityLoot(ent);
+                        }
+                        window.entities.splice(window.entities.indexOf(ent), 1);
+                        if (window.updateUI) window.updateUI();
+                    }
+                }
+            }
+
+            // Daño a bloques de MADERA cercanos (block, stair, barricade, door, box)
+            const woodTypes = new Set(['block', 'stair', 'barricade', 'door', 'box', 'ladder']);
+            for (const b of window.blocks) {
+                if (!woodTypes.has(b.type)) continue;
+                const bCX = b.x + bs / 2;
+                const bCY = b.y + bs / 2;
+                if (Math.hypot(bCX - fireCX, bCY - fireCY) > fire.w * 1.1) continue;
+
+                const woodDmg = fireDmg * 0.8;
+                b.hp = (b.hp || b.maxHp || 100) - woodDmg;
+                window.setHit(b);
+
+                // Añadir marca de quemado sobre el bloque
+                if (!window.scorchMarks.some(s => Math.abs(s.x - b.x) < 4 && Math.abs(s.y - b.y) < 4)) {
+                    window.scorchMarks.push({
+                        x: b.x, y: b.y,
+                        w: bs, h: bs,
+                        alpha: 0.55 + Math.random() * 0.3,
+                        seed: Math.floor(b.x * 7 + b.y * 11) & 0xFFFF,
+                        born: Date.now(),
+                        blockX: b.x, blockY: b.y,  // para eliminarse si el bloque se destruye
+                        lifetime: 90000 + Math.random() * 60000
+                    });
+                }
+
+                if (b.hp <= 0) {
+                    window.destroyBlockLocally(b);
+                    window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: 9999, destroyed: true });
+                } else {
+                    window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: woodDmg });
+                }
+            }
+        }
+
+        if (fire.life <= 0) {
+            window.fires.splice(i, 1);
+        }
+    }
 };
