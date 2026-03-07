@@ -11,9 +11,10 @@
  * @param {'x'|'y'} axis
  */
 window.checkBlockCollisions = function (axis) {
-    if (window.player.inBackground) return;
+    if (window.player.inBackground) return false;
     const p  = window.player;
     const bs = window.game.blockSize;
+    let hitWallX = false;   // ← devuelve true si colisionó en eje X con pared sólida
 
     // ── 1. Bloques construidos (bloques colocados por jugadores) ────────────────
     for (const b of window.blocks) {
@@ -63,18 +64,23 @@ window.checkBlockCollisions = function (axis) {
                 if (!hasAbove) {
                     p.y = b.y - p.height; p.vy = 0; p.isGrounded = true;
                 } else {
-                    if (p.vx > 0)      p.x = b.x - p.width - 0.1;
-                    else if (p.vx < 0) p.x = b.x + bs + 0.1;
+                    if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
+                    else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
                     p.vx = 0;
                 }
             } else {
-                if (p.vx > 0)      p.x = b.x - p.width - 0.1;
-                else if (p.vx < 0) p.x = b.x + bs + 0.1;
+                if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
+                else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
                 p.vx = 0;
             }
         } else {
             if (p.vy > 0) { p.y = b.y - p.height; p.vy = 0; p.isGrounded = true; }
-            else if (p.vy < 0) { p.y = b.y + itemHeight + 0.1; p.vy = 0; }
+            else if (p.vy < 0) {
+                // Techo de bloque construido: empujar hacia abajo justo debajo del bloque
+                // p.y se clampea al borde inferior del bloque para que el jugador empiece a caer.
+                p.y  = b.y + itemHeight;
+                p.vy = 0;
+            }
         }
     }
 
@@ -125,8 +131,8 @@ window.checkBlockCollisions = function (axis) {
                 // Solo bloquear si la celda cubre el torso (no el suelo)
                 if (cellY >= pFeetY - 2) continue;
                 if (!window.checkRectIntersection(p.x, p.y, p.width, p.height, cellX, cellY, bs, bs)) continue;
-                if (p.vx > 0) { p.x = cellX - p.width - 0.1; p.vx = 0; }
-                else if (p.vx < 0) { p.x = cellX + bs + 0.1; p.vx = 0; }
+                if (p.vx > 0) { p.x = cellX - p.width - 0.1; p.vx = 0; hitWallX = true; }
+                else if (p.vx < 0) { p.x = cellX + bs + 0.1; p.vx = 0; hitWallX = true; }
 
             } else { // axis === 'y'
                 if (!window.checkRectIntersection(p.x + 2, p.y, p.width - 4, p.height, cellX, cellY, bs, bs)) continue;
@@ -140,15 +146,19 @@ window.checkBlockCollisions = function (axis) {
                     p.isGrounded = true;
                 } else {
                     // Subiendo: rebotar contra la BASE de la celda (techo).
-                    // La cabeza debe estar DENTRO de la celda (p.y < cellY + bs)
-                    // y no haber pasado al otro lado (p.y > cellY → ya dentro o saliendo).
-                    if (p.y >= cellY + bs) continue;  // celda está debajo de la cabeza, no es techo
-                    p.y  = cellY + bs + 0.1;
+                    // Condición: la cabeza del jugador penetró la celda desde abajo.
+                    // p.y es la parte SUPERIOR del jugador. Si p.y >= cellY+bs, la celda
+                    // está completamente por debajo → no es techo, ignorar.
+                    if (p.y >= cellY + bs) continue;
+                    // Clamp exacto: colocar la cabeza justo en el borde inferior de la celda.
+                    // No usar +0.1 porque acumula error frame a frame cuando hay fricción de techo.
+                    p.y  = cellY + bs;
                     p.vy = 0;
                 }
             }
         }
     }
+    return hitWallX;
 };
 
 /**
@@ -542,7 +552,7 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
         }
 
         for (const b of window.blocks) {
-            if (b.type === 'ladder') continue;
+            if (b.type === 'ladder' || b.type === 'placed_torch') continue;
             const bh = b.type === 'door' ? bs * 2 : bs;
             if (b.type === 'door' && !isDoor && Math.abs(b.x - x) < 1 && Math.abs(b.y - (y + h)) < 1) continue;
             if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
@@ -590,9 +600,9 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
             }
         }
 
-        // No puede solapar bloques ya existentes
+        // No puede solapar bloques ya existentes (placed_torch no cuenta: sin colisión)
         for (const b of window.blocks) {
-            if (b.type === 'ladder') continue;
+            if (b.type === 'ladder' || b.type === 'placed_torch') continue;
             const bh = b.type === 'door' ? bs * 2 : bs;
             if (window.checkRectIntersection(x, y, w, h, b.x, b.y, bs, bh)) return false;
         }

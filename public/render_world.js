@@ -98,23 +98,93 @@ window.draw = function() {
     });
 
     // === MONTAÑAS DE FONDO (parallax 0.05x y 0.15x) ===
-    const bgW = 1280; const bgBackH = 500; const bgMidH = 350;
-    let backX = -(window.camera.x * 0.05) % bgW; if (backX > 0) backX -= bgW;
-    let midX  = -(window.camera.x * 0.15) % bgW; if (midX  > 0) midX  -= bgW;
+    // ─────────────────────────────────────────────────────────────────────────────
+    // DIMENSIONES REALES de los sprites (medidas con PIL):
+    //   bg_mountains_back.png →  512 × 153 px  (montañas del horizonte)
+    //   bg_mountains_mid.png  → 1705 × 350 px  (bosque de pinos)
+    //
+    // BUGS CORREGIDOS:
+    //  1. El código anterior usaba bgW=1280 para ambas imágenes → el loop de tiling
+    //     era incorrecto: entre cada repetición aparecía un gap de ~768px (back) o
+    //     un solapamiento de ~425px (mid), causando líneas y cortes visibles.
+    //  2. backY usaba groundLevel−500+80 → la imagen de 153px quedaba estirada a 500px.
+    //  3. Sin Math.floor(), las coordenadas fraccionarias producen pixel tearing/blurring
+    //     al escalar con antialias activado en Canvas.
+    // ─────────────────────────────────────────────────────────────────────────────
+    const bgBackNW = 512;  // ancho natural del sprite de montañas
+    const bgBackNH = 153;  // alto  natural del sprite de montañas
+    const bgMidNW  = 1705; // ancho natural del sprite de bosque
+    const bgMidNH  = 350;  // alto  natural del sprite de bosque
+
+    // Factor de escala para adaptar cada sprite a la resolución lógica del canvas.
+    // Las montañas (153px) se escalan para que cubran ~22% de la pantalla en altura.
+    // El bosque (350px) se escala para que su base coincida exactamente con el suelo.
+    const bgBackScaleH = Math.round(H * 0.22);          // altura renderizada de montañas
+    const bgBackScaleW = Math.round(bgBackNW * (bgBackScaleH / bgBackNH)); // mantiene aspecto
+    const bgMidScaleH  = bgMidNH;                        // bosque a tamaño natural (ya encaja)
+    const bgMidScaleW  = bgMidNW;
+
+    // Offset de parallax horizontal — módulo por el ANCHO RENDERIZADO de cada sprite
+    // para que el punto de costura coincida exactamente al repetir.
+    // Math.floor() → coordenadas enteras → sin sub-pixel bleeding entre tiles.
+    let backX = Math.floor(-(window.camera.x * 0.05) % bgBackScaleW);
+    if (backX > 0) backX -= bgBackScaleW;
+    let midX  = Math.floor(-(window.camera.x * 0.15) % bgMidScaleW);
+    if (midX  > 0) midX  -= bgMidScaleW;
+
+    // Offset de parallax vertical (leve, sigue la cámara Y)
     const camYOffset = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
     const backParallax = Math.max(-60, Math.min(60, -camYOffset * 0.03));
     const midParallax  = Math.max(-90, Math.min(90, -camYOffset * 0.06));
-    const backY = window.game.groundLevel - bgBackH + 80 + backParallax;
-    const midY  = window.game.groundLevel - bgMidH  + 30 + midParallax;
+
+    // Posición Y: anclar el BORDE INFERIOR de cada sprite a la línea del horizonte.
+    // Math.floor() evita líneas de 1px por redondeo inconsistente entre frames.
+    const _groundSY = Math.floor(window.game.groundLevel - window.camera.y + H / 2);
+    const backY = Math.floor(_groundSY - bgBackScaleH + backParallax);
+    const midY  = Math.floor(_groundSY - bgMidScaleH  + midParallax);
+
     const bgDimAlpha = darkness * 0.55;
+
     // Montañas solo visibles cuando el terreno está en pantalla (no underground)
     if (_surfSY > 0) {
         window.ctx.save();
-        window.ctx.beginPath(); window.ctx.rect(0, 0, W, Math.ceil(_surfSY)); window.ctx.clip();
-        if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) { for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) { window.ctx.drawImage(window.sprites.bg_mountains_back, backX + (i * bgW), backY, bgW, bgBackH); } }
-        if (bgDimAlpha > 0.04) { window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`; window.ctx.fillRect(0, backY, W, bgBackH); }
-        if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) { for (let i = -1; i <= Math.ceil(W / bgW) + 1; i++) { window.ctx.drawImage(window.sprites.bg_mountains_mid, midX + (i * bgW), midY, bgW, bgMidH); } }
-        if (bgDimAlpha > 0.04) { window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`; window.ctx.fillRect(0, midY, W, bgMidH); }
+        // Clip al área por encima del suelo para que los sprites no sangren a la cueva
+        window.ctx.beginPath();
+        window.ctx.rect(0, 0, W, Math.ceil(_surfSY));
+        window.ctx.clip();
+
+        // ── Capa trasera: montañas (512px → tileando cada bgBackScaleW px) ──────
+        if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
+            const tilesNeeded = Math.ceil(W / bgBackScaleW) + 2;
+            for (let i = -1; i < tilesNeeded; i++) {
+                window.ctx.drawImage(
+                    window.sprites.bg_mountains_back,
+                    Math.floor(backX + i * bgBackScaleW), backY,
+                    bgBackScaleW, bgBackScaleH
+                );
+            }
+        }
+        if (bgDimAlpha > 0.04) {
+            window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`;
+            window.ctx.fillRect(0, backY, W, bgBackScaleH);
+        }
+
+        // ── Capa delantera: bosque (1705px → tileando cada bgMidScaleW px) ──────
+        if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
+            const tilesNeeded = Math.ceil(W / bgMidScaleW) + 2;
+            for (let i = -1; i < tilesNeeded; i++) {
+                window.ctx.drawImage(
+                    window.sprites.bg_mountains_mid,
+                    Math.floor(midX + i * bgMidScaleW), midY,
+                    bgMidScaleW, bgMidScaleH
+                );
+            }
+        }
+        if (bgDimAlpha > 0.04) {
+            window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`;
+            window.ctx.fillRect(0, midY, W, bgMidScaleH);
+        }
+
         window.ctx.restore();
     }
     // === TERRENO PARALLAX DE FONDO (0.25x, cacheado por franjas de 512px, Q≠low) ===

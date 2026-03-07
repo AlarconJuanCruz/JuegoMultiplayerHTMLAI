@@ -11,8 +11,14 @@ window.spawnDustPuff = function(x, y, facingRight, isRemote) {
         const spread = (Math.random() - 0.5) * 6, speed = 0.4 + Math.random() * 0.6, dir = facingRight ? -1 : 1;
         window.dustParticles.push({ x: x + spread, y: y - 2 + (Math.random() - 0.5) * 4, vx: dir * speed * (0.6 + Math.random() * 0.8), vy: -(0.3 + Math.random() * 0.5), r: 3 + Math.random() * 3, growRate: 0.18 + Math.random() * 0.12, life: 1.0, decay: 0.022 + Math.random() * 0.012, alpha: 0.28 + Math.random() * 0.18, gray: Math.floor(180 + Math.random() * 50) });
     }
-    if (!isRemote && window.game.isMultiplayer && window.socket)
-        window.socket.emit('worldUpdate', { action: 'dust_puff', payload: { x, y, facingRight } });
+    if (!isRemote && window.game.isMultiplayer && window.socket) {
+        // Limitar dust_puff a red a máximo ~2/seg para no saturar el canal
+        const _now = Date.now();
+        if (!window._lastDustNet || _now - window._lastDustNet > 500) {
+            window._lastDustNet = _now;
+            window.socket.emit('worldUpdate', { action: 'dust_puff', payload: { x, y, facingRight } });
+        }
+    }
 };
 
 window.spawnDroppedItem = function(x, y, type, amount) {
@@ -398,10 +404,12 @@ window.addEventListener('keydown', (e) => {
         }
     }
 
+    // Atajos de mapa/menú — M gestionado en map.js con listener propio
+    // Solo dejamos aquí el guard de input para prevenir acciones de juego
+
     if (!window.player.placementMode) {
         if (e.key === 'i' || e.key === 'I') { if (window.toggleMenu) window.toggleMenu('inventory'); }
         if (e.key === 'c' || e.key === 'C') { if (window.toggleMenu) window.toggleMenu('crafting'); }
-        if (e.key === 'm' || e.key === 'M') { if (window.toggleMap) window.toggleMap(); }
         if (e.key === 'f' || e.key === 'F') {
             const _isTorch = window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item';
             if (_isTorch) {
@@ -1147,13 +1155,26 @@ function update() {
         const _staminaDrain = Math.max(0.0005, 0.002 - _baseAgi*0.0002);
         window.player.speed = _isSprinting ? _runSpd : _walkSpd; window.player.isSprinting = _isSprinting;
 
-        if (Math.abs(window.player.vx) > 0.3 && window.player.isGrounded) window.player.animTime += Math.abs(window.player.vx) * 0.025 * (_isSprinting ? 2.1 : 2.2);
-        else window.player.animTime = 0;
-
         // Física X
+        // NOTA: animTime se actualiza DESPUÉS de la colisión X (ver bloque abajo)
+        // para que la animación refleje el movimiento REAL, no la intención de tecla.
         window.player.x += window.player.vx;
         if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
-        window.checkBlockCollisions('x');
+        const _hitWallX = window.checkBlockCollisions('x');
+        // Si chocó contra una pared, frenar el ramp de aceleración para evitar vibración
+        if (_hitWallX) window.player._accelRamp = Math.min(window.player._accelRamp || 0, 0.15);
+
+        // ── animTime: recalcular con el vx REAL post-colisión ──────────────────
+        // Si _hitWallX=true, vx ya fue puesto a 0 por la colisión → animTime=0 (Idle).
+        // Esto garantiza que la animación de caminar se detenga al tocar una pared,
+        // incluso si el jugador mantiene la tecla presionada.
+        if (window.player.isGrounded) {
+            if (Math.abs(window.player.vx) > 0.3) {
+                window.player.animTime += Math.abs(window.player.vx) * 0.025 * (_isSprinting ? 2.1 : 2.2);
+            } else {
+                window.player.animTime = 0;   // Idle: personaje quieto o bloqueado por pared
+            }
+        }
 
         // Escalera: auto-enganche con W
         const _onLadder = !window.player.isDead && window.isOnLadder();
@@ -1256,11 +1277,53 @@ function update() {
 
         if (window.keys?.mouseLeft && !window.player.isDead) window.attemptAction();
 
-        // Sync multijugador
+        // Sync multijugador — emisión con dirty-check para reducir tráfico
         if (window.game.isMultiplayer) {
-            if (window.socket && (window.game.frameCount % 2 === 0 || window.player.attackFrame > 0 || window.player.isAiming || window.player.isDead || window.player.isTyping !== window.player._lastTypingState)) {
-                window.socket.emit('playerMovement', { x: window.player.x, y: window.player.y, vx: window.player.vx, vy: window.player.vy, isGrounded: window.player.isGrounded, facingRight: window.player.facingRight, activeTool: window.player.activeTool, animTime: window.player.animTime, attackFrame: window.player.attackFrame, isAiming: window.player.isAiming, isCharging: window.player.isCharging, chargeLevel: window.player.chargeLevel, mouseX: window.mouseWorldX, mouseY: window.mouseWorldY, isDead: window.player.isDead, level: window.player.level, isTyping: window.player.isTyping||false, isDancing: window.player.isDancing||false, danceStart: window.player.danceStart||0, deathAnimFrame: window.player.deathAnimFrame||0, isClimbing: window.player.isClimbing||false });
-                window.player._lastTypingState = window.player.isTyping;
+            if (window.socket) {
+                // Estado que cambia rápido (posición/velocidad): cada 2 frames
+                const _frame2 = window.game.frameCount % 2 === 0;
+                // Estado que cambia lento (herramienta, animación especial): solo cuando varía
+                const _toolChg  = window.player.activeTool  !== window.player._lastTool;
+                const _deadChg  = window.player.isDead       !== window.player._lastDead;
+                const _aimChg   = window.player.isAiming     !== window.player._lastAim;
+                const _typChg   = (window.player.isTyping||false) !== (window.player._lastTypingState||false);
+                const _atkChg   = window.player.attackFrame  > 0;
+                const _danceChg = window.player.isDancing    !== window.player._lastDancing;
+                if (_frame2 || _toolChg || _deadChg || _aimChg || _typChg || _atkChg || _danceChg) {
+                    // Payload dividido: frecuente vs infrecuente para ahorrar bytes
+                    const _pm = {
+                        x: window.player.x, y: window.player.y,
+                        vx: window.player.vx, vy: window.player.vy,
+                        facingRight: window.player.facingRight,
+                        isGrounded: window.player.isGrounded,
+                        animTime: window.player.animTime,
+                        isDead: window.player.isDead,
+                        isClimbing: window.player.isClimbing || false,
+                        deathAnimFrame: window.player.deathAnimFrame || 0,
+                    };
+                    // Solo añadir campos infrecuentes cuando cambian
+                    if (_toolChg || _aimChg || _atkChg) {
+                        _pm.activeTool   = window.player.activeTool;
+                        _pm.attackFrame  = window.player.attackFrame;
+                        _pm.isAiming     = window.player.isAiming;
+                        _pm.isCharging   = window.player.isCharging;
+                        _pm.chargeLevel  = window.player.chargeLevel;
+                        _pm.mouseX       = window.mouseWorldX;
+                        _pm.mouseY       = window.mouseWorldY;
+                    }
+                    if (_typChg || _danceChg) {
+                        _pm.isTyping     = window.player.isTyping || false;
+                        _pm.isDancing    = window.player.isDancing || false;
+                        _pm.danceStart   = window.player.danceStart || 0;
+                        _pm.level        = window.player.level;
+                    }
+                    window.socket.emit('playerMovement', _pm);
+                    window.player._lastTool     = window.player.activeTool;
+                    window.player._lastDead     = window.player.isDead;
+                    window.player._lastAim      = window.player.isAiming;
+                    window.player._lastTypingState = window.player.isTyping || false;
+                    window.player._lastDancing  = window.player.isDancing;
+                }
             }
             if (window.otherPlayers) {
                 for (const op of Object.values(window.otherPlayers)) {
@@ -1406,7 +1469,7 @@ function update() {
                 const _iGY = window.getGroundY ? window.getGroundY(item.x) : window.game.groundLevel;
                 if (item.y+s >= _iGY) { item.y = _iGY-s; item.vy *= -0.5; item.vx *= 0.8; }
                 for (const b of window.blocks) {
-                    if ((b.type==='door'&&b.open)||b.type==='box'||b.type==='campfire'||b.type==='bed'||b.type==='barricade') continue;
+                    if ((b.type==='door'&&b.open)||b.type==='box'||b.type==='campfire'||b.type==='bed'||b.type==='barricade'||b.type==='placed_torch') continue;
                     const bh = b.type==='door'?bs*2:bs;
                     if (window.checkRectIntersection(item.x,item.y,s,s,b.x,b.y,bs,bh)&&item.vy>0&&item.y+s-item.vy<=b.y) { item.y = b.y-s; item.vy *= -0.5; item.vx *= 0.8; }
                 }
@@ -1468,7 +1531,7 @@ function update() {
                 const bh = b.type==='door'?bs*2:bs;
                 if (pr.fromTurret && b.type==='turret') continue;
                 if (pr.fromTurret && pr.hostBlockX!==undefined && Math.abs(b.x-pr.hostBlockX)<2 && Math.abs(b.y-pr.hostBlockY)<2) continue;
-                if (!b.open && b.type!=='box' && b.type!=='campfire' && b.type!=='barricade' && b.type!=='turret' && window.checkRectIntersection(pr.x,pr.y,4,4,b.x,b.y,bs,bh)) { hitBlock=b; break; }
+                if (!b.open && b.type!=='box' && b.type!=='campfire' && b.type!=='barricade' && b.type!=='turret' && b.type!=='placed_torch' && window.checkRectIntersection(pr.x,pr.y,4,4,b.x,b.y,bs,bh)) { hitBlock=b; break; }
             }
             if (hitBlock) {
                 if (isMyArrow && !pr.isEnemy && Math.random() < 0.5) { const sa={id:Math.random().toString(36).substring(2,9),x:pr.x,y:pr.y,angle:pr.angle,blockX:hitBlock.x,blockY:hitBlock.y,life:18000}; window.stuckArrows.push(sa); window.sendWorldUpdate('spawn_stuck_arrow',sa); if(window.playSound) window.playSound('arrow_stick'); }

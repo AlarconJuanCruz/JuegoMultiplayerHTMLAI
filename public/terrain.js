@@ -177,14 +177,14 @@ window.getTerrainIsFlat = function(x) {
 //   row 0-2   → tierra/raíces  (transición superficial)
 //   row 3-14  → piedra
 //   row 15-30 → carbón (coal)  — vetas densas
-//   row 31-55 → azufre (sulfur) — vetas medianas + algo de coal
-//   row 56-90 → diamante (diamond) — raras vetas + azufre
-//   row > 90  → bedrock (indestructible)
+//   row 31-40 → azufre (sulfur) — vetas medianas
+//   row 41-49 → diamante (diamond) — raras vetas + azufre
+//   row >= 50 → bedrock (indestructible)
 //
-// MAX_DEPTH = 90 bloques  (~2700 px con blockSize=30)
+// MAX_DEPTH = 50 bloques  (~3200 px con blockSize=64)
 // ════════════════════════════════════════════════════════════════════
 
-window.UG_MAX_DEPTH = 90;   // bloques desde surface hacia abajo
+window.UG_MAX_DEPTH = 50;   // bloques desde surface hacia abajo
 
 // ── Hash determinista 2D seeded ──────────────────────────────────────
 function _ugH(cx, cy) {
@@ -246,28 +246,28 @@ window.getUGCell = function(col, row) {
     const oreH   = _ugH(col + 9001, row + 4003); // hash puntual para minerales raros
 
     if (row < 15) {
-        // Zona piedra: pequeñas vetas de carbón (~8%)
+        // Zona piedra (row 3-14): pequeñas vetas de carbón (~8%)
         if (oreN > 0.78) return 'coal';
         return 'stone';
     }
     if (row < 31) {
-        // Zona carbón: vetas densas (~30% coal)
+        // Zona carbón (row 15-30): vetas densas (~30% coal)
         const coalN = _ugF(col * 0.22 + 300, row * 0.22 + 150);
         if (coalN > 0.60) return 'coal';
         if (oreH > 0.965) return 'sulfur'; // trazas de azufre
         return 'stone';
     }
-    if (row < 56) {
-        // Zona azufre: vetas medianas, algo de carbón residual
+    if (row < 41) {
+        // Zona azufre (row 31-40): vetas medianas, algo de carbón residual
         const sN = _ugF(col * 0.19 + 400, row * 0.19 + 200);
         if (sN > 0.62) return 'sulfur';
-        if (oreH > 0.88) return 'coal';   // vetas de carbón residual
-        if (oreH > 0.975) return 'diamond';
+        if (oreH > 0.88) return 'coal';   // carbón residual
+        if (oreH > 0.975) return 'diamond'; // trazas tempranas de diamante
         return 'stone';
     }
-    // Zona profunda (56-90): diamante más frecuente
+    // Zona diamante (row 41-49): más frecuente cerca del bedrock
     const dN = _ugF(col * 0.16 + 500, row * 0.16 + 250);
-    if (dN > 0.72) return 'diamond';
+    if (dN > 0.68) return 'diamond';
     if (oreH > 0.75) return 'sulfur';  // azufre residual
     return 'stone';
 };

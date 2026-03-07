@@ -142,7 +142,8 @@ function drawMap() {
         {row:3,  c:'#445566', label:'Piedra'},
         {row:15, c:'#554433', label:'Carbón'},
         {row:31, c:'#665522', label:'Azufre'},
-        {row:56, c:'#224455', label:'Diamante'},
+        {row:41, c:'#224455', label:'Diamante'},
+        {row:50, c:'#222230', label:'Bedrock'},
     ];
     ctx.save();
     ctx.font='bold '+Math.max(10,zoom*2)+'px monospace';
@@ -193,6 +194,19 @@ window.toggleMap = function() {
 };
 
 window.renderMap = function() { if(window._mapOpen) drawMap(); };
+
+// ── Listener independiente para tecla M ──────────────────────────
+// Se registra aquí (map.js) para que no dependa de ninguna guarda
+// de game.js (isDead, placementMode, foco de input, etc.).
+// Única condición: el juego debe estar corriendo y el chat no enfocado.
+document.addEventListener('keydown', function _mapKeyHandler(e) {
+    if (e.key !== 'm' && e.key !== 'M') return;
+    if (!window.game?.isRunning) return;
+    const ae = document.activeElement;
+    if (ae && (ae.id === 'chat-input' || ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName))) return;
+    e.preventDefault();
+    if (window.toggleMap) window.toggleMap();
+});
 
 // Loop liviano
 (function loop(){

@@ -259,6 +259,25 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
             else if (ent.vy >= 0 && ent.y + ent.height >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
         }
 
+        // isGrounded real: combina superficie Y celdas UG directamente bajo los pies
+        let _entIsGrounded = (ent.y + ent.height >= entGY - 2);
+        if (!_entIsGrounded && window.getUGCellV && window.getTerrainCol) {
+            const _feetY = ent.y + ent.height;
+            const _cL = Math.floor(ent.x / window.game.blockSize);
+            const _cR = Math.floor((ent.x + ent.width - 1) / window.game.blockSize);
+            for (let _cc = _cL; _cc <= _cR && !_entIsGrounded; _cc++) {
+                const _cd2 = window.getTerrainCol(_cc);
+                if (!_cd2 || _cd2.type === 'hole') continue;
+                const _row = Math.floor((_feetY - _cd2.topY) / window.game.blockSize);
+                if (_row >= 0) {
+                    const _mat = window.getUGCellV(_cc, _row);
+                    if (_mat && _mat !== 'air') _entIsGrounded = true;
+                }
+            }
+        }
+        // Cooldown de salto: evita spam de saltos en stuck detection
+        if ((ent._jumpCooldown || 0) > 0) ent._jumpCooldown--;
+
         window.applyStairPhysicsEntity(ent);
 
         // ── Target: jugador más cercano ──
@@ -312,14 +331,15 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
         }
 
         if (!repelled) {
-            _updateEntityAI(ent, i, target, targetCX, targetCY, minDist, isDay, isNight, isHoldingTorch, hitWall, lastX, entGY);
+            _updateEntityAI(ent, i, target, targetCX, targetCY, minDist, isDay, isNight, isHoldingTorch, hitWall, lastX, entGY, _entIsGrounded);
         }
     }
 };
 
 /** @private */
-function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, isNight, isHoldingTorch, hitWall, lastX, entGY) {
-    const isGrounded = ent.y + ent.height >= entGY - 2;
+function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, isNight, isHoldingTorch, hitWall, lastX, entGY, isGrounded) {
+    // isGrounded viene ya calculado desde el loop principal (incluye UG cells)
+    if (isGrounded === undefined) isGrounded = ent.y + ent.height >= entGY - 2;
 
     if (ent.type === 'spider' || ent.type === 'zombie') {
         if (ent.ignorePlayer > 0) { ent.ignorePlayer--; }
@@ -464,11 +484,11 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             }
 
             // ── Desatascar: atacar bloque obstructor ──────────────────────────
-            if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
+            if (hitWall || Math.abs(ent.x - lastX) < 0.4) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
 
                 // Detectar si hay un escalón pequeño o puerta inmediatamente adelante
-                if (ent.stuckFrames > 4 && isGrounded) {
+                if (ent.stuckFrames > 4 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     const bs     = window.game.blockSize;
                     const feetY  = ent.y + ent.height;
                     const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
@@ -480,7 +500,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                         return checkX >= b.x && checkX <= b.x + bs &&
                                b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
                     });
-                    if (stepBlock) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
+                    if (stepBlock) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
 
                     // ¿Hay una puerta cerrada? → intentar abrir o saltar por encima
                     const doorBlock = window.blocks.find(b => {
@@ -499,15 +519,18 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                             else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
                             ent.attackCooldown = ent.type === 'zombie' ? 80 : 55;
                             ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
-                        } else if (ent.stuckFrames > 15) {
+                        } else if (ent.stuckFrames > 15 && (ent._jumpCooldown || 0) === 0) {
                             // Si no puede romperla, intenta saltar por encima
-                            ent.vy = -11;
+                            ent.vy = -11; ent._jumpCooldown = 20;
                             ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
                         }
                     }
                 }
 
-                if (ent.stuckFrames > 10 && isGrounded) ent.vy = ent.type === 'zombie' ? -7 : -9;
+                if (ent.stuckFrames > 10 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                    ent.vy = ent.type === 'zombie' ? -7 : -9;
+                    ent._jumpCooldown = 16;
+                }
 
                 // Buscar bloque destructible que está bloqueando el paso
                 if (ent.stuckFrames > 20 && ent.attackCooldown <= 0) {
@@ -528,7 +551,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                         if (obstacle.hp <= 0) window.destroyBlockLocally(obstacle);
                         else window.sendWorldUpdate('hit_block', { x: obstacle.x, y: obstacle.y, dmg });
                         ent.attackCooldown = ent.type === 'zombie' ? 90 : 60;
-                        ent.stuckFrames = Math.max(0, ent.stuckFrames - 15); // no resetear del todo
+                        ent.stuckFrames = Math.max(0, ent.stuckFrames - 15);
                     }
                 }
 
@@ -779,11 +802,11 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             }
 
             // Desatascar — con abandon si lleva demasiado tiempo bloqueado
-            if (hitWall || Math.abs(ent.x - lastX) < 0.1) {
+            if (hitWall || Math.abs(ent.x - lastX) < 0.4) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
 
                 // Detectar escalón pequeño adelante → saltar inmediatamente
-                if (ent.stuckFrames > 3 && isGrounded) {
+                if (ent.stuckFrames > 3 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     const bs     = window.game.blockSize;
                     const dirX   = target.x > ent.x ? 1 : -1;
                     const feetY  = ent.y + ent.height;
@@ -794,10 +817,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                         return checkX >= b.x && checkX <= b.x + bs &&
                                b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
                     });
-                    if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; }
+                    if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
 
                     // Puerta → intentar romperla (lobo) o saltar por encima
-                    const dirX2  = target.x > ent.x ? 1 : -1;
                     const doorBlock = window.blocks.find(b => {
                         if (b.type !== 'door' || b.open) return false;
                         return checkX >= b.x && checkX <= b.x + bs &&
@@ -812,12 +834,14 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                         else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
                         ent.attackCooldown = 55;
                         ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
-                    } else if (doorBlock && ent.stuckFrames > 15) {
-                        ent.vy = -12; ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
+                    } else if (doorBlock && ent.stuckFrames > 15 && (ent._jumpCooldown || 0) === 0) {
+                        ent.vy = -12; ent._jumpCooldown = 20; ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
                     }
                 }
 
-                if (ent.stuckFrames > 10 && isGrounded) { ent.vy = -10; }
+                if (ent.stuckFrames > 10 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                    ent.vy = -10; ent._jumpCooldown = 16;
+                }
                 if (ent.stuckFrames > 70) {
                     // Abandonar target, retroceder y revaluar
                     ent.wolfState      = 'cooldown';
@@ -856,11 +880,11 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 ent.vx = dirX * chargeSpd;
 
                 // Salto de obstáculo durante la carga
-                if ((hitWall || Math.abs(ent.x - lastX) < 0.1) && isGrounded) {
+                if ((hitWall || Math.abs(ent.x - lastX) < 0.4) && isGrounded) {
                     ent.stuckFrames = (ent.stuckFrames || 0) + 1;
 
                     // Detectar escalón → saltar inmediatamente sin contar stuckFrames
-                    if (ent.stuckFrames > 2) {
+                    if (ent.stuckFrames > 2 && (ent._jumpCooldown || 0) === 0) {
                         const bs     = window.game.blockSize;
                         const feetY  = ent.y + ent.height;
                         const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
@@ -870,10 +894,12 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                             return checkX >= b.x && checkX <= b.x + bs &&
                                    b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
                         });
-                        if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; }
+                        if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
                     }
 
-                    if (ent.stuckFrames > 8)  { ent.vy = -9; }
+                    if (ent.stuckFrames > 8 && (ent._jumpCooldown || 0) === 0) {
+                        ent.vy = -9; ent._jumpCooldown = 16;
+                    }
                     if (ent.stuckFrames > 55) {
                         ent.wolfState = 'cooldown'; ent.wolfStateTimer = 45;
                         ent.vx = -dirX * 1.5; ent.stuckFrames = 0;
