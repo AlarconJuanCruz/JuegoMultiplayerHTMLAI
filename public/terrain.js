@@ -292,11 +292,14 @@ window.getUGCell = function(col, row) {
     return v;
 };
 
-// Al resetear semilla, limpiar el cache de celdas
+// Al cambiar semilla, limpiar caches de terreno y daño.
+// NO limpiamos _minedCells aquí: applySeed se llama también al reconectar al
+// servidor (worldSeed event), y borrar _minedCells en ese momento destruye la
+// restauración del terreno minado que acaba de llegar con initWorldState.
+// _minedCells solo se limpia en worldReset (reset explícito del mundo).
 const _origApplySeed = window.applySeed;
 window.applySeed = function() {
     window._ugCellCache = {};
-    window._minedCells  = {};
     window._cellDamage  = {};
     _origApplySeed();
 };

@@ -97,63 +97,62 @@ window.draw = function() {
         window.ctx.restore();
     });
 
-    // === MONTAÑAS DE FONDO (parallax 0.05x y 0.15x) ===
+    // === MONTAÑAS DE FONDO (parallax horizontal solamente) ===
     // ─────────────────────────────────────────────────────────────────────────────
-    // DIMENSIONES REALES de los sprites (medidas con PIL):
+    // SPRITES:
     //   bg_mountains_back.png →  512 × 153 px  (montañas del horizonte)
     //   bg_mountains_mid.png  → 1705 × 350 px  (bosque de pinos)
     //
-    // BUGS CORREGIDOS:
-    //  1. El código anterior usaba bgW=1280 para ambas imágenes → el loop de tiling
-    //     era incorrecto: entre cada repetición aparecía un gap de ~768px (back) o
-    //     un solapamiento de ~425px (mid), causando líneas y cortes visibles.
-    //  2. backY usaba groundLevel−500+80 → la imagen de 153px quedaba estirada a 500px.
-    //  3. Sin Math.floor(), las coordenadas fraccionarias producen pixel tearing/blurring
-    //     al escalar con antialias activado en Canvas.
+    // REGLAS DE RENDERIZADO:
+    //  1. Y FIJA en pantalla — NO depende de camera.y ni de zoom.
+    //     La cámara está diseñada para que el suelo esté en H*0.62 cuando el
+    //     jugador está parado. Usando _surfSY (que sí sigue la cámara) los fondos
+    //     se movían cada vez que el jugador saltaba o cambiaba de elevación.
+    //  2. Escalado proporcional a H — los sprites cubren siempre el mismo % del
+    //     cielo sin importar resolución, y al hacer zoom los fondos no cambian
+    //     (están en screen-space, antes de la transformación de cámara).
+    //  3. Tiling horizontal con el ancho REAL del sprite escalado para evitar gaps.
     // ─────────────────────────────────────────────────────────────────────────────
-    const bgBackNW = 512;  // ancho natural del sprite de montañas
-    const bgBackNH = 153;  // alto  natural del sprite de montañas
-    const bgMidNW  = 1705; // ancho natural del sprite de bosque
-    const bgMidNH  = 350;  // alto  natural del sprite de bosque
+    const bgBackNW = 512;   // ancho natural del sprite de montañas
+    const bgBackNH = 153;   // alto  natural
+    const bgMidNW  = 1705;  // ancho natural del sprite de bosque
+    const bgMidNH  = 350;   // alto  natural
 
-    // Factor de escala para adaptar cada sprite a la resolución lógica del canvas.
-    // Las montañas (153px) se escalan para que cubran ~22% de la pantalla en altura.
-    // El bosque (350px) se escala para que su base coincida exactamente con el suelo.
-    const bgBackScaleH = Math.round(H * 0.22);          // altura renderizada de montañas
-    const bgBackScaleW = Math.round(bgBackNW * (bgBackScaleH / bgBackNH)); // mantiene aspecto
-    const bgMidScaleH  = bgMidNH;                        // bosque a tamaño natural (ya encaja)
-    const bgMidScaleW  = bgMidNW;
+    // Horizonte fijo en pantalla: siempre H*0.62 (≈446px a 720p).
+    // Cuando el jugador está bajo tierra _surfSY cae a <0 y saltamos el dibujado;
+    // mientras la superficie esté visible, el horizonte es estable en pantalla.
+    const bgHorizonY = H * 0.62;
 
-    // Offset de parallax horizontal — módulo por el ANCHO RENDERIZADO de cada sprite
-    // para que el punto de costura coincida exactamente al repetir.
-    // Math.floor() → coordenadas enteras → sin sub-pixel bleeding entre tiles.
+    // Escalar sprites para que ocupen una fracción fija del cielo.
+    // back: capa trasera llena el 28% inferior del cielo  (~202px a 720p)
+    // mid : capa frontal llena el 62% inferior del cielo  (~447px a 720p)
+    const bgBackScaleH = Math.round(H * 0.28);
+    const bgBackScaleW = Math.round(bgBackNW * (bgBackScaleH / bgBackNH));
+    const bgMidScaleH  = Math.round(H * 0.62);
+    const bgMidScaleW  = Math.round(bgMidNW  * (bgMidScaleH  / bgMidNH));
+
+    // Posiciones Y fijas (borde inferior en bgHorizonY)
+    const backY = Math.floor(bgHorizonY - bgBackScaleH);
+    const midY  = Math.floor(bgHorizonY - bgMidScaleH);
+
+    // Parallax horizontal: los fondos se mueven con camera.x a distinta velocidad
     let backX = Math.floor(-(window.camera.x * 0.05) % bgBackScaleW);
     if (backX > 0) backX -= bgBackScaleW;
     let midX  = Math.floor(-(window.camera.x * 0.15) % bgMidScaleW);
     if (midX  > 0) midX  -= bgMidScaleW;
 
-    // Offset de parallax vertical (leve, sigue la cámara Y)
-    const camYOffset = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
-    const backParallax = Math.max(-60, Math.min(60, -camYOffset * 0.03));
-    const midParallax  = Math.max(-90, Math.min(90, -camYOffset * 0.06));
-
-    // Posición Y: anclar el BORDE INFERIOR de cada sprite a la línea del horizonte.
-    // Math.floor() evita líneas de 1px por redondeo inconsistente entre frames.
-    const _groundSY = Math.floor(window.game.groundLevel - window.camera.y + H / 2);
-    const backY = Math.floor(_groundSY - bgBackScaleH + backParallax);
-    const midY  = Math.floor(_groundSY - bgMidScaleH  + midParallax);
-
     const bgDimAlpha = darkness * 0.55;
 
-    // Montañas solo visibles cuando el terreno está en pantalla (no underground)
+    // Solo dibujar cuando el suelo es visible en pantalla (no completamente underground)
     if (_surfSY > 0) {
         window.ctx.save();
-        // Clip al área por encima del suelo para que los sprites no sangren a la cueva
+        // Clip al área visible del cielo: min entre el horizonte fijo y _surfSY
+        // (cuando estamos underground _surfSY < bgHorizonY y no debe dibujarse nada)
         window.ctx.beginPath();
-        window.ctx.rect(0, 0, W, Math.ceil(_surfSY));
+        window.ctx.rect(0, 0, W, Math.ceil(Math.min(bgHorizonY, _surfSY)));
         window.ctx.clip();
 
-        // ── Capa trasera: montañas (512px → tileando cada bgBackScaleW px) ──────
+        // ── Capa trasera: montañas ──────────────────────────────────────────────
         if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
             const tilesNeeded = Math.ceil(W / bgBackScaleW) + 2;
             for (let i = -1; i < tilesNeeded; i++) {
@@ -169,7 +168,7 @@ window.draw = function() {
             window.ctx.fillRect(0, backY, W, bgBackScaleH);
         }
 
-        // ── Capa delantera: bosque (1705px → tileando cada bgMidScaleW px) ──────
+        // ── Capa frontal: bosque ────────────────────────────────────────────────
         if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
             const tilesNeeded = Math.ceil(W / bgMidScaleW) + 2;
             for (let i = -1; i < tilesNeeded; i++) {
@@ -187,192 +186,6 @@ window.draw = function() {
 
         window.ctx.restore();
     }
-    // === TERRENO PARALLAX DE FONDO (0.25x, cacheado por franjas de 512px, Q≠low) ===
-    // Solo se dibuja cuando el suelo es visible en pantalla (no estamos underground)
-    if (Q !== 'low' && _surfSY > 0) {
-        const C      = window.ctx;
-        const camX   = window.camera.x;
-        const camY   = window.camera.y;
-        const shoreX = window.game.shoreX || 0;
-        const base   = window.game.baseGroundLevel;
-
-        const PAR    = 0.25; const SCALE  = 0.80;
-        const STRIP_W = 512; const STRIP_H = 500; const TREE_H = 180;
-
-        const camYOffset2  = window.camera.y - (window.game.baseGroundLevel - H * 0.62);
-        const parYParallax = Math.max(-25, Math.min(25, -camYOffset2 * 0.04));
-        const horizonScreenY = window.game.groundLevel + (STRIP_H * SCALE * 0.01) + parYParallax;
-        const parWorldLeft   = camX * PAR;
-
-        const tp = window._tp || window._defaultTp || {};
-
-        // Altura del terreno de fondo (ondas con phase offset)
-        function bgGroundH(wx) {
-            let h = 0;
-            h += Math.sin(wx * 0.0019 + (tp.p0 || 0) + 1.7) * (tp.a0 || 40);
-            h += Math.cos(wx * 0.0037 + (tp.p1 || 0) + 0.9) * (tp.a1 || 25);
-            h += Math.sin(wx * 0.0085 + (tp.p2 || 0) + 2.3) * (tp.a2 || 12);
-            h += Math.cos(wx * 0.0177 + 0.6) * 6;
-            return h;
-        }
-        function bgDesertAlpha(wx) {
-            const dStart = (window.game.desertStart || 8000) + shoreX;
-            const dWidth = window.game.desertWidth  || 1000;
-            return Math.max(0, Math.min(1, wx > dStart + dWidth ? 1 : wx > dStart ? (wx - dStart) / dWidth : 0));
-        }
-
-        const spGrass = window.sprites?.tile_grass_top; const spSand  = window.sprites?.tile_sand_top;
-        const spDirt  = window.sprites?.tile_dirt;      const spOak   = window.sprites?.tree_oak;
-        const spPine  = window.sprites?.tree_pine;      const spBirch = window.sprites?.tree_birch;
-        const spPalm  = window.sprites?.tree_palm;
-
-        // Caché de franjas (invalidar si cambia bioma/seed)
-        if (!window._bgParCache)      window._bgParCache      = {};
-        if (!window._bgParCacheFrame) window._bgParCacheFrame = {};
-        const cacheKey0 = (window.game.desertStart || 0) + '_' + (tp.p0 || 0).toFixed(2);
-        if (window._bgParCacheKey !== cacheKey0) { window._bgParCache = {}; window._bgParCacheFrame = {}; window._bgParCacheKey = cacheKey0; }
-
-        const visParLeft  = parWorldLeft;
-        const visParRight = parWorldLeft + W / SCALE;
-        const firstStrip  = Math.floor(visParLeft  / STRIP_W);
-        const lastStrip   = Math.ceil (visParRight / STRIP_W);
-
-        // Renderiza una franja (offscreen canvas) con suelo + árboles/flores
-        function renderStrip(stripIdx) {
-            const oc = document.createElement('canvas'); oc.width = STRIP_W; oc.height = STRIP_H;
-            const oc2 = oc.getContext('2d'); oc2.clearRect(0, 0, STRIP_W, STRIP_H);
-            const wxLeft = stripIdx * STRIP_W; const wxRight = wxLeft + STRIP_W; const STEP = 4;
-
-            const cols = [];
-            for (let lx = 0; lx < STRIP_W; lx += STEP) { const wx = wxLeft + lx; cols.push({ lx, wx, h: bgGroundH(wx), da: bgDesertAlpha(wx) }); }
-
-            // Árboles/cactus (antes del suelo, para que el suelo tape raíces)
-            const TREE_SPACING = 110;
-            for (let tx = Math.floor(wxLeft / TREE_SPACING) * TREE_SPACING; tx < wxRight + TREE_SPACING; tx += TREE_SPACING) {
-                const tSeed  = Math.abs(Math.sin(tx * 0.0471 + 3.7)); const tSeed2 = Math.abs(Math.sin(tx * 0.0813 + 1.2));
-                const tJit   = (tSeed - 0.5) * TREE_SPACING * 0.55;  const tWX    = tx + tJit;
-                if (tWX < wxLeft || tWX >= wxRight || tSeed < 0.28) continue;
-                const da2 = bgDesertAlpha(tWX); const lx2 = tWX - wxLeft; const h2 = bgGroundH(tWX); const gY2 = STRIP_H - 80 - h2;
-                if (da2 > 0.7) {
-                    // Cactus sintético
-                    const cactH = 30 + tSeed2 * 22; const cactW = 5;
-                    oc2.fillStyle = '#3a7a30'; oc2.beginPath(); oc2.roundRect(lx2 - cactW/2, gY2 - cactH, cactW, cactH, 2); oc2.fill();
-                    if (tSeed2 > 0.4) {
-                        const armY = gY2 - cactH * 0.55; const armDir = tSeed > 0.5 ? 1 : -1;
-                        oc2.beginPath(); oc2.roundRect(lx2 - cactW/2 + armDir * cactW/2, armY - cactW*0.4, armDir * 14, cactW * 0.8, 2); oc2.fill();
-                        oc2.beginPath(); oc2.roundRect(lx2 - cactW/2 + armDir*(14 + cactW/2), armY - 14, cactW*0.9, 14, 2); oc2.fill();
-                    }
-                } else {
-                    // Árbol de bosque (sprite o sintético)
-                    const tType = Math.floor(tSeed2 * 3); const tImg = tType === 0 ? spOak : (tType === 1 ? spPine : spBirch);
-                    const tDrawH = 90 + tSeed * 70; const tDrawW = tDrawH * 0.5;
-                    if (tImg && tImg.complete && tImg.naturalWidth > 0) { oc2.drawImage(tImg, lx2 - tDrawW/2, gY2 - tDrawH, tDrawW, tDrawH); }
-                    else {
-                        oc2.fillStyle = tType === 1 ? '#1a5c28' : '#2d6e1a'; const hw = tDrawW * 0.45;
-                        for (let ti = 0; ti < 3; ti++) { const ty2 = gY2 - tDrawH * (0.15 + ti * 0.28); const tw2 = hw * (1 - ti * 0.22); oc2.beginPath(); oc2.moveTo(lx2 - tw2, ty2); oc2.lineTo(lx2 + tw2, ty2); oc2.lineTo(lx2, ty2 - tDrawH * 0.32); oc2.closePath(); oc2.fill(); }
-                    }
-                }
-            }
-
-            // Flores y hongos
-            for (let lx3 = 0; lx3 < STRIP_W; lx3 += 24) {
-                const wx3 = wxLeft + lx3; const da3 = bgDesertAlpha(wx3); if (da3 > 0.5) continue;
-                const fs1 = Math.abs(Math.sin(wx3 * 0.0531 + 7.3)); const fs2 = Math.abs(Math.sin(wx3 * 0.0871 + 2.1)); const fs3 = Math.abs(Math.sin(wx3 * 0.1237 + 4.7));
-                const h3 = bgGroundH(wx3); const gY3 = STRIP_H - 80 - h3;
-                if (fs1 > 0.93) {
-                    const stemH = 4 + fs2 * 3;
-                    oc2.fillStyle = '#e8dcc8'; oc2.fillRect(lx3 + 2, gY3 - stemH, 3, stemH);
-                    oc2.fillStyle = fs3 > 0.5 ? '#c0392b' : '#8B4513'; oc2.beginPath(); oc2.ellipse(lx3 + 3.5, gY3 - stemH, 5, 4, 0, Math.PI, 0); oc2.fill();
-                    oc2.fillStyle = 'rgba(255,255,255,0.7)'; oc2.beginPath(); oc2.arc(lx3 + 2, gY3 - stemH - 1, 1, 0, Math.PI * 2); oc2.fill();
-                } else if (fs2 > 0.91) {
-                    const sh = 5 + fs3 * 4; const fc = ['#e74c3c','#9b59b6','#f39c12','#e91e8c','#3498db'][Math.floor(fs3 * 5)];
-                    oc2.fillStyle = '#27ae60'; oc2.fillRect(lx3 + 1, gY3 - sh, 2, sh);
-                    oc2.fillStyle = fc;
-                    for (let p = 0; p < 4; p++) { const pa = (p / 4) * Math.PI * 2; oc2.beginPath(); oc2.ellipse(lx3 + 2 + Math.cos(pa) * 2.5, gY3 - sh + Math.sin(pa) * 2, 1.8, 1.2, pa, 0, Math.PI * 2); oc2.fill(); }
-                    oc2.fillStyle = '#f1c40f'; oc2.beginPath(); oc2.arc(lx3 + 2, gY3 - sh, 1.4, 0, Math.PI * 2); oc2.fill();
-                }
-            }
-
-            // Suelo: clip al perfil del terreno → dirt → arena → superficie grass/sand
-            oc2.save();
-            oc2.beginPath(); oc2.moveTo(0, STRIP_H);
-            for (const col of cols) { const gY = STRIP_H - 80 - col.h; oc2.lineTo(col.lx, gY); }
-            oc2.lineTo(STRIP_W, STRIP_H); oc2.closePath(); oc2.clip();
-            if (spDirt && spDirt.complete && spDirt.naturalWidth > 0) { const pat = oc2.createPattern(spDirt, 'repeat'); if (pat) { oc2.fillStyle = pat; oc2.fillRect(0, 0, STRIP_W, STRIP_H); } }
-            else { oc2.fillStyle = '#3d2412'; oc2.fillRect(0, 0, STRIP_W, STRIP_H); }
-            for (const col of cols) {
-                if (col.da <= 0) continue; const gY = STRIP_H - 80 - col.h;
-                oc2.globalAlpha = col.da;
-                if (spSand && spSand.complete && spSand.naturalWidth > 0) { const pat2 = oc2.createPattern(spSand, 'repeat'); if (pat2) { oc2.fillStyle = pat2; } else { oc2.fillStyle = '#d4a853'; } } else { oc2.fillStyle = '#d4a853'; }
-                oc2.fillRect(col.lx, gY, STEP + 1, STRIP_H - gY); oc2.globalAlpha = 1;
-            }
-            oc2.restore();
-
-            // Superficie (grass/sand top) + briznas de pasto
-            for (const col of cols) {
-                const { lx, wx, h, da } = col; const gY = STRIP_H - 80 - h;
-                if (da < 1) {
-                    oc2.globalAlpha = 1 - da;
-                    if (spGrass && spGrass.complete && spGrass.naturalWidth > 0) { const texX = ((wx % 64) + 64) % 64; const dw = Math.min(STEP + 0.5, 64 - texX); oc2.drawImage(spGrass, texX, 0, dw, 64, lx, gY - 1, dw, 64); if (dw < STEP) oc2.drawImage(spGrass, 0, 0, STEP - dw + 0.5, 64, lx + dw, gY - 1, STEP - dw + 0.5, 64); }
-                    else { oc2.fillStyle = '#528c2a'; oc2.fillRect(lx, gY - 1, STEP + 1, 18); }
-                    oc2.globalAlpha = 1;
-                }
-                if (da > 0) {
-                    oc2.globalAlpha = da;
-                    if (spSand && spSand.complete && spSand.naturalWidth > 0) { const texX = ((wx % 64) + 64) % 64; const dw = Math.min(STEP + 0.5, 64 - texX); oc2.drawImage(spSand, texX, 0, dw, 64, lx, gY - 1, dw, 64); if (dw < STEP) oc2.drawImage(spSand, 0, 0, STEP - dw + 0.5, 64, lx + dw, gY - 1, STEP - dw + 0.5, 64); }
-                    else { oc2.fillStyle = '#e6c280'; oc2.fillRect(lx, gY - 1, STEP + 1, 18); }
-                    oc2.globalAlpha = 1;
-                }
-                if (da < 0.6 && lx % 18 === 0) {
-                    const gs = Math.sin(wx * 0.0531) * 0.5 + 0.5;
-                    oc2.globalAlpha = (1 - da) * 0.7; oc2.strokeStyle = gs > 0.5 ? '#4caf50' : '#2e7d32'; oc2.lineWidth = 1; oc2.lineCap = 'round';
-                    const gh = 3 + gs * 5; oc2.beginPath(); oc2.moveTo(lx + gs * 6, gY + 2); oc2.quadraticCurveTo(lx + gs * 6 + 1, gY - gh * 0.5, lx + gs * 6 + 1.5, gY - gh); oc2.stroke(); oc2.globalAlpha = 1;
-                }
-            }
-            return oc;
-        }
-
-        // Dibujar franjas visibles (con caché TTL=180 frames)
-        const TTL = 180; const frameN = window.game.frameCount || 0;
-        C.save();
-
-        const totalW = Math.ceil((lastStrip - firstStrip + 2) * STRIP_W * SCALE);
-        const stripH = STRIP_H * SCALE;
-        if (!window._bgParTmp) window._bgParTmp = document.createElement('canvas');
-        const tmp = window._bgParTmp;
-        if (tmp.width < totalW || tmp.height < stripH) { tmp.width = Math.max(tmp.width, totalW + 512); tmp.height = Math.max(tmp.height, stripH + 4); }
-        const tc = tmp.getContext('2d'); tc.clearRect(0, 0, tmp.width, tmp.height);
-        const baseScreenY = horizonScreenY - (STRIP_H - 80) * SCALE;
-        const offsetX0    = (firstStrip * STRIP_W - parWorldLeft) * SCALE;
-
-        for (let si = firstStrip; si <= lastStrip; si++) {
-            if (!window._bgParCache[si]) window._bgParCache[si] = renderStrip(si);
-            window._bgParCacheFrame[si] = frameN;
-            const oc = window._bgParCache[si]; const parWX = si * STRIP_W;
-            const screenX = (parWX - parWorldLeft) * SCALE; const tmpX = screenX - offsetX0;
-            tc.drawImage(oc, tmpX, 0, STRIP_W * SCALE, stripH);
-        }
-
-        // Oscurecer ligeramente para efecto de profundidad
-        tc.save(); tc.globalCompositeOperation = 'source-atop'; tc.fillStyle = 'rgba(0, 0, 0, 0.20)'; tc.fillRect(0, 0, tmp.width, tmp.height); tc.restore();
-        // Clipear al área visible por encima del suelo, usando la surfScreenY con zoom
-        // calculada antes (_surfSY). Así el parallax nunca aparece en el área de cueva.
-        if (_surfSY > 0) {
-            C.save();
-            C.beginPath(); C.rect(0, 0, W, Math.ceil(_surfSY)); C.clip();
-            C.drawImage(tmp, offsetX0, baseScreenY, tmp.width, stripH);
-            C.restore();
-        }
-        C.globalAlpha = 1;
-
-        // Tinte nocturno sobre la capa
-        if (bgDimAlpha > 0.05) { C.save(); const screenH2 = STRIP_H * SCALE; const screenY2 = horizonScreenY - (STRIP_H - 80) * SCALE; C.fillStyle = `rgba(5,8,20,${Math.min(0.85, bgDimAlpha * 0.70)})`; C.fillRect(0, screenY2, W, screenH2); C.restore(); }
-
-        // Purgar franjas viejas del caché
-        if (frameN % 120 === 0) { for (const k of Object.keys(window._bgParCache)) { if (frameN - (window._bgParCacheFrame[k] || 0) > TTL) { delete window._bgParCache[k]; delete window._bgParCacheFrame[k]; } } }
-
-        C.restore();
-    } // fin parallax terrain (Q !== 'low')
 
     // === ZOOM + TRANSFORMACIÓN DE CÁMARA ===
     const z = window.game.zoom || 1;

@@ -135,7 +135,14 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             window.socket.on('timeSync', (ms) => { window.game.serverStartTime = Date.now() - ms; });
 
             window.socket.on('worldSeed', (data) => {
-                if (data?.seed && window.setSeedFromCode) { window.setSeedFromCode(data.seed); localStorage.setItem('worldSeedCode', window.seedCode); let el = document.getElementById('seed-display'); if (el) el.textContent = window.seedCode; }
+                if (data?.seed && window.setSeedFromCode) {
+                    // setSeedFromCode llama applySeed, que ya NO borra _minedCells.
+                    // Si initWorldState llegó antes (siempre es así), _minedCells
+                    // ya tiene los datos del servidor y se preservan.
+                    window.setSeedFromCode(data.seed);
+                    localStorage.setItem('worldSeedCode', window.seedCode);
+                    let el = document.getElementById('seed-display'); if (el) el.textContent = window.seedCode;
+                }
             });
 
             window.socket.on('serverFull', () => { alert('⚠️ Servidor lleno.'); window.location.reload(); });
@@ -145,6 +152,8 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             window.socket.on('worldReset', (data) => {
                 if (data?.seed && window.setSeedFromCode) { window.setSeedFromCode(data.seed); localStorage.setItem('worldSeedCode', window.seedCode); }
                 window.blocks = []; window.droppedItems = []; window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = []; window.stuckArrows = []; window.fires = []; window.scorchMarks = []; window.trees = []; window.rocks = []; window.entities = []; window.game.exploredRight = window.game.shoreX;
+                // Reset explícito del mundo: limpiar terreno minado (applySeed ya no lo hace)
+                window._minedCells = {}; window._cellDamage = {}; window._ugCellCache = {};
                 if (window.applySeed) window.applySeed();
                 window.generateWorldSector(window.game.shoreX, window.game.shoreX + window.game.chunkSize);
                 window.game.exploredRight = window.game.shoreX + window.game.chunkSize;
@@ -158,6 +167,18 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 window.trees.forEach(t => { let sk = Object.keys(window.treeState).find(kx => Math.abs(parseFloat(kx) - t.x) < 1); if (sk) { t.isStump = window.treeState[sk].isStump; t.regrowthCount = window.treeState[sk].regrowthCount; t.grownDay = window.treeState[sk].grownDay; if (t.isStump) { t.hp = 50; t.maxHp = 50; } } });
                 window.rocks = window.rocks.filter(r => !window.removedRocks.some(rx => Math.abs(rx - r.x) < 1));
                 window.entities = window.entities.filter(e => !window.killedEntities.includes(e.id));
+
+                // ── Restaurar terreno minado ──────────────────────────────────────────
+                // state.minedCells: {'col_row': true, ...}  guardado en el servidor.
+                // applySeed (llamado por worldSeed) ya NO borra _minedCells, así que
+                // basta con aplicar directamente aquí sin workarounds de timing.
+                if (state.minedCells && typeof state.minedCells === 'object') {
+                    window._minedCells = Object.assign({}, state.minedCells);
+                    if (window._ugCellCache)     window._ugCellCache     = {};
+                    if (window._terrainColCache) window._terrainColCache = {};
+                }
+                window._serverMinedCells = {}; // limpiar por si quedó algo de sesiones anteriores
+
                 if (window.updateUI) window.updateUI();
             });
 
@@ -203,12 +224,20 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 else if (data.action === 'update_campfire')  { let b = window.blocks.find(bl => Math.abs(bl.x-data.payload.x) < 1 && Math.abs(bl.y-data.payload.y) < 1 && bl.type==='campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire?.x === b.x && window.renderCampfireUI) window.renderCampfireUI(); } }
                 else if (data.action === 'dust_puff')        { window.spawnDustPuff(data.payload.x, data.payload.y, data.payload.facingRight, true); }
                 else if (data.action === 'mine_cell') {
-                    // Otro jugador minó una celda — aplicar daño localmente
-                    if (window.damageCellUG) {
+                    // Otro jugador minó una celda — aplicar localmente.
+                    // Si broken:true, marcar directamente como minada (no acumular HP
+                    // que podría desincronizarse si se perdieron paquetes).
+                    if (window.damageCellUG && window.mineCell) {
                         const _mc = data.payload;
-                        window.damageCellUG(_mc.col, _mc.row, _mc.dmg);
+                        if (_mc.broken === true) {
+                            // La celda ya se destruyó en el cliente origen → marcar directo
+                            window.mineCell(_mc.col, _mc.row);
+                            if (window._ugCellCache) delete window._ugCellCache[_mc.col + '_' + _mc.row];
+                        } else {
+                            window.damageCellUG(_mc.col, _mc.row, _mc.dmg);
+                        }
                         // Si se rompió la superficie, limpiar árboles/rocas encima
-                        if (_mc.row === 0) {
+                        if (_mc.row === 0 && _mc.broken === true) {
                             const _bs = window.game.blockSize;
                             const _cx = _mc.col * _bs, _cxr = _cx + _bs;
                             window.trees = window.trees.filter(t => {
@@ -662,9 +691,14 @@ window.attemptAction = function() {
                     // Explorar zona al minar (fog of war)
                     if (window.exploreArea) window.exploreArea(mCol * bs + bs/2, cellWCY, 80);
 
-                    // Sync multijugador: enviar daño de celda a otros jugadores
+                    // Sync multijugador: enviar daño de celda a otros jugadores.
+                    // broken=true cuando la celda se destruyó en este golpe → el servidor
+                    // la guarda en worldState.minedCells para persistirla entre sesiones.
                     if (window.game.isMultiplayer && window.sendWorldUpdate) {
-                        window.sendWorldUpdate('mine_cell', { col: mCol, row: mRow, dmg: terrainDmg });
+                        window.sendWorldUpdate('mine_cell', {
+                            col: mCol, row: mRow, dmg: terrainDmg,
+                            broken: !!broken   // true solo cuando la celda se destruyó
+                        });
                     }
 
                     if (broken) {

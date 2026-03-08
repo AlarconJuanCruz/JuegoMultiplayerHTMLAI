@@ -183,7 +183,7 @@ window.hasCeilingAbove = function (margin) {
             b.type === 'box'       || b.type === 'campfire' ||
             b.type === 'bed'       || b.type === 'grave'    ||
             b.type === 'barricade' || b.type === 'ladder'   ||
-            b.type === 'stair'
+            b.type === 'stair'     || b.type === 'placed_torch'
         ) continue;
         const bh = b.type === 'door' ? bs * 2 : bs;
         if (window.checkRectIntersection(cx, cy, cw, ch, b.x, b.y, bs, bh)) return true;
@@ -437,7 +437,7 @@ window.isOverlappingSolidBlock = function () {
             b.type === 'box'       || b.type === 'campfire' ||
             b.type === 'bed'       || b.type === 'grave'    ||
             b.type === 'barricade' || b.type === 'ladder'   ||
-            b.type === 'stair'
+            b.type === 'stair'     || b.type === 'placed_torch'
         ) continue;
         const h = b.type === 'door' ? bs * 2 : bs;
         if (window.checkRectIntersection(window.player.x, window.player.y, window.player.width, window.player.height, b.x, b.y, bs, h)) return true;
