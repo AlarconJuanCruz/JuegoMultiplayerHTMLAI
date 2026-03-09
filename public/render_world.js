@@ -452,6 +452,66 @@ window.draw = function() {
             }
         }
 
+        // ── Telas de araña de cueva ─────────────────────────────────────────
+        if (window.caveCobwebs?.length > 0) {
+            const C = window.ctx;
+            for (const _cw of window.caveCobwebs) {
+                // Culling rápido
+                if (_cw.x + _cw.w < startCol * bs || _cw.x > (endCol + 1) * bs) continue;
+                const _hpFrac = _cw.hp / _cw.maxHp;
+                const _alpha  = 0.55 + _hpFrac * 0.35;
+                C.save();
+                C.globalAlpha = _alpha;
+
+                const cx = _cw.x, cy = _cw.y, cw = _cw.w, ch = _cw.h;
+                const seed = _cw.seed || 0.5;
+
+                // Hilos radiales desde el anclaje (esquina o techo)
+                const anchX = _cw.style === 0 ? cx : (_cw.style === 1 ? cx + cw : cx + cw * 0.5);
+                const anchY = cy;
+
+                C.strokeStyle = `rgba(220,220,220,${_alpha})`;
+                C.lineWidth = 0.8;
+                C.beginPath();
+                const _threads = 5 + Math.floor(seed * 4);
+                for (let _t = 0; _t < _threads; _t++) {
+                    const _tx = cx + (_t / (_threads - 1)) * cw + (seed - 0.5) * 4;
+                    const _ty = cy + ch * (0.6 + seed * 0.4);
+                    C.moveTo(anchX, anchY);
+                    C.lineTo(_tx, _ty);
+                }
+                C.stroke();
+
+                // Arcos concéntricos (tela de araña)
+                C.strokeStyle = `rgba(200,200,200,${_alpha * 0.7})`;
+                C.lineWidth = 0.6;
+                const _rings = 3 + Math.floor(seed * 2);
+                for (let _r = 1; _r <= _rings; _r++) {
+                    const _rf = _r / _rings;
+                    C.beginPath();
+                    const _rXL = anchX - cw * _rf * 0.9;
+                    const _rXR = anchX + cw * _rf * 0.9;
+                    const _rY  = cy + ch * _rf * 0.85;
+                    C.moveTo(_rXL, cy + ch * _rf * 0.2);
+                    C.quadraticCurveTo(anchX, _rY, _rXR, cy + ch * _rf * 0.2);
+                    C.stroke();
+                }
+
+                // Daño: grietas en la tela si está dañada
+                if (_hpFrac < 0.7) {
+                    C.strokeStyle = `rgba(150,150,150,${_alpha * 0.5})`;
+                    C.lineWidth = 0.5;
+                    C.beginPath();
+                    C.moveTo(anchX - cw * 0.2, cy + ch * 0.3);
+                    C.lineTo(anchX + cw * 0.1 * (seed - 0.3), cy + ch * 0.7);
+                    C.stroke();
+                }
+
+                C.globalAlpha = 1;
+                C.restore();
+            }
+        }
+
         // Superficie (grass/sand top) por columna
         for (let col = startCol; col <= endCol; col++) {
             const col_data = window.getTerrainCol ? window.getTerrainCol(col) : { topY: base, type: 'flat' }; if (col_data.type === 'hole') continue;

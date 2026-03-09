@@ -644,6 +644,27 @@ window.attemptAction = function() {
 
     if (!actionDone && blockDmg > 0 && window.tryHitBlock(pCX, pCY, blockDmg, meleeRange)) actionDone = true;
 
+    // ── Telas de araña: golpear destruye y da tela ─────────────────────────
+    if (!actionDone && window.caveCobwebs?.length > 0) {
+        for (let _ci = window.caveCobwebs.length - 1; _ci >= 0; _ci--) {
+            const _cw = window.caveCobwebs[_ci];
+            const _cwCX = _cw.x + _cw.w / 2, _cwCY = _cw.y + _cw.h / 2;
+            if (Math.hypot(_cwCX - pCX, _cwCY - pCY) > meleeRange + 20) continue;
+            _cw.hp -= baseDmg;
+            window.spawnParticles(_cwCX, _cwCY, '#ffffff', 5, 0.4);
+            if (_cw.hp <= 0) {
+                window.caveCobwebs.splice(_ci, 1);
+                // Drop de tela directamente al inventario
+                const _webAmt = 1 + Math.floor(Math.random() * 2);
+                window.player.inventory.web = (window.player.inventory.web || 0) + _webAmt;
+                window.spawnDamageText(_cwCX, _cwCY - 10, `+${_webAmt} 🕸️`, '#e0e0e0');
+                if (window.updateUI) window.updateUI();
+                actionDone = true;
+            }
+            break;
+        }
+    }
+
     // Árbol vs piedra: priorizar el más cercano al cursor
     if (!actionDone && (treeDmg > 0 || rockDmg > 0)) {
         const distToTree = (() => { for (const t of window.trees) { const tFY = window.getGroundY ? window.getGroundY(t.x+t.width/2) : t.y+t.height; const tHY = t.isStump ? tFY-40 : tFY-Math.min(t.height*0.35, meleeRange*0.6); const d = Math.hypot(window.mouseWorldX-(t.x+t.width/2), window.mouseWorldY-tHY); if (d <= meleeRange) return d; } return Infinity; })();
@@ -1224,13 +1245,53 @@ function update() {
         // Guardar dirección de la pared para cancelar accel el frame siguiente.
         // Si no hay colisión, limpiar la dirección para que el jugador pueda volver a moverse.
         if (_hitWallX) {
-            window.player._wallDir   = window.player.vx >= 0 ? 1 : -1;   // dirección en que chocó
-            // Si vx ya fue puesto a 0 por la colisión, usar la tecla presionada como proxy
-            if (window.player.vx === 0) window.player._wallDir = window.keys?.d ? 1 : (window.keys?.a ? -1 : 0);
+            // Colisión física real con pared este frame (el player tenía vx != 0).
+            window.player._wallDir   = window.player.vx > 0 ? 1 : (window.player.vx < 0 ? -1 : 0);
+            // Si vx ya fue puesto a 0 por la colisión, usar la tecla como proxy.
+            if (window.player._wallDir === 0) window.player._wallDir = window.keys?.d ? 1 : (window.keys?.a ? -1 : 0);
             window.player._accelRamp = 0;
             window.player.animTime   = 0;
+        } else if (_pressingIntoWall) {
+            // vx fue suprimido a 0 por _pressingIntoWall el frame anterior → hitWallX=false.
+            // Esto causa la oscilación: vx=0 → sin colisión → _wallDir=0 → vx crece → colisión → etc.
+            // Solución: probar si la pared sigue ahí antes de limpiar _wallDir.
+            const _probeDir = window.player._wallDir;
+            const _pbs      = window.game.blockSize;
+            // Punto de prueba: 2px fuera del borde del jugador en la dirección bloqueada
+            const _probeX   = _probeDir > 0
+                ? window.player.x + window.player.width + 2
+                : window.player.x - 2;
+            const _probeCol = Math.floor(_probeX / _pbs);
+            const _probeCD  = window.getTerrainCol ? window.getTerrainCol(_probeCol) : null;
+            // Pared de terreno (acantilado de superficie)
+            const _terrainWall = _probeCD && _probeCD.type !== 'hole' &&
+                _probeCD.topY < (window.player.y + window.player.height) - _pbs * 0.85;
+            // Pared de celda UG (cueva)
+            const _ugWall = !_terrainWall && !!window.getUGCellV && (() => {
+                if (!_probeCD || _probeCD.type === 'hole') return false;
+                const _topY = _probeCD.topY;
+                const _foot = window.player.y + window.player.height;
+                const _rTop = Math.max(0, Math.floor((window.player.y - _topY) / _pbs));
+                const _rBot = Math.max(0, Math.floor((_foot - 2 - _topY) / _pbs));
+                for (let _r = _rTop; _r <= _rBot; _r++) {
+                    if (window.getUGCellV(_probeCol, _r) !== 'air') return true;
+                }
+                return false;
+            })();
+            // Pared de bloque colocado por el jugador
+            const _blockWall = !_terrainWall && !_ugWall && !!window.blocks && window.blocks.some(_wb => {
+                if (_wb.type === 'ladder' || (_wb.type === 'door' && _wb.open)) return false;
+                const _wbh = _wb.type === 'door' ? _pbs * 2 : _pbs;
+                return Math.abs(_wb.x - _probeCol * _pbs) < _pbs &&
+                    _wb.y < window.player.y + window.player.height &&
+                    _wb.y + _wbh > window.player.y;
+            });
+            if (!_terrainWall && !_ugWall && !_blockWall) {
+                window.player._wallDir = 0;  // pared desapareció → liberar movimiento
+            }
+            // Si la pared sigue ahí: mantener _wallDir y el bloqueo de vx ya está activo
         } else {
-            window.player._wallDir = 0;  // libre → reactivar aceleración normal
+            window.player._wallDir = 0;  // tecla soltada → libre
         }
 
         // ── animTime: recalcular con el vx REAL post-colisión ──────────────────
@@ -1694,6 +1755,115 @@ function update() {
                 else if (pick==='spider') { const hp=15+lvl*10,sw=32+lvl*2,sh=18+lvl; newEnt={id:_id(),type:'spider',name:'Araña',level:lvl,x:cx,y:_sGY-sh,width:sw,height:sh,vx:_vx(0.7),vy:0,hp,maxHp:hp,damage:5+lvl*2,isHit:false,attackCooldown:0,stuckFrames:0,ignorePlayer:0,lastX:cx}; }
                 else if (pick==='wolf')   { const hp=40+lvl*10; newEnt={id:_id(),type:'wolf',name:'Lobo',level:lvl,x:cx,y:_sGY-50,width:63,height:50,vx:_vx(0.5),vy:0,hp,maxHp:hp,damage:7+lvl*2,isHit:false,attackCooldown:0,stuckFrames:0,ignorePlayer:0,lastX:cx,packId:'np_'+Math.floor(cx/100),wolfState:'patrol',wolfStateTimer:0,wolfLeader:true}; }
                 if (newEnt) { window.entities.push(newEnt); window.sendWorldUpdate('spawn_entity',{entity:newEnt}); }
+            }
+        }
+
+        // ── Spawn de arañas de cueva (independiente de día/noche) ───────────────
+        // Activo cuando el jugador está bajo el suelo en una cueva real.
+        // Se generan 2 tipos: araña pequeña (nivel bajo) y araña grande (nivel alto).
+        {
+            const _ugSurf  = window.getTerrainCol ? window.getTerrainCol(Math.floor(pCX / bs)) : null;
+            const _ugSurfY = _ugSurf ? _ugSurf.topY : (window.game.baseGroundLevel || 510);
+            const _playerInCave = window.player.y + window.player.height > _ugSurfY + bs * 2
+                && !window.player.isDead;
+
+            if (_playerInCave && isMasterClient && window.game.frameCount % 360 === 0) {
+                const _caveSpiders = window.entities.filter(e => e.type === 'spider' && e.inCave).length;
+                const _caveSpiderCap = 2 + Math.floor((window.game.days || 1) * 0.4);
+                if (_caveSpiders < _caveSpiderCap) {
+                    // Elegir X de spawn: offset lateral 400-700px del jugador
+                    const _side   = Math.random() > 0.5 ? 1 : -1;
+                    const _spawnX = window.player.x + _side * (400 + Math.random() * 300);
+                    const _spCol  = Math.floor(_spawnX / bs);
+                    const _spCD   = window.getTerrainCol ? window.getTerrainCol(_spCol) : null;
+                    if (_spCD && _spCD.type !== 'hole') {
+                        // Buscar suelo de cueva: primera fila sólida debajo de al menos 1 fila de aire
+                        let _caveFloorY = null;
+                        let _inAir = false;
+                        for (let _sr = 0; _sr < (window.UG_MAX_DEPTH || 50); _sr++) {
+                            const _smat = window.getUGCellV ? window.getUGCellV(_spCol, _sr) : 'stone';
+                            if (_smat === 'air') { _inAir = true; }
+                            else if (_inAir && _smat !== 'air' && _smat !== 'bedrock') {
+                                _caveFloorY = _spCD.topY + _sr * bs;
+                                break;
+                            }
+                        }
+                        if (_caveFloorY !== null && _caveFloorY > _ugSurfY + bs) {
+                            const _isBig  = Math.random() < 0.22 && (window.game.days || 1) > 2;
+                            const _spLvl  = Math.max(1, Math.floor(((window.game.days || 1) - 1) * 0.6) + (_isBig ? 3 : 0));
+                            const _spHp   = _isBig ? 70 + _spLvl * 18 : 18 + _spLvl * 7;
+                            const _spW    = _isBig ? 44 : 22;
+                            const _spH    = _isBig ? 26 : 13;
+                            const _spEnt  = {
+                                id: 'csv_' + Math.random().toString(36).substr(2, 9),
+                                type: 'spider',
+                                name: _isBig ? 'Araña Caverna' : 'Araña de Cueva',
+                                level: _spLvl,
+                                x: _spawnX, y: _caveFloorY - _spH,
+                                width: _spW, height: _spH,
+                                vx: _side > 0 ? -0.6 : 0.6, vy: 0,
+                                hp: _spHp, maxHp: _spHp,
+                                damage: _isBig ? 14 + _spLvl * 3 : 4 + _spLvl * 2,
+                                isHit: false, attackCooldown: 0,
+                                stuckFrames: 0, ignorePlayer: 60, lastX: _spawnX,
+                                inCave: true,  // flag para distinguirlas de arañas de superficie
+                            };
+                            window.entities.push(_spEnt);
+                            if (window.sendWorldUpdate) window.sendWorldUpdate('spawn_entity', { entity: _spEnt });
+                        }
+                    }
+                }
+            }
+
+            // ── Generación de telas de araña (decoración de cueva) ─────────────
+            // Se generan cerca del jugador cuando está bajo tierra en una cueva.
+            // Se almacenan en window.caveCobwebs y persisten hasta ser destruidas.
+            if (_playerInCave && window.game.frameCount % 90 === 0) {
+                window.caveCobwebs = window.caveCobwebs || [];
+                window._cobwebGenSet = window._cobwebGenSet || new Set();
+                const _ugSurfY2 = _ugSurfY;
+                // Escanear columnas cercanas al jugador en busca de esquinas de cueva
+                const _cwStartCol = Math.floor((window.player.x - 400) / bs);
+                const _cwEndCol   = Math.floor((window.player.x + 400) / bs);
+                for (let _cwC = _cwStartCol; _cwC <= _cwEndCol; _cwC++) {
+                    const _cwCD = window.getTerrainCol ? window.getTerrainCol(_cwC) : null;
+                    if (!_cwCD || _cwCD.type === 'hole') continue;
+                    const _cwTopY = _cwCD.topY;
+                    // Escanear filas en esta columna buscando celdas de aire con techo/pared sólidos
+                    for (let _cwR = 1; _cwR < Math.min(window.UG_MAX_DEPTH || 50, 25); _cwR++) {
+                        const _cwKey = `${_cwC}_${_cwR}`;
+                        if (window._cobwebGenSet.has(_cwKey)) continue;
+                        const _cwMat = window.getUGCellV ? window.getUGCellV(_cwC, _cwR) : 'stone';
+                        if (_cwMat !== 'air') continue;
+                        // ¿Es un rincón de cueva? (aire aquí, sólido arriba y a un lado)
+                        const _cwAbove = window.getUGCellV ? window.getUGCellV(_cwC, _cwR - 1) : 'stone';
+                        const _cwLeft  = window.getUGCellV ? window.getUGCellV(_cwC - 1, _cwR) : 'stone';
+                        const _cwRight = window.getUGCellV ? window.getUGCellV(_cwC + 1, _cwR) : 'stone';
+                        const _isCeiling = _cwAbove !== 'air' && _cwAbove !== 'bedrock';
+                        const _isCornerL = _isCeiling && _cwLeft  !== 'air' && _cwLeft  !== 'bedrock';
+                        const _isCornerR = _isCeiling && _cwRight !== 'air' && _cwRight !== 'bedrock';
+                        // Probabilidad baja: no saturar el mundo de telas
+                        const _cwHash = (((_cwC * 374761393) ^ (_cwR * 1103515245)) >>> 0) / 0xFFFFFFFF;
+                        const _cwChance = _isCornerL || _isCornerR ? 0.09 : (_isCeiling ? 0.04 : 0);
+                        window._cobwebGenSet.add(_cwKey);
+                        if (_cwHash > _cwChance) continue;
+                        // Crear tela
+                        const _cwX  = _cwC * bs + (_isCornerL ? 0 : (_isCornerR ? bs - 10 : bs * 0.2));
+                        const _cwY  = _cwTopY + (_cwR) * bs;
+                        const _cwW  = _isCornerL || _isCornerR ? bs * 0.7 : bs;
+                        const _cwH  = _isCornerL || _isCornerR ? bs * 0.7 : bs * 0.5;
+                        const _cwHp = 4 + Math.floor(_cwHash * 6);
+                        window.caveCobwebs.push({
+                            id: `cw_${_cwC}_${_cwR}`,
+                            x: _cwX, y: _cwY, w: _cwW, h: _cwH,
+                            hp: _cwHp, maxHp: _cwHp,
+                            style: _isCornerL ? 0 : (_isCornerR ? 1 : 2),
+                            seed: _cwHash,
+                        });
+                    }
+                }
+                // Limitar tamaño del array de telas
+                if (window.caveCobwebs.length > 120) window.caveCobwebs.splice(0, window.caveCobwebs.length - 120);
             }
         }
 
