@@ -136,12 +136,19 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
 
             window.socket.on('worldSeed', (data) => {
                 if (data?.seed && window.setSeedFromCode) {
-                    // setSeedFromCode llama applySeed, que ya NO borra _minedCells.
-                    // Si initWorldState llegó antes (siempre es así), _minedCells
-                    // ya tiene los datos del servidor y se preservan.
                     window.setSeedFromCode(data.seed);
                     localStorage.setItem('worldSeedCode', window.seedCode);
                     let el = document.getElementById('seed-display'); if (el) el.textContent = window.seedCode;
+                }
+                // Re-aplicar celdas minadas DESPUÉS de applySeed para que no se pierdan.
+                // applySeed limpia _ugCellCache y _terrainColCache pero NO _minedCells.
+                // Aun así, guardamos una copia defensiva en _pendingMinedCells por si
+                // alguna ruta de código inesperada borra _minedCells antes de llegar aquí.
+                if (window._pendingMinedCells && Object.keys(window._pendingMinedCells).length > 0) {
+                    Object.assign(window._minedCells, window._pendingMinedCells);
+                    window._ugCellCache     = {};
+                    window._terrainColCache = {};
+                    window._pendingMinedCells = null;
                 }
             });
 
@@ -169,13 +176,16 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 window.entities = window.entities.filter(e => !window.killedEntities.includes(e.id));
 
                 // ── Restaurar terreno minado ──────────────────────────────────────────
-                // state.minedCells: {'col_row': true, ...}  guardado en el servidor.
-                // applySeed (llamado por worldSeed) ya NO borra _minedCells, así que
-                // basta con aplicar directamente aquí sin workarounds de timing.
+                // Guardamos en _pendingMinedCells además de _minedCells.
+                // Si worldSeed llega después y llama a applySeed, el handler de worldSeed
+                // re-aplica _pendingMinedCells para garantizar que no se pierdan.
                 if (state.minedCells && typeof state.minedCells === 'object') {
-                    window._minedCells = Object.assign({}, state.minedCells);
+                    window._minedCells         = Object.assign({}, state.minedCells);
+                    window._pendingMinedCells  = Object.assign({}, state.minedCells);  // copia defensiva
                     if (window._ugCellCache)     window._ugCellCache     = {};
                     if (window._terrainColCache) window._terrainColCache = {};
+                } else {
+                    window._pendingMinedCells = null;
                 }
                 window._serverMinedCells = {}; // limpiar por si quedó algo de sesiones anteriores
 

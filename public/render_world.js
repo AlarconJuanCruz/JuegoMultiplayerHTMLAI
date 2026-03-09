@@ -102,75 +102,77 @@ window.draw = function() {
     //   bg_mountains_back.png  →  512 × 153 px
     //   bg_mountains_mid.png   → 1705 × 350 px
     //
-    // bgHorizonY es FIJO en H*0.62 (independiente de camera.y).
-    // Un fondo "a distancia infinita" nunca se mueve verticalmente con la cámara.
-    // La fórmula correcta es H*0.62 porque la cámara sigue al jugador con:
-    //   camera.y = footY - H*0.62  →  screenY(groundLevel) = groundLevel - camera.y = H*0.62
-    // Usar _surfSY aquí hacía que las montañas se deslizasen verticalmente cuando
-    // el jugador subía colinas (camera.y cambia → _surfSY cambia → horizonte salta).
+    // DISEÑO DE CAPAS:
+    //   back (montañas lejanas) → zona media-alta del cielo, escala H*0.24
+    //   mid  (bosque/pinos)     → borde inferior del cielo (horizonte), escala H*0.28
+    //
+    // Anclar ambas ABAJO en horizontes DISTINTOS para que back sea visible por encima de mid:
+    //   mid  → bottom en bgHorizonY   (la línea de terreno)
+    //   back → bottom en bgHorizonY - midDisplayH + H*0.06  (justo encima del mid, con pequeño solapamiento)
+    //
+    // bgHorizonY FIJO (independiente de camera.y): el cielo no se mueve verticalmente.
     // ─────────────────────────────────────────────────────────────────────────────
     const bgBackNW = 512,  bgBackNH = 153;
     const bgMidNW  = 1705, bgMidNH  = 350;
 
-    // Horizonte fijo: fondo siempre anclado al mismo Y de pantalla
-    const bgHorizonY = H * 0.62;
+    const bgHorizonY = H * 0.62;   // fijo — línea de terreno en pantalla
 
-    // Factor de escala uniforme respecto al canvas de referencia (720p)
-    const bgScale = H / 720;
-    const bgBackScaleH = Math.round(bgBackNH * bgScale);
-    const bgBackScaleW = Math.round(bgBackNW * bgScale);
-    const bgMidScaleH  = Math.round(bgMidNH  * bgScale);
-    const bgMidScaleW  = Math.round(bgMidNW  * bgScale);
+    // Alturas de visualización (independientes de las dimensiones naturales del sprite)
+    const bgMidDisplayH  = Math.round(H * 0.28);                                   // ~202px @720p
+    const bgBackDisplayH = Math.round(H * 0.24);                                   // ~173px @720p
 
-    // Posición Y: borde inferior en bgHorizonY
-    const backY = Math.floor(bgHorizonY - bgBackScaleH);
-    const midY  = Math.floor(bgHorizonY - bgMidScaleH);
+    // Anchos proporcionales al alto de visualización
+    const bgMidDisplayW  = Math.round(bgMidNW  * (bgMidDisplayH  / bgMidNH));      // ~1051px @720p
+    const bgBackDisplayW = Math.round(bgBackNW * (bgBackDisplayH / bgBackNH));     //  ~578px @720p
 
-    // Parallax X: módulo positivo garantizado para evitar gaps
-    const _rawBackX = -(window.camera.x * 0.05) % bgBackScaleW;
-    let backX = Math.floor(_rawBackX <= 0 ? _rawBackX : _rawBackX - bgBackScaleW);
-    const _rawMidX  = -(window.camera.x * 0.15) % bgMidScaleW;
-    let midX  = Math.floor(_rawMidX  <= 0 ? _rawMidX  : _rawMidX  - bgMidScaleW);
+    // Posición Y: mid anclado en horizonte, back anclado encima del mid
+    const midY  = Math.floor(bgHorizonY - bgMidDisplayH);
+    const backY = Math.floor(midY - bgBackDisplayH + H * 0.06);   // pequeño solapamiento estético
+
+    // Parallax X
+    const _rawBackX = -(window.camera.x * 0.05) % bgBackDisplayW;
+    let backX = Math.floor(_rawBackX <= 0 ? _rawBackX : _rawBackX - bgBackDisplayW);
+    const _rawMidX  = -(window.camera.x * 0.15) % bgMidDisplayW;
+    let midX  = Math.floor(_rawMidX  <= 0 ? _rawMidX  : _rawMidX  - bgMidDisplayW);
 
     const bgDimAlpha = darkness * 0.55;
 
-    // Solo dibujar cuando el suelo es visible en pantalla (no completamente underground)
     if (_surfSY > 0) {
         window.ctx.save();
         window.ctx.beginPath();
         window.ctx.rect(0, 0, W, Math.ceil(bgHorizonY));
         window.ctx.clip();
 
-        // ── Capa trasera: montañas ──────────────────────────────────────────────
+        // ── Capa trasera: montañas lejanas (parte alta del cielo) ───────────────
         if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
-            const tilesNeeded = Math.ceil(W / bgBackScaleW) + 2;
+            const tilesNeeded = Math.ceil(W / bgBackDisplayW) + 2;
             for (let i = 0; i < tilesNeeded; i++) {
                 window.ctx.drawImage(
                     window.sprites.bg_mountains_back,
-                    backX + i * bgBackScaleW, backY,
-                    bgBackScaleW, bgBackScaleH
+                    backX + i * bgBackDisplayW, backY,
+                    bgBackDisplayW, bgBackDisplayH
                 );
             }
         }
         if (bgDimAlpha > 0.04) {
             window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.8})`;
-            window.ctx.fillRect(0, backY, W, bgBackScaleH);
+            window.ctx.fillRect(0, backY, W, bgBackDisplayH);
         }
 
-        // ── Capa frontal: bosque de pinos ───────────────────────────────────────
+        // ── Capa frontal: bosque de pinos (horizonte) ───────────────────────────
         if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
-            const tilesNeeded = Math.ceil(W / bgMidScaleW) + 2;
+            const tilesNeeded = Math.ceil(W / bgMidDisplayW) + 2;
             for (let i = 0; i < tilesNeeded; i++) {
                 window.ctx.drawImage(
                     window.sprites.bg_mountains_mid,
-                    midX + i * bgMidScaleW, midY,
-                    bgMidScaleW, bgMidScaleH
+                    midX + i * bgMidDisplayW, midY,
+                    bgMidDisplayW, bgMidDisplayH
                 );
             }
         }
         if (bgDimAlpha > 0.04) {
             window.ctx.fillStyle = `rgba(5,8,20,${bgDimAlpha * 0.65})`;
-            window.ctx.fillRect(0, midY, W, bgMidScaleH);
+            window.ctx.fillRect(0, midY, W, bgMidDisplayH);
         }
 
         window.ctx.restore();
@@ -422,17 +424,28 @@ window.draw = function() {
                         }
                     }
 
-                    // Barra de progreso de minado
+                    // Grietas de minado (sin barra de HP — la textura de grietas es suficiente)
                     const frac = window.getCellDmgFrac ? window.getCellDmgFrac(col, row) : 0;
                     if (frac > 0) {
-                        C.fillStyle = 'rgba(0,0,0,0.55)'; C.fillRect(x+2, Math.floor(cellY)+bs-6, bs-4, 4);
-                        const bw = Math.floor((bs-4)*frac);
-                        C.fillStyle = frac < 0.5 ? '#e74c3c' : frac < 0.85 ? '#f39c12' : '#fff';
-                        C.fillRect(x+2, Math.floor(cellY)+bs-6, bw, 4);
-                        const crackAlpha = frac * 0.65; const cSeed = (col*7+row*13) & 0xFF;
+                        const crackAlpha = 0.18 + frac * 0.70;
+                        const cSeed = (col * 7 + row * 13) & 0xFF;
                         C.fillStyle = `rgba(0,0,0,${crackAlpha})`;
-                        for (let cr=0; cr<3; cr++) {
-                            C.fillRect(x+((cSeed*(cr+1)*37)%(bs-4)), Math.floor(cellY)+((cSeed*(cr+1)*53)%(bs-4)), 2, Math.floor(frac*8)+1);
+                        const numCracks = 2 + Math.floor(frac * 4);
+                        for (let cr = 0; cr < numCracks; cr++) {
+                            const cx  = x + ((cSeed * (cr + 1) * 37) % (bs - 6)) + 2;
+                            const cy  = Math.floor(cellY) + ((cSeed * (cr + 1) * 53) % (bs - 6)) + 2;
+                            const cw  = 1 + Math.floor(frac * 3);
+                            const ch  = Math.floor(frac * 10) + 2 + (cr & 1) * 4;
+                            C.fillRect(cx, cy, cw, ch);
+                            // grieta cruzada en ángulo para dar volumen
+                            if (frac > 0.4) {
+                                C.fillRect(cx + (cr & 1 ? 2 : -2), cy + Math.floor(ch * 0.4), ch, cw);
+                            }
+                        }
+                        // Overlay semitransparente cuando está a punto de romperse
+                        if (frac > 0.75) {
+                            C.fillStyle = `rgba(255,180,60,${(frac - 0.75) * 0.28})`;
+                            C.fillRect(x, Math.floor(cellY), drawW, cH);
                         }
                     }
                 }

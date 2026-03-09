@@ -38,6 +38,20 @@ function saveRoomState(room) {
     _pendingWrites.set(key, tid);
 }
 
+// Guardado inmediato (síncrono) — solo para eventos críticos donde el proceso
+// puede terminar poco después (disconnect, vaciado de sala, mine_cell roto).
+function saveRoomStateNow(room) {
+    const key  = _persistKey(room);
+    const file = path.join(DATA_DIR, `${key}.json`);
+    // Cancelar cualquier write pendiente para esta sala (ya lo incluimos aquí)
+    if (_pendingWrites.has(key)) { clearTimeout(_pendingWrites.get(key)); _pendingWrites.delete(key); }
+    try {
+        fs.writeFileSync(file, JSON.stringify(room.worldState), 'utf8');
+    } catch (e) {
+        console.error(`[persist] Error guardando (sync) ${key}:`, e.message);
+    }
+}
+
 function loadRoomState(persistKey) {
     try {
         const file = path.join(DATA_DIR, `${persistKey}.json`);
@@ -172,16 +186,13 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         socket.emit('timeSync', Date.now() - room.createdAt);
         socket.emit('initWorldState', room.worldState);
-        if (room.worldState.seedCode) socket.emit('worldSeed', { seed: room.worldState.seedCode });
 
-        room.players[socket.id] = { id: socket.id, ...safeData };
-
-        if (Object.keys(room.players).length === 1 && !room.worldState.seedCode && safeData.seedCode) {
+        if (Object.keys(room.players).length === 0 && !room.worldState.seedCode && safeData.seedCode) {
+            // Primera persona en entrar: registrar la semilla del cliente como semilla del mundo
             room.worldState.seedCode = safeData.seedCode;
-            socket.emit('worldSeed', { seed: room.worldState.seedCode });
-        } else if (room.worldState.seedCode) {
-            socket.emit('worldSeed', { seed: room.worldState.seedCode });
         }
+        // Enviar worldSeed UNA SOLA VEZ (evitar doble applySeed en el cliente)
+        if (room.worldState.seedCode) socket.emit('worldSeed', { seed: room.worldState.seedCode });
 
         io.to(roomId).emit('currentPlayers', room.players);
         io.emit('roomListUpdate', publicRoomList());
@@ -344,9 +355,9 @@ io.on('connection', (socket) => {
                     if (!ws.minedCells) ws.minedCells = {};
                     if (mc.broken === true) {
                         ws.minedCells[mc.col + '_' + mc.row] = true;
-                        // Persistir a disco cada vez que se rompe una celda
-                        // (debounced → colapsa múltiples golpes en 1 escritura)
-                        saveRoomState(room);
+                        // Guardar de forma inmediata/síncrona para que ningún disconnect
+                        // o cierre de proceso pierda la celda recién rota.
+                        saveRoomStateNow(room);
                     }
                 }
                 break;
@@ -402,8 +413,9 @@ io.on('connection', (socket) => {
         delete room.players[socket.id];
         socketRates.delete(socket.id);
 
-        // Guardar siempre al quedar sala vacía (o simplemente al desconectarse)
-        saveRoomState(room);
+        // Guardar de forma inmediata al desconectar: si el servidor termina justo
+        // después del disconnect, saveRoomState (debounced) podría no ejecutarse.
+        saveRoomStateNow(room);
         if (Object.keys(room.players).length === 0)
             console.log(`[persist] Sala ${room.id} (${_persistKey(room)}) guardada al quedar vacía`);
 
