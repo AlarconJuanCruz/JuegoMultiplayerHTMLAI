@@ -1854,7 +1854,7 @@ function update() {
                         const _cwY  = _cwTopY + (_cwR) * bs;
                         const _cwW  = _isCornerL || _isCornerR ? bs * 0.7 : bs;
                         const _cwH  = _isCornerL || _isCornerR ? bs * 0.7 : bs * 0.5;
-                        const _cwHp = 4 + Math.floor(_cwHash * 6);
+                        const _cwHp = 20 + Math.floor(_cwHash * 15);
                         window.caveCobwebs.push({
                             id: `cw_${_cwC}_${_cwR}`,
                             x: _cwX, y: _cwY, w: _cwW, h: _cwH,

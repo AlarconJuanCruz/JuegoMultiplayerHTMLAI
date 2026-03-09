@@ -242,28 +242,33 @@ io.on('connection', (socket) => {
         const room = rooms[socket.roomId];
         if (!room || !room.players[socket.id]) return;
         const p = room.players[socket.id];
+        // Campos siempre presentes en el paquete frecuente
         Object.assign(p, {
-            x: Number(data.x) || p.x, y: Number(data.y) || p.y,
-            vx: Number(data.vx) || 0,  vy: Number(data.vy) || 0,
-            isGrounded:     !!data.isGrounded,
-            facingRight:    !!data.facingRight,
-            activeTool:     sanitize(data.activeTool ?? 'hand', 20),
-            animTime:       Number(data.animTime)    || 0,
-            attackFrame:    Number(data.attackFrame) || 0,
-            isAiming:       !!data.isAiming,
-            isCharging:     !!data.isCharging,
-            chargeLevel:    Math.max(0, Math.min(100, Number(data.chargeLevel) || 0)),
-            mouseX:         Number(data.mouseX)  || 0,
-            mouseY:         Number(data.mouseY)  || 0,
-            isDead:         !!data.isDead,
-            level:          Math.max(1, Math.min(9999, parseInt(data.level) || p.level)),
-            isTyping:       !!data.isTyping,
-            isDancing:      !!data.isDancing,
-            danceStart:     Number(data.danceStart) || 0,
+            x:           Number(data.x)  || p.x,
+            y:           Number(data.y)  || p.y,
+            vx:          Number(data.vx) || 0,
+            vy:          Number(data.vy) || 0,
+            isGrounded:  !!data.isGrounded,
+            facingRight: !!data.facingRight,
+            animTime:    Number(data.animTime)    || 0,
+            isDead:      !!data.isDead,
             deathAnimFrame: Number(data.deathAnimFrame) || 0,
-            isClimbing:     !!data.isClimbing,
-            isSprinting:    !!data.isSprinting
+            isClimbing:  !!data.isClimbing,
+            isSprinting: !!data.isSprinting,
+            isTyping:    !!data.isTyping,
         });
+        // Campos opcionales: solo se actualizan cuando el cliente los envía
+        // (evita resetear activeTool a 'hand' en paquetes que no lo incluyen)
+        if (data.activeTool !== undefined) p.activeTool = sanitize(data.activeTool, 20) || 'hand';
+        if (data.attackFrame !== undefined) p.attackFrame = Number(data.attackFrame) || 0;
+        if (data.isAiming    !== undefined) p.isAiming    = !!data.isAiming;
+        if (data.isCharging  !== undefined) p.isCharging  = !!data.isCharging;
+        if (data.chargeLevel !== undefined) p.chargeLevel = Math.max(0, Math.min(100, Number(data.chargeLevel) || 0));
+        if (data.mouseX      !== undefined) p.mouseX      = Number(data.mouseX)  || 0;
+        if (data.mouseY      !== undefined) p.mouseY      = Number(data.mouseY)  || 0;
+        if (data.level       !== undefined) p.level       = Math.max(1, Math.min(9999, parseInt(data.level) || p.level));
+        if (data.isDancing   !== undefined) p.isDancing   = !!data.isDancing;
+        if (data.danceStart  !== undefined) p.danceStart  = Number(data.danceStart) || 0;
         socket.to(socket.roomId).emit('playerMoved', { ...p, id: socket.id });
     });
 
