@@ -29,7 +29,32 @@ window.checkBlockCollisions = function (axis) {
         const itemHeight = b.type === 'door' ? bs * 2 : bs;
 
         if (b.type === 'stair') {
-            if (axis !== 'y') continue;
+            if (axis === 'x') {
+                // La cara trasera (vertical sólida) del escalón bloquea el paso.
+                // facingRight=true  → cara sólida = DERECHA  (jugador viene de derecha, vx<0)
+                // facingRight=false → cara sólida = IZQUIERDA (jugador viene de izquierda, vx>0)
+                const pFoot = p.y + p.height;
+                if (pFoot <= b.y || p.y >= b.y + bs) continue; // sin solapamiento vertical
+                if (!window.checkRectIntersection(p.x, p.y, p.width, p.height, b.x, b.y, bs, bs)) continue;
+
+                // Calcular la Y de la rampa en el centro del jugador para saber si está SOBRE la rampa
+                const pCX   = p.x + p.width / 2;
+                const relX  = Math.max(0, Math.min(bs, pCX - b.x));
+                const frac  = b.facingRight ? (relX / bs) : (1 - relX / bs);
+                const rampY = b.y + bs - frac * bs;
+
+                // Si el pie está cerca de la superficie de la rampa → el jugador está montado en ella → no bloquear
+                if (Math.abs(pFoot - rampY) <= bs * 0.65) { continue; }
+
+                // Bloquear sólo desde la cara sólida (trasera)
+                if (b.facingRight && p.vx < 0) {
+                    p.x = b.x + bs + 0.1; p.vx = 0; hitWallX = true;
+                } else if (!b.facingRight && p.vx > 0) {
+                    p.x = b.x - p.width - 0.1; p.vx = 0; hitWallX = true;
+                }
+                continue;
+            }
+            // eje Y: lógica de rampa existente
             if (p.vy <= 0) continue;
             const pCX = p.x + p.width / 2;
             if (pCX < b.x || pCX > b.x + bs) continue;
@@ -471,6 +496,18 @@ window.isAdjacentToBlockOrGround = function (x, y, w, h) {
         if (window.checkRectIntersection(x - 2, y - 2, w + 4, h + 4, b.x, b.y, bs, bh)) return true;
     }
 
+    // Columnas de terreno superficial adyacentes lateralmente también cuentan como soporte.
+    // Permite colocar bloques pegados a la pared de una colina/escalón de terreno.
+    if (window.getTerrainCol) {
+        const colL = Math.floor((x - 1)     / bs);
+        const colR = Math.floor((x + w + 1) / bs);
+        const cdL  = window.getTerrainCol(colL);
+        const cdR  = window.getTerrainCol(colR);
+        // La columna lateral es sólida desde topY hacia abajo → soporta si su topY <= fondo del bloque
+        if (cdL && cdL.type !== 'hole' && cdL.topY <= y + h) return true;
+        if (cdR && cdR.type !== 'hole' && cdR.topY <= y + h) return true;
+    }
+
     // Underground: también contar celdas UG sólidas adyacentes
     if (window.getUGCellV && window.getTerrainCol) {
         // Comprobar las 4 celdas vecinas (arriba, abajo, izq, der)
@@ -529,7 +566,17 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
                 Math.abs(b.x - x) < bs - 1 &&
                 Math.abs(b.y - (y + h)) < 4
             );
-            if (!isFlat && !hasBlockBelow) return false;
+            // También permitir si hay terreno adyacente a la misma altura (esquina de colina)
+            const hasAdjacentTerrain = (() => {
+                if (!window.getTerrainCol) return false;
+                const colL = Math.floor((x - 1)     / bs);
+                const colR = Math.floor((x + w + 1) / bs);
+                const cdL  = window.getTerrainCol(colL);
+                const cdR  = window.getTerrainCol(colR);
+                return (cdL && cdL.type !== 'hole' && cdL.topY <= y + h) ||
+                       (cdR && cdR.type !== 'hole' && cdR.topY <= y + h);
+            })();
+            if (!isFlat && !hasBlockBelow && !hasAdjacentTerrain) return false;
         }
 
         if (window.checkRectIntersection(x, y, w, h, window.player.x, window.player.y, window.player.width, window.player.height)) return false;
@@ -553,8 +600,19 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
         }
 
         if (isItem || isDoor) {
+            // Terreno lateral adyacente también provee soporte (colocar contra pared de colina)
+            const adjacentTerrainSupport = (() => {
+                if (!window.getTerrainCol) return false;
+                const colL = Math.floor((x - 1)     / bs);
+                const colR = Math.floor((x + w + 1) / bs);
+                const cdL  = window.getTerrainCol(colL);
+                const cdR  = window.getTerrainCol(colR);
+                return (cdL && cdL.type !== 'hole' && cdL.topY <= y + h) ||
+                       (cdR && cdR.type !== 'hole' && cdR.topY <= y + h);
+            })();
             const supported =
                 y + h >= groundGridY ||
+                adjacentTerrainSupport ||
                 window.blocks.some(b =>
                     (b.type === 'block' || b.type === 'ladder' || b.type === 'stair') &&
                     Math.abs(b.x - x) < 1 &&

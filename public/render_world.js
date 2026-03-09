@@ -828,7 +828,7 @@ window.draw = function() {
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
         const pCX = window.player.x + window.player.width / 2; const pCY = window.player.y + 6;
         const dx = window.mouseWorldX - pCX; const dy = window.mouseWorldY - pCY; const angle = Math.atan2(dy, dx);
-        const power = 4 + (window.player.chargeLevel / 100) * 6; const grav = window.game.gravity * 0.4; const bs = window.game.blockSize;
+        const power = 4 + (window.player.chargeLevel / 100) * 6; const grav = window.game.gravity * 0.25; const bs = window.game.blockSize;
         let simX = pCX, simY = pCY; let simVx = Math.cos(angle) * power; let simVy = Math.sin(angle) * power;
         const pts = []; let hitX = null, hitY = null;
         for (let i = 0; i < 240; i++) {
@@ -852,7 +852,7 @@ window.draw = function() {
     if (window.player.activeTool === 'molotov' && window.player.isAiming && window.player.isCharging && (window.player.inventory.molotov || 0) > 0 && !window.player.isDead) {
         const pCX = window.player.x + window.player.width / 2; const pCY = window.player.y + 8;
         const dx = window.mouseWorldX - pCX; const dy = window.mouseWorldY - pCY; const angle = Math.atan2(dy, dx);
-        const power = 5.0 + (window.player.chargeLevel / 100) * 9.0; const grav = (window.game.gravity || 0.32) * 1.4;
+        const power = 5.0 + (window.player.chargeLevel / 100) * 9.0; const grav = (window.game.gravity || 0.32) * 0.9;
         let simVx = Math.cos(angle) * power; let simVy = Math.sin(angle) * power; let simX = pCX; let simY = pCY;
         const dotPositions = [];
         for (let i = 0; i < 300; i++) {
@@ -1207,6 +1207,22 @@ window.draw = function() {
 
     // Borde de pantalla
     { window.ctx.strokeStyle = 'rgba(0,0,0,0.5)'; window.ctx.lineWidth = 3; window.ctx.strokeRect(1, 1, _ppW - 2, _ppH - 2); }
+
+    // ── Contador de FPS ────────────────────────────────────────────────────────
+    {
+        const fps  = window._fps || 0;
+        const C    = window.ctx;
+        const fCol = fps >= 55 ? '#44ff88' : fps >= 35 ? '#ffcc00' : '#ff4444';
+        C.save();
+        C.font         = 'bold 13px "Press Start 2P"';
+        C.textAlign    = 'right';
+        C.textBaseline = 'top';
+        C.fillStyle    = 'rgba(0,0,0,0.55)';
+        C.fillRect(_ppW - 72, 8, 64, 20);
+        C.fillStyle = fCol;
+        C.fillText(`${fps} FPS`, _ppW - 10, 10);
+        C.restore();
+    }
 
     window.ctx.restore(); // cierra screenShake (save más externo)
 };

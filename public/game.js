@@ -1712,7 +1712,16 @@ function update() {
     } catch (err) { console.error('Motor de juego protegido:', err); }
 }
 
-window.gameLoop = function() {
+window.gameLoop = function(timestamp) {
+    // ── Cálculo de FPS ────────────────────────────────────────────────
+    if (window._fpsLastTime === undefined) { window._fpsLastTime = timestamp; window._fpsFrames = 0; window._fps = 60; }
+    window._fpsFrames++;
+    const fpsDelta = timestamp - window._fpsLastTime;
+    if (fpsDelta >= 500) {   // actualizar cada 500 ms para evitar parpadeo
+        window._fps = Math.round(window._fpsFrames / (fpsDelta / 1000));
+        window._fpsFrames = 0;
+        window._fpsLastTime = timestamp;
+    }
     if (window.game?.isRunning && !document.hidden) update();
     if (typeof window.draw === 'function' && !document.hidden) window.draw();
     requestAnimationFrame(window.gameLoop);
