@@ -261,7 +261,8 @@ io.on('connection', (socket) => {
             isDancing:      !!data.isDancing,
             danceStart:     Number(data.danceStart) || 0,
             deathAnimFrame: Number(data.deathAnimFrame) || 0,
-            isClimbing:     !!data.isClimbing
+            isClimbing:     !!data.isClimbing,
+            isSprinting:    !!data.isSprinting
         });
         socket.to(socket.roomId).emit('playerMoved', { ...p, id: socket.id });
     });
