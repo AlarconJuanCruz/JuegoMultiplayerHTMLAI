@@ -1146,7 +1146,7 @@ function update() {
         }
 
         if (window.player.isDead) {
-            window.player.vx = 0; window.player.isStealth = false; window.player.isClimbing = false;
+            window.player.vx = 0; window.player.isStealth = false; window.player.isClimbing = false; window.player._wallDir = 0;
             let pO = window.getEl('placement-overlay'); if (pO) pO.style.display = 'none';
             if ((window.player.deathAnimFrame || 0) > 0) window.player.deathAnimFrame--;
         }
@@ -1157,11 +1157,25 @@ function update() {
         if (!window.player.isDead) {
             let pO = window.getEl('placement-overlay'); if (pO) pO.style.display = window.player.placementMode ? 'block' : 'none';
             const isPressingMove = window.keys?.a || window.keys?.d;
-            window.player._accelRamp = isPressingMove ? Math.min(1.0, (window.player._accelRamp||0) + 0.09) : Math.max(0.0, (window.player._accelRamp||0) - 0.18);
-            const accel = (window.player.isGrounded ? 0.6 : 0.4) * window.player._accelRamp, fric = window.player.isGrounded ? 0.78 : 0.95;
-            if (window.keys?.a) window.player.vx -= accel;
-            if (window.keys?.d) window.player.vx += accel;
-            window.player.vx *= fric;
+
+            // ── Anti-jitter de pared: si el frame anterior detectó colisión X y el
+            // jugador sigue presionando en esa misma dirección, cancelar aceleración
+            // antes de aplicarla para que vx no acumule los ~0.04-0.12px que causan
+            // la micro-oscilación y la "vibración" visual contra bloques de superficie.
+            const _wallDir = window.player._wallDir || 0;  // 1=derecha, -1=izquierda, 0=libre
+            const _pressingIntoWall = (_wallDir === 1 && window.keys?.d) || (_wallDir === -1 && window.keys?.a);
+            if (_pressingIntoWall) {
+                // Mantener vx en 0, no ramp, no animar
+                window.player.vx = 0;
+                window.player._accelRamp = 0;
+                window.player.animTime   = 0;
+            } else {
+                window.player._accelRamp = isPressingMove ? Math.min(1.0, (window.player._accelRamp||0) + 0.09) : Math.max(0.0, (window.player._accelRamp||0) - 0.18);
+                const accel = (window.player.isGrounded ? 0.6 : 0.4) * window.player._accelRamp, fric = window.player.isGrounded ? 0.78 : 0.95;
+                if (window.keys?.a) window.player.vx -= accel;
+                if (window.keys?.d) window.player.vx += accel;
+                window.player.vx *= fric;
+            }
 
             // Ralentizar en rampas
             let stairSpeedMult = 1.0;
@@ -1197,9 +1211,17 @@ function update() {
         window.player.x += window.player.vx;
         if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
         const _hitWallX = window.checkBlockCollisions('x');
-        // Pared: resetear ramp a 0 para que vx no alcance el umbral de animación
-        // en los frames siguientes, y forzar animTime=0 inmediatamente.
-        if (_hitWallX) { window.player._accelRamp = 0; window.player.animTime = 0; }
+        // Guardar dirección de la pared para cancelar accel el frame siguiente.
+        // Si no hay colisión, limpiar la dirección para que el jugador pueda volver a moverse.
+        if (_hitWallX) {
+            window.player._wallDir   = window.player.vx >= 0 ? 1 : -1;   // dirección en que chocó
+            // Si vx ya fue puesto a 0 por la colisión, usar la tecla presionada como proxy
+            if (window.player.vx === 0) window.player._wallDir = window.keys?.d ? 1 : (window.keys?.a ? -1 : 0);
+            window.player._accelRamp = 0;
+            window.player.animTime   = 0;
+        } else {
+            window.player._wallDir = 0;  // libre → reactivar aceleración normal
+        }
 
         // ── animTime: recalcular con el vx REAL post-colisión ──────────────────
         // Si _hitWallX=true, vx ya fue puesto a 0 por la colisión → animTime=0 (Idle).
@@ -1309,6 +1331,7 @@ function update() {
             const jumpPower = Math.abs(window.player.jumpPower), headroom = Math.ceil((jumpPower*jumpPower) / (2*0.5));
             window.player.vy = (window.hasCeilingAbove && window.hasCeilingAbove(headroom)) ? Math.max(window.player.jumpPower, -3) : window.player.jumpPower;
             window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false;
+            window.player._wallDir = 0;  // al saltar, liberar bloqueo de pared
         }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0 && !_isClimbing) window.player.vy *= 0.5;
 
