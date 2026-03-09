@@ -1251,7 +1251,9 @@ function update() {
             if (window.player._wallDir === 0) window.player._wallDir = window.keys?.d ? 1 : (window.keys?.a ? -1 : 0);
             window.player._accelRamp = 0;
             window.player.animTime   = 0;
-        } else if (_pressingIntoWall) {
+        } else if (window.player._wallDir !== 0 &&
+                   ((window.player._wallDir === 1 && window.keys?.d) ||
+                    (window.player._wallDir === -1 && window.keys?.a))) {
             // vx fue suprimido a 0 por _pressingIntoWall el frame anterior → hitWallX=false.
             // Esto causa la oscilación: vx=0 → sin colisión → _wallDir=0 → vx crece → colisión → etc.
             // Solución: probar si la pared sigue ahí antes de limpiar _wallDir.

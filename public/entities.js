@@ -27,8 +27,8 @@ window.killEntityLoot = function (ent) {
 
     switch (ent.type) {
         case 'spider':
-            drop('web', 2);
-            window.gainXP(20 * ent.level);
+            drop('web', ent.inCave ? 3 + Math.floor(Math.random() * 3) : 2);
+            window.gainXP((ent.inCave ? 30 : 20) * ent.level);
             break;
         case 'chicken':
             drop('meat', 1);
@@ -67,9 +67,13 @@ window.generateWorldSector = function (startX, endX) {
 
     function isTerrainTooSteep(cx) {
         if (!window.getGroundY) return false;
+        const bs   = window.game.blockSize;
         const base = window.getGroundY(cx);
-        return Math.abs(window.getGroundY(cx - 30) - base) > 45 ||
-               Math.abs(window.getGroundY(cx + 30) - base) > 45;
+        // Rechazar solo si la diferencia de altura es mayor a 2 bloques
+        // en un radio de 2 bloques — colinas normales de 1-2 bloques de borde
+        // son válidas para árboles y rocas.
+        return Math.abs(window.getGroundY(cx - bs * 2) - base) > bs * 2 ||
+               Math.abs(window.getGroundY(cx + bs * 2) - base) > bs * 2;
     }
 
     // ── Árboles ──
@@ -543,7 +547,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
 
         const aggroRange = ent.type === 'zombie'
             ? (isNight && !target.isStealth ? 800 : 400)
-            : (isNight && !target.isStealth ? 600 : 180);
+            : (ent.inCave || (isNight && !target.isStealth) ? 520 : 180);
         const hpPct      = ent.hp / ent.maxHp;
         const enraged    = (ent.enragedFrames || 0) > 0;
         const baseSpd    = ent.type === 'zombie' ? 0.45 : 1.05; // araña más rápida

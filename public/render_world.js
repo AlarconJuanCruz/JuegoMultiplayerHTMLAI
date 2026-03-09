@@ -551,12 +551,14 @@ window.draw = function() {
         }
 
         // Vegetación animada (pasto, flores, hongos, detalles desierto) por columna
-        // PERF: en Q=medium se actualiza cada 2 frames; en Q=low se omite
+        // PERF: la animación se congela cada 2 frames en medium (wt constante), pero
+        // siempre se DIBUJA para evitar el parpadeo que causaba omitir el render.
         if (Q !== 'low') {
         const _vegFrame = window.game.frameCount || 0;
-        const _doVeg    = Q === 'high' || (_vegFrame & 1) === 0; // medium: cada 2 frames
-        if (_doVeg) {
-            const wt = _vegFrame * 0.04;
+        // Congelar wt en frames impares (medium): misma pose, sin flicker
+        const _wt_this = (_vegFrame % 2 === 0 || Q === 'high') ? _vegFrame : _vegFrame - 1;
+        {
+            const wt = _wt_this * 0.04;
             window.ctx.lineCap = 'round';
             for (let col = startCol; col <= endCol; col++) {
                 const col_data = window.getTerrainCol ? window.getTerrainCol(col) : { topY: base, type: 'flat' }; if (col_data.type === 'hole') continue;
@@ -604,7 +606,7 @@ window.draw = function() {
                     C.globalAlpha = 1;
                 }
             }
-        } // end _doVeg
+        } // end veg draw block
         } // end Q !== 'low'
     } // fin terreno por columnas
 
