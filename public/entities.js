@@ -198,6 +198,25 @@ window.generateWorldSector = function (startX, endX) {
  * @param {number}  pCY   centro Y del jugador
  */
 window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
+    // ── Mapa espacial de bloques para LOS (O(1) lookup por celda de grilla) ──
+    // Se reconstruye solo cuando el array de bloques cambia de tamaño
+    // o periódicamente cada 60 frames para capturar cambios de estado (door open, etc).
+    const bkLen = (window.blocks || []).length;
+    const frame = window.game.frameCount || 0;
+    if (!window._entBkMap || window._entBkMapLen !== bkLen || (frame & 63) === 0) {
+        const bs  = window.game.blockSize;
+        const map = new Map();
+        for (const b of (window.blocks || [])) {
+            if (b.type === 'ladder' || b.type === 'placed_torch' ||
+                b.type === 'box'   || b.type === 'campfire'      ||
+                b.type === 'bed'   || b.type === 'grave'         ||
+                (b.type === 'door' && b.open)) continue;
+            map.set(Math.floor(b.x / bs) + '_' + Math.floor(b.y / bs), b);
+        }
+        window._entBkMap    = map;
+        window._entBkMapLen = bkLen;
+    }
+
     const _camW  = window._canvasLogicW || 1280;
     const _cullX = (window.camera ? window.camera.x : pCX - _camW/2) - _camW * 0.6;
     const _cullR = _cullX + _camW * 2.2;
@@ -408,30 +427,41 @@ function _entFOVInfo(ent, isNight) {
     }
 }
 
-/** @private – raycast de línea de visión; devuelve false si hay obstáculo sólido */
+/** @private – raycast de línea de visión; devuelve false si hay obstáculo sólido.
+ *  PERFORMANCE: usa un lookup espacial de bloques en lugar de iterar todo el array. */
 function _entLOS(x0, y0, x1, y1) {
     const bs    = window.game.blockSize;
     const dx    = x1 - x0, dy = y1 - y0;
     const dist  = Math.hypot(dx, dy);
     if (dist < 2) return true;
-    const steps = Math.max(2, Math.ceil(dist / (bs * 0.55)));
+    const steps = Math.max(2, Math.ceil(dist / (bs * 0.6)));
     const sx    = dx / steps, sy = dy / steps;
+
+    // Lookup espacial de bloques: construido una vez por frame cuando los bloques cambian.
+    // _entBkMap: Map de 'gx_gy' → bloque (solo bloques sólidos para LOS)
+    const bkMap = window._entBkMap;
 
     for (let i = 1; i < steps; i++) {
         const px = x0 + sx * i;
         const py = y0 + sy * i;
 
-        // ── Bloques construidos sólidos ──────────────────────────────────────
-        for (const b of window.blocks) {
-            if (b.type === 'ladder' || b.type === 'placed_torch' ||
-                b.type === 'box'   || b.type === 'campfire' ||
-                b.type === 'bed'   || b.type === 'grave'    ||
-                (b.type === 'door' && b.open)) continue;
-            const bh = b.type === 'door' ? bs * 2 : bs;
-            if (px >= b.x && px < b.x + bs && py >= b.y && py < b.y + bh) return false;
+        // ── Bloques construidos sólidos (lookup O(1)) ────────────────────────
+        if (bkMap) {
+            const gx = Math.floor(px / bs);
+            const gy = Math.floor(py / bs);
+            const bk = bkMap.get(gx + '_' + gy);
+            if (bk) {
+                const bh = bk.type === 'door' ? bs * 2 : bs;
+                if (px >= bk.x && px < bk.x + bs && py >= bk.y && py < bk.y + bh) return false;
+            }
+            // Comprobar también la celda de arriba para puertas (2 bloques alto)
+            const bk2 = bkMap.get(gx + '_' + (gy - 1));
+            if (bk2 && bk2.type === 'door' && !bk2.open) {
+                if (px >= bk2.x && px < bk2.x + bs && py >= bk2.y && py < bk2.y + bs * 2) return false;
+            }
         }
 
-        // ── Celdas UG sólidas (incluida la superficie del terreno) ───────────
+        // ── Celdas UG sólidas ────────────────────────────────────────────────
         if (window.getUGCellV && window.getTerrainCol) {
             const col = Math.floor(px / bs);
             const cd  = window.getTerrainCol(col);
@@ -450,8 +480,8 @@ function _entLOS(x0, y0, x1, y1) {
 /**
  * @private
  * Devuelve true si la entidad puede ver el punto (tx, ty).
- * Criterios: dentro de rango + dentro del cono FOV + línea de visión libre.
- * Excepción: si el objetivo está dentro del radio de "ruido" siempre detecta.
+ * PERFORMANCE: cachea resultado por mob, re-evalúa cada 10 frames o si la
+ * distancia cambió >30px (mob se movió mucho entre checks).
  */
 function _entCanSeeTarget(ent, tx, ty, isNight) {
     const fov  = _entFOVInfo(ent, isNight);
@@ -459,9 +489,19 @@ function _entCanSeeTarget(ent, tx, ty, isNight) {
     const cy   = ent.y + ent.height / 2;
     const dist = Math.hypot(tx - cx, ty - cy);
 
-    // Detección por ruido/proximidad (independiente de orientación y LOS)
+    // Detección por ruido (siempre, sin LOS)
     if (dist <= fov.noise) return true;
     if (dist > fov.range)  return false;
+
+    // Cache: si el resultado anterior es reciente y la posición no cambió mucho, reutilizar
+    const frame = window.game.frameCount || 0;
+    if (ent._losCache !== undefined &&
+        frame - (ent._losCacheFrame || 0) < 10 &&
+        Math.abs(ent._losCacheX - cx) < 32 &&
+        Math.abs(ent._losCacheY - cy) < 32 &&
+        Math.abs((ent._losCacheTX||0) - tx) < 32) {
+        return ent._losCache;
+    }
 
     // Actualizar dirección mirada
     if (ent.vx !== 0) ent._facing = ent.vx > 0 ? 1 : -1;
@@ -469,10 +509,21 @@ function _entCanSeeTarget(ent, tx, ty, isNight) {
     const facingAngle = facing > 0 ? 0 : Math.PI;
     let angleDiff     = Math.abs(Math.atan2(ty - cy, tx - cx) - facingAngle);
     if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
-    if (angleDiff > fov.halfAngle) return false;
 
-    // Línea de visión
-    return _entLOS(cx, cy, tx, ty);
+    let result;
+    if (angleDiff > fov.halfAngle) {
+        result = false;
+    } else {
+        result = _entLOS(cx, cy, tx, ty);
+    }
+
+    // Guardar en cache
+    ent._losCache      = result;
+    ent._losCacheFrame = frame;
+    ent._losCacheX     = cx;
+    ent._losCacheY     = cy;
+    ent._losCacheTX    = tx;
+    return result;
 }
 
 /** @private */

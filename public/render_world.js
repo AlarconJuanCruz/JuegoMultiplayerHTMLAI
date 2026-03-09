@@ -489,8 +489,12 @@ window.draw = function() {
         }
 
         // Vegetación animada (pasto, flores, hongos, detalles desierto) por columna
-        {
-            const wt = (window.game.frameCount || 0) * 0.04;
+        // PERF: en Q=medium se actualiza cada 2 frames; en Q=low se omite
+        if (Q !== 'low') {
+        const _vegFrame = window.game.frameCount || 0;
+        const _doVeg    = Q === 'high' || (_vegFrame & 1) === 0; // medium: cada 2 frames
+        if (_doVeg) {
+            const wt = _vegFrame * 0.04;
             window.ctx.lineCap = 'round';
             for (let col = startCol; col <= endCol; col++) {
                 const col_data = window.getTerrainCol ? window.getTerrainCol(col) : { topY: base, type: 'flat' }; if (col_data.type === 'hole') continue;
@@ -499,7 +503,7 @@ window.draw = function() {
                 const topY = col_data.topY; const x = col * bs; const colCX = x + bs / 2; const da = colDesert(colCX);
                 const gY = window.getGroundY(colCX);
                 if (da < 1 && colCX > (window.game.shoreX || 0) + 20) {
-                    if (Q !== 'low') {
+                    {
                         window.ctx.globalAlpha = (1 - da) * 0.9; window.ctx.lineWidth = 1;
                         const seed = Math.sin(colCX * 0.0173) * 0.5 + 0.5; const seed2 = Math.sin(colCX * 0.0531 + 1.2) * 0.5 + 0.5;
                         const h1 = 4 + seed * 6; const wx1 = Math.sin(wt + colCX * 0.11) * 2;
@@ -538,7 +542,8 @@ window.draw = function() {
                     C.globalAlpha = 1;
                 }
             }
-        }
+        } // end _doVeg
+        } // end Q !== 'low'
     } // fin terreno por columnas
 
     // Bloques colocados por el jugador — dibujados DESPUÉS del terreno para
@@ -930,10 +935,31 @@ window.draw = function() {
     // Partículas genéricas
     window.particles.forEach(p => { window.ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); window.ctx.fillStyle = p.color; window.ctx.fillRect(p.x, p.y, p.size, p.size); });
 
-    // Polvo al correr (gradiente radial nebuloso, Q≠low)
-    if (Q !== 'low' && window.dustParticles && window.dustParticles.length > 0) {
+    // Polvo al correr
+    if (window.dustParticles && window.dustParticles.length > 0) {
         const C = window.ctx; C.save();
-        window.dustParticles.forEach(d => { const alpha = d.life * d.alpha; if (alpha <= 0) return; const grad = C.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r); const g = d.gray; grad.addColorStop(0, `rgba(${g},${g},${g},${alpha})`); grad.addColorStop(0.5, `rgba(${g},${g},${g},${alpha * 0.5})`); grad.addColorStop(1, `rgba(${g},${g},${g},0)`); C.fillStyle = grad; C.beginPath(); C.arc(d.x, d.y, d.r, 0, Math.PI * 2); C.fill(); });
+        if (Q === 'high') {
+            // Alta calidad: gradiente radial nebuloso
+            window.dustParticles.forEach(d => {
+                const alpha = d.life * d.alpha; if (alpha <= 0) return;
+                const grad = C.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
+                const g = d.gray;
+                grad.addColorStop(0,   `rgba(${g},${g},${g},${alpha})`);
+                grad.addColorStop(0.5, `rgba(${g},${g},${g},${alpha * 0.5})`);
+                grad.addColorStop(1,   `rgba(${g},${g},${g},0)`);
+                C.fillStyle = grad; C.beginPath(); C.arc(d.x, d.y, d.r, 0, Math.PI * 2); C.fill();
+            });
+        } else {
+            // Calidad media/baja: elipse sólida semitransparente (5× más rápido)
+            window.dustParticles.forEach(d => {
+                const alpha = d.life * d.alpha * 0.55; if (alpha <= 0.02) return;
+                const g = d.gray;
+                C.globalAlpha = alpha;
+                C.fillStyle = `rgb(${g},${g},${g})`;
+                C.beginPath(); C.ellipse(d.x, d.y, d.r * 0.8, d.r * 0.5, 0, 0, Math.PI * 2); C.fill();
+            });
+            C.globalAlpha = 1;
+        }
         C.restore();
     }
 

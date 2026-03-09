@@ -120,7 +120,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 }
                 if (window.otherPlayers[pInfo.id]) {
                     let op = window.otherPlayers[pInfo.id];
-                    Object.assign(op, { targetX: pInfo.x, targetY: pInfo.y, vx: pInfo.vx, vy: pInfo.vy, facingRight: pInfo.facingRight, activeTool: pInfo.activeTool, animTime: pInfo.animTime, attackFrame: pInfo.attackFrame, isAiming: pInfo.isAiming, isCharging: pInfo.isCharging, chargeLevel: pInfo.chargeLevel, level: pInfo.level, mouseX: pInfo.mouseX, mouseY: pInfo.mouseY, isDancing: pInfo.isDancing||false, danceStart: pInfo.danceStart||0, isClimbing: pInfo.isClimbing||false, isGrounded: pInfo.isGrounded||false });
+                    Object.assign(op, { targetX: pInfo.x, targetY: pInfo.y, vx: pInfo.vx, vy: pInfo.vy, facingRight: pInfo.facingRight, activeTool: pInfo.activeTool, animTime: pInfo.animTime, attackFrame: pInfo.attackFrame, isAiming: pInfo.isAiming, isCharging: pInfo.isCharging, chargeLevel: pInfo.chargeLevel, level: pInfo.level, mouseX: pInfo.mouseX, mouseY: pInfo.mouseY, isDancing: pInfo.isDancing||false, danceStart: pInfo.danceStart||0, isClimbing: pInfo.isClimbing||false, isGrounded: pInfo.isGrounded||false, isSprinting: pInfo.isSprinting||false, isTyping: pInfo.isTyping||false });
                     if (pInfo.isDead && !op.isDead) op.deathAnimFrame = 40;
                     op.isDead = pInfo.isDead;
                 }
@@ -223,6 +223,8 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 else if (data.action === 'update_box')       { let b = window.blocks.find(bl => Math.abs(bl.x-data.payload.x) < 1 && Math.abs(bl.y-data.payload.y) < 1 && (bl.type==='box'||bl.type==='grave')); if (b) { b.inventory = data.payload.inventory; if (window.currentOpenBox && Math.abs(window.currentOpenBox.x-b.x) < 1 && window.renderBoxUI) window.renderBoxUI(); } }
                 else if (data.action === 'update_campfire')  { let b = window.blocks.find(bl => Math.abs(bl.x-data.payload.x) < 1 && Math.abs(bl.y-data.payload.y) < 1 && bl.type==='campfire'); if (b) { b.wood = data.payload.wood; b.meat = data.payload.meat; b.cooked = data.payload.cooked; b.isBurning = data.payload.isBurning; if (window.currentCampfire?.x === b.x && window.renderCampfireUI) window.renderCampfireUI(); } }
                 else if (data.action === 'dust_puff')        { window.spawnDustPuff(data.payload.x, data.payload.y, data.payload.facingRight, true); }
+                else if (data.action === 'spawn_fire')       { if (window.spawnFireFromNetwork) window.spawnFireFromNetwork(data.payload); }
+                else if (data.action === 'fire_damage')      { if (data.payload.targetId === myId) window.damagePlayer(data.payload.dmg, '🔥 Fuego'); }
                 else if (data.action === 'mine_cell') {
                     // Otro jugador minó una celda — aplicar localmente.
                     // Si broken:true, marcar directamente como minada (no acumular HP
@@ -1335,6 +1337,8 @@ function update() {
                         isDead: window.player.isDead,
                         isClimbing: window.player.isClimbing || false,
                         deathAnimFrame: window.player.deathAnimFrame || 0,
+                        isSprinting: window.player.isSprinting || false,
+                        isTyping: window.player.isTyping || false,
                     };
                     // Solo añadir campos infrecuentes cuando cambian
                     if (_toolChg || _aimChg || _atkChg) {
@@ -1347,7 +1351,6 @@ function update() {
                         _pm.mouseY       = window.mouseWorldY;
                     }
                     if (_typChg || _danceChg) {
-                        _pm.isTyping     = window.player.isTyping || false;
                         _pm.isDancing    = window.player.isDancing || false;
                         _pm.danceStart   = window.player.danceStart || 0;
                         _pm.level        = window.player.level;
@@ -1551,7 +1554,17 @@ function update() {
             if (pr.isMolotov) {
                 let hitGround = pr.y >= _prGY, hitBlockM = null;
                 if (!hitGround) for (const b of window.blocks) { const bh=b.type==='door'?bs*2:bs; if(!b.open&&window.checkRectIntersection(pr.x-4,pr.y-4,10,10,b.x,b.y,bs,bh)){hitBlockM=b;break;} }
-                if (hitGround || hitBlockM || pr.life <= 0) { window.spawnMolotovFire(pr.x, hitGround?_prGY:(hitBlockM?hitBlockM.y:pr.y), isMyArrow); window.projectiles.splice(i,1); }
+                if (hitGround || hitBlockM || pr.life <= 0) {
+                    const impY = hitGround ? _prGY : (hitBlockM ? hitBlockM.y : pr.y);
+                    if (isMyArrow) {
+                        // Jugador local: crear fuego y broadcast a todos
+                        const fireParams = window.spawnMolotovFire(pr.x, impY, true);
+                        if (fireParams && window.game.isMultiplayer)
+                            window.sendWorldUpdate('spawn_fire', fireParams);
+                    }
+                    // Remotos: NO crear fuego aquí — lo reciben vía evento 'spawn_fire'
+                    window.projectiles.splice(i, 1);
+                }
                 continue;
             }
 
@@ -1651,8 +1664,21 @@ function update() {
             }
         }
 
-        if (window.game.isMultiplayer && window.socket && isMasterClient && window.game.frameCount % 6 === 0 && window.entities.length > 0)
-            window.sendWorldUpdate('sync_entities', window.entities.map(e => ({id:e.id,x:e.x,y:e.y,vx:e.vx,vy:e.vy,hp:e.hp})));
+        if (window.game.isMultiplayer && window.socket && isMasterClient && window.game.frameCount % 10 === 0 && window.entities.length > 0) {
+            // Solo enviar entidades que se movieron >2px desde el último sync para reducir tráfico
+            const _esnap = window.entities.reduce((acc, e) => {
+                const _prev = window._entLastSync && window._entLastSync[e.id];
+                if (!_prev || Math.abs(e.x - _prev.x) > 2 || Math.abs(e.y - _prev.y) > 2 || Math.abs(e.hp - _prev.hp) > 0) {
+                    acc.push({id:e.id,x:e.x,y:e.y,vx:e.vx,vy:e.vy,hp:e.hp});
+                }
+                return acc;
+            }, []);
+            if (_esnap.length > 0) {
+                if (!window._entLastSync) window._entLastSync = {};
+                _esnap.forEach(s => { window._entLastSync[s.id] = {x:s.x, y:s.y, hp:s.hp}; });
+                window.sendWorldUpdate('sync_entities', _esnap);
+            }
+        }
 
         const isHoldingTorch = window.player.activeTool==='torch' && !window.player.inBackground && !window.player.isDead;
         window.updateEntities(isDay, isNight, isHoldingTorch, pCX, pCY);

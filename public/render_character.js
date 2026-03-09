@@ -79,12 +79,15 @@ window.drawCharacter = function(charData, isLocal) {
         isClimbing = charData.isClimbing || false;
         // Usar vx/vy/isGrounded recibidos por red en vez de calcular delta-Y localmente
         // Así el terreno ondulado no confunde caminar con saltar
-        const remVx = charData.vx || 0;
-        const remVy = charData.vy || 0;
+        const remVx      = charData.vx || 0;
+        const remVy      = charData.vy || 0;
         const remGrounded = charData.isGrounded || false;
-        isJumping = !remGrounded && Math.abs(remVy) > 1.5 && !isClimbing;
-        isRunning = Math.abs(remVx) > 0.1 && !isJumping && !isClimbing;
-        if (isRunning || isClimbing) charData.renderAnimTime = (charData.renderAnimTime || 0) + Math.abs(remVx) * 0.025;
+        const remMoving  = Math.abs(remVx) > 0.1 && !isClimbing;
+        isJumping  = !remGrounded && Math.abs(remVy) > 1.5 && !isClimbing && !remMoving;
+        isRunning  = remMoving && !!(charData.isSprinting) && !isJumping;
+        // _charIsWalking se usa por el bloque de animación; setearlo para remotos también
+        window._charIsWalking = remMoving && !isRunning && !isJumping;
+        if (remMoving || isClimbing) charData.renderAnimTime = (charData.renderAnimTime || 0) + Math.abs(remVx) * 0.025 * (isRunning ? 1.9 : 1.0);
         else if (!isJumping) charData.renderAnimTime = 0;
     }
 

@@ -180,9 +180,14 @@ window.hasCeilingAbove = function (margin) {
 window.checkEntityCollisions = function (ent, axis) {
     let hitWall = false;
     const bs = window.game.blockSize;
+    // Pre-filter: solo bloques que puedan solapar con el AABB del mob (± 1 bloque de margen)
+    const eMinX = ent.x - bs, eMaxX = ent.x + ent.width  + bs;
+    const eMinY = ent.y - bs, eMaxY = ent.y + ent.height + bs * 2; // +2bs para puertas altas
 
     for (let i = window.blocks.length - 1; i >= 0; i--) {
         const b = window.blocks[i];
+        // Spatial pre-filter (evita el checkRectIntersection y el type-check en bloques lejanos)
+        if (b.x + bs < eMinX || b.x > eMaxX || b.y + bs * 2 < eMinY || b.y > eMaxY) continue;
         if (
             (b.type === 'door' && b.open) ||
             b.type === 'box'   || b.type === 'campfire' ||
