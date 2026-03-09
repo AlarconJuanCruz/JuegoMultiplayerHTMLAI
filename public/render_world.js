@@ -98,67 +98,56 @@ window.draw = function() {
     });
 
     // === MONTAÑAS DE FONDO (parallax horizontal solamente) ===
-    // ─────────────────────────────────────────────────────────────────────────────
-    // SPRITES:
-    //   bg_mountains_back.png →  512 × 153 px  (montañas del horizonte)
-    //   bg_mountains_mid.png  → 1705 × 350 px  (bosque de pinos)
+    // Dimensiones naturales exactas de cada sprite:
+    //   bg_mountains_back.png  →  512 × 153 px
+    //   bg_mountains_mid.png   → 1705 × 350 px
     //
-    // REGLAS DE RENDERIZADO:
-    //  1. Y FIJA en pantalla — NO depende de camera.y ni de zoom.
-    //     La cámara está diseñada para que el suelo esté en H*0.62 cuando el
-    //     jugador está parado. Usando _surfSY (que sí sigue la cámara) los fondos
-    //     se movían cada vez que el jugador saltaba o cambiaba de elevación.
-    //  2. Escalado proporcional a H — los sprites cubren siempre el mismo % del
-    //     cielo sin importar resolución, y al hacer zoom los fondos no cambian
-    //     (están en screen-space, antes de la transformación de cámara).
-    //  3. Tiling horizontal con el ancho REAL del sprite escalado para evitar gaps.
+    // bgHorizonY es FIJO en H*0.62 (independiente de camera.y).
+    // Un fondo "a distancia infinita" nunca se mueve verticalmente con la cámara.
+    // La fórmula correcta es H*0.62 porque la cámara sigue al jugador con:
+    //   camera.y = footY - H*0.62  →  screenY(groundLevel) = groundLevel - camera.y = H*0.62
+    // Usar _surfSY aquí hacía que las montañas se deslizasen verticalmente cuando
+    // el jugador subía colinas (camera.y cambia → _surfSY cambia → horizonte salta).
     // ─────────────────────────────────────────────────────────────────────────────
-    const bgBackNW = 512;   // ancho natural del sprite de montañas
-    const bgBackNH = 153;   // alto  natural
-    const bgMidNW  = 1705;  // ancho natural del sprite de bosque
-    const bgMidNH  = 350;   // alto  natural
+    const bgBackNW = 512,  bgBackNH = 153;
+    const bgMidNW  = 1705, bgMidNH  = 350;
 
-    // Horizonte fijo en pantalla: siempre H*0.62 (≈446px a 720p).
-    // Cuando el jugador está bajo tierra _surfSY cae a <0 y saltamos el dibujado;
-    // mientras la superficie esté visible, el horizonte es estable en pantalla.
+    // Horizonte fijo: fondo siempre anclado al mismo Y de pantalla
     const bgHorizonY = H * 0.62;
 
-    // Escalar sprites para que ocupen una fracción fija del cielo.
-    // back: capa trasera llena el 28% inferior del cielo  (~202px a 720p)
-    // mid : capa frontal llena el 62% inferior del cielo  (~447px a 720p)
-    const bgBackScaleH = Math.round(H * 0.28);
-    const bgBackScaleW = Math.round(bgBackNW * (bgBackScaleH / bgBackNH));
-    const bgMidScaleH  = Math.round(H * 0.62);
-    const bgMidScaleW  = Math.round(bgMidNW  * (bgMidScaleH  / bgMidNH));
+    // Factor de escala uniforme respecto al canvas de referencia (720p)
+    const bgScale = H / 720;
+    const bgBackScaleH = Math.round(bgBackNH * bgScale);
+    const bgBackScaleW = Math.round(bgBackNW * bgScale);
+    const bgMidScaleH  = Math.round(bgMidNH  * bgScale);
+    const bgMidScaleW  = Math.round(bgMidNW  * bgScale);
 
-    // Posiciones Y fijas (borde inferior en bgHorizonY)
+    // Posición Y: borde inferior en bgHorizonY
     const backY = Math.floor(bgHorizonY - bgBackScaleH);
     const midY  = Math.floor(bgHorizonY - bgMidScaleH);
 
-    // Parallax horizontal: los fondos se mueven con camera.x a distinta velocidad
-    let backX = Math.floor(-(window.camera.x * 0.05) % bgBackScaleW);
-    if (backX > 0) backX -= bgBackScaleW;
-    let midX  = Math.floor(-(window.camera.x * 0.15) % bgMidScaleW);
-    if (midX  > 0) midX  -= bgMidScaleW;
+    // Parallax X: módulo positivo garantizado para evitar gaps
+    const _rawBackX = -(window.camera.x * 0.05) % bgBackScaleW;
+    let backX = Math.floor(_rawBackX <= 0 ? _rawBackX : _rawBackX - bgBackScaleW);
+    const _rawMidX  = -(window.camera.x * 0.15) % bgMidScaleW;
+    let midX  = Math.floor(_rawMidX  <= 0 ? _rawMidX  : _rawMidX  - bgMidScaleW);
 
     const bgDimAlpha = darkness * 0.55;
 
     // Solo dibujar cuando el suelo es visible en pantalla (no completamente underground)
     if (_surfSY > 0) {
         window.ctx.save();
-        // Clip al área visible del cielo: min entre el horizonte fijo y _surfSY
-        // (cuando estamos underground _surfSY < bgHorizonY y no debe dibujarse nada)
         window.ctx.beginPath();
-        window.ctx.rect(0, 0, W, Math.ceil(Math.min(bgHorizonY, _surfSY)));
+        window.ctx.rect(0, 0, W, Math.ceil(bgHorizonY));
         window.ctx.clip();
 
         // ── Capa trasera: montañas ──────────────────────────────────────────────
         if (window.sprites.bg_mountains_back.complete && window.sprites.bg_mountains_back.naturalWidth > 0) {
             const tilesNeeded = Math.ceil(W / bgBackScaleW) + 2;
-            for (let i = -1; i < tilesNeeded; i++) {
+            for (let i = 0; i < tilesNeeded; i++) {
                 window.ctx.drawImage(
                     window.sprites.bg_mountains_back,
-                    Math.floor(backX + i * bgBackScaleW), backY,
+                    backX + i * bgBackScaleW, backY,
                     bgBackScaleW, bgBackScaleH
                 );
             }
@@ -168,13 +157,13 @@ window.draw = function() {
             window.ctx.fillRect(0, backY, W, bgBackScaleH);
         }
 
-        // ── Capa frontal: bosque ────────────────────────────────────────────────
+        // ── Capa frontal: bosque de pinos ───────────────────────────────────────
         if (window.sprites.bg_mountains_mid.complete && window.sprites.bg_mountains_mid.naturalWidth > 0) {
             const tilesNeeded = Math.ceil(W / bgMidScaleW) + 2;
-            for (let i = -1; i < tilesNeeded; i++) {
+            for (let i = 0; i < tilesNeeded; i++) {
                 window.ctx.drawImage(
                     window.sprites.bg_mountains_mid,
-                    Math.floor(midX + i * bgMidScaleW), midY,
+                    midX + i * bgMidScaleW, midY,
                     bgMidScaleW, bgMidScaleH
                 );
             }
@@ -1208,21 +1197,23 @@ window.draw = function() {
     // Borde de pantalla
     { window.ctx.strokeStyle = 'rgba(0,0,0,0.5)'; window.ctx.lineWidth = 3; window.ctx.strokeRect(1, 1, _ppW - 2, _ppH - 2); }
 
-    // ── Contador de FPS ────────────────────────────────────────────────────────
+    window.ctx.restore(); // cierra screenShake (save más externo)
+
+    // ── Contador de FPS — abajo-derecha, fuente pequeña, fuera del screenShake ──
     {
         const fps  = window._fps || 0;
         const C    = window.ctx;
-        const fCol = fps >= 55 ? '#44ff88' : fps >= 35 ? '#ffcc00' : '#ff4444';
+        const fCol = fps >= 55 ? '#44ff88' : fps >= 35 ? '#ffdd00' : '#ff4444';
         C.save();
-        C.font         = 'bold 13px "Press Start 2P"';
+        C.font         = '9px "Press Start 2P"';
         C.textAlign    = 'right';
-        C.textBaseline = 'top';
-        C.fillStyle    = 'rgba(0,0,0,0.55)';
-        C.fillRect(_ppW - 72, 8, 64, 20);
-        C.fillStyle = fCol;
-        C.fillText(`${fps} FPS`, _ppW - 10, 10);
+        C.textBaseline = 'bottom';
+        const label    = fps + ' FPS';
+        const tw       = C.measureText(label).width;
+        C.fillStyle    = 'rgba(0,0,0,0.5)';
+        C.fillRect(_ppW - tw - 10, _ppH - 16, tw + 8, 13);
+        C.fillStyle    = fCol;
+        C.fillText(label, _ppW - 6, _ppH - 4);
         C.restore();
     }
-
-    window.ctx.restore(); // cierra screenShake (save más externo)
 };
