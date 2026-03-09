@@ -48,31 +48,10 @@ window.checkBlockCollisions = function (axis) {
         if (!window.checkRectIntersection(checkX, p.y, checkW, p.height, b.x, b.y, bs, itemHeight)) continue;
 
         if (axis === 'x') {
-            // Step-over para bloques construidos en superficie: permitir escalón de 1 bloque
-            // Solo cuando la diferencia de altura es pequeña Y el espacio encima está libre
-            const stepH = bs * 0.55;
-            const isStep = b.y >= p.y + p.height - stepH;
-            if (isStep) {
-                // Verificar que no hay bloque sólido encima (o sea, es un escalón real)
-                const hasAbove = window.blocks.some(ob =>
-                    ob !== b &&
-                    ob.type !== 'ladder' && ob.type !== 'stair' &&
-                    ob.type !== 'box'    && ob.type !== 'campfire' &&
-                    ob.type !== 'bed'    && !(ob.type === 'door' && ob.open) &&
-                    Math.abs(ob.x - b.x) < 2 && Math.abs(ob.y - (b.y - bs)) < 2
-                );
-                if (!hasAbove) {
-                    p.y = b.y - p.height; p.vy = 0; p.isGrounded = true;
-                } else {
-                    if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
-                    else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
-                    p.vx = 0;
-                }
-            } else {
-                if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
-                else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
-                p.vx = 0;
-            }
+            // Sin step-over: el jugador debe saltar explícitamente para subir cualquier bloque.
+            if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
+            else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
+            p.vx = 0;
         } else {
             if (p.vy > 0) { p.y = b.y - p.height; p.vy = 0; p.isGrounded = true; }
             else if (p.vy < 0) {
@@ -131,6 +110,7 @@ window.checkBlockCollisions = function (axis) {
                 // Solo bloquear si la celda cubre el torso (no el suelo)
                 if (cellY >= pFeetY - 2) continue;
                 if (!window.checkRectIntersection(p.x, p.y, p.width, p.height, cellX, cellY, bs, bs)) continue;
+                // Sin step-over: el jugador debe saltar explícitamente.
                 if (p.vx > 0) { p.x = cellX - p.width - 0.1; p.vx = 0; hitWallX = true; }
                 else if (p.vx < 0) { p.x = cellX + bs + 0.1; p.vx = 0; hitWallX = true; }
 
@@ -232,8 +212,24 @@ window.checkEntityCollisions = function (ent, axis) {
                 continue;
             }
 
-            if (ent.vx > 0)      { ent.x = b.x - ent.width; ent.vx *= -1; hitWall = true; }
-            else if (ent.vx < 0) { ent.x = b.x + bs;        ent.vx *= -1; hitWall = true; }
+            // Step-over: escalar bloques de hasta 1 unidad de altura automáticamente.
+            // Condición: techo del bloque (b.y) está dentro de 1 bs de los pies del mob
+            // Y no hay bloque sólido encima (si hubiera, sería una pared de 2+).
+            const _entFY = ent.y + ent.height;
+            if (b.y >= _entFY - bs) {
+                const _entRoof = window.blocks.some(ob =>
+                    ob !== b &&
+                    ob.type !== 'ladder' && ob.type !== 'placed_torch' &&
+                    !(ob.type === 'door' && ob.open) &&
+                    Math.abs(ob.x - b.x) < 2 && Math.abs(ob.y - (b.y - bs)) < 2
+                );
+                if (!_entRoof) { ent.y = b.y - ent.height; ent.vy = 0; continue; }
+            }
+
+            // Pared real: detener sin rebotar. vx=0 → animación se detiene.
+            // La IA lee hitWall=true y decide saltar en el mismo frame.
+            if (ent.vx > 0)      { ent.x = b.x - ent.width; ent.vx = 0; hitWall = true; }
+            else if (ent.vx < 0) { ent.x = b.x + bs;         ent.vx = 0; hitWall = true; }
 
             // Entidades atacan puertas (zombie, spider, wolf, archer)
             if ((ent.type === 'zombie' || ent.type === 'spider' || ent.type === 'wolf' || ent.type === 'archer') && b.type === 'door') {
@@ -315,8 +311,19 @@ window.checkEntityUGCollisions = function (ent, axis) {
             if (axis === 'x') {
                 if (cellY >= eFeetY - 2) continue;  // celda de suelo, no pared
                 if (!window.checkRectIntersection(ent.x, ent.y, ent.width, ent.height, cellX, cellY, bs, bs)) continue;
-                if (ent.vx > 0) { ent.x = cellX - ent.width - 0.1; ent.vx *= -1; }
-                else if (ent.vx < 0) { ent.x = cellX + bs + 0.1; ent.vx *= -1; }
+
+                // Step-over UG: celda dentro de 1 bloque de los pies + celda encima es aire
+                if (cellY >= eFeetY - bs) {
+                    const _mAboveE = (vr > 0) ? window.getUGCellV(vc, vr - 1) : 'air';
+                    if (!_mAboveE || _mAboveE === 'air') {
+                        ent.y = cellY - ent.height;
+                        ent.vy = 0;
+                        continue;
+                    }
+                }
+                // Pared real: parar sin rebotar
+                if (ent.vx > 0) { ent.x = cellX - ent.width - 0.1; ent.vx = 0; }
+                else if (ent.vx < 0) { ent.x = cellX + bs + 0.1; ent.vx = 0; }
                 hitWall = true;
             } else {
                 if (!window.checkRectIntersection(ent.x + 1, ent.y, ent.width - 2, ent.height, cellX, cellY, bs, bs)) continue;

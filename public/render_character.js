@@ -71,7 +71,7 @@ window.drawCharacter = function(charData, isLocal) {
         // This prevents the jump pose flickering when walking down stairs
         // (where isGrounded briefly becomes false between stair snaps).
         isJumping = !charData.isGrounded && !isClimbing && (charData.vy || 0) > 2.5;
-        const isMovingH = Math.abs(charData.vx || 0) > 0.1 && !isJumping && !isClimbing;
+        const isMovingH = Math.abs(charData.vx || 0) > 0.1 && (charData.animTime || 0) > 0.05 && !isJumping && !isClimbing;
         isRunning = isMovingH && !!(charData.isSprinting);
         window._charIsWalking = isMovingH && !isRunning; // flag para animación caminata
         charData.renderAnimTime = charData.animTime; 

@@ -336,6 +336,145 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
     }
 };
 
+/** @private
+ * Mira adelante en la dirección dirX y clasifica el obstáculo inmediato.
+ * @returns {0|1|2}  0 = libre,  1 = escalón ≤ 1 bloque (la física lo sube sola),
+ *                   2 = pared de 2+ bloques (el mob debe saltar para cruzarla)
+ */
+function _entObstacleAhead(ent, dirX) {
+    const bs   = window.game.blockSize;
+    const fY   = ent.y + ent.height;          // nivel de pies
+    const hY   = ent.y;                        // nivel de cabeza
+    // Punto de muestreo: 1px más allá del borde frontal del mob
+    const chkX = ent.x + (dirX > 0 ? ent.width + 1 : -1);
+
+    let topY = fY; // tope más alto encontrado (en Y decreciente = más arriba en pantalla)
+
+    // ── Bloques construidos ──────────────────────────────────────────────────────
+    for (const b of window.blocks) {
+        if (b.type === 'ladder' || b.type === 'placed_torch' || b.type === 'stair') continue;
+        if ((b.type === 'door' && b.open) || b.type === 'box' ||
+            b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue;
+        const bh = b.type === 'door' ? bs * 2 : bs;
+        if (chkX < b.x || chkX > b.x + bs) continue;
+        if (b.y + bh <= hY - 2) continue;  // completamente encima de la cabeza
+        if (b.y >= fY + 2) continue;        // completamente debajo de los pies
+        if (b.y < topY) topY = b.y;
+    }
+
+    // ── Celdas UG ────────────────────────────────────────────────────────────────
+    if (window.getUGCellV && window.getTerrainCol) {
+        const col = Math.floor(chkX / bs);
+        const cd  = window.getTerrainCol(col);
+        if (cd && cd.type !== 'hole') {
+            const r0 = Math.max(0, Math.floor((hY - cd.topY) / bs));
+            const r1 = Math.floor((fY  - cd.topY) / bs) + 1;
+            for (let r = r0; r <= r1; r++) {
+                const mat = window.getUGCellV(col, r);
+                if (!mat || mat === 'air') continue;
+                const cy = cd.topY + r * bs;
+                if (cy + bs <= hY - 2) continue;  // encima de la cabeza
+                if (cy >= fY + 2) continue;        // debajo de los pies
+                if (cy < topY) topY = cy;
+            }
+        }
+    }
+
+    const stepH = fY - topY;
+    if (stepH <= 0)       return 0;  // camino libre
+    if (stepH <= bs + 2)  return 1;  // escalón (física auto-step lo maneja)
+    return 2;                        // pared: hay que saltar
+}
+
+// ─── Campo de visión y línea de visión ────────────────────────────────────────
+//
+// Cada mob tiene:
+//   range      – distancia máxima de detección
+//   halfAngle  – semiángulo del cono de visión (radianes desde el frente)
+//   noise      – radio de detección por "sonido" (siempre activo, sin LOS)
+//
+// LOS: rayo desde el centro del mob hasta el centro del objetivo, paso de bs*0.55.
+// Cualquier celda UG sólida (incluida la superficie) o bloque construido sólido lo bloquea.
+// Efecto: mobs en superficie no ven a jugadores bajo tierra a no ser que haya un hueco minado.
+
+/** @private – parámetros de FOV por tipo de mob */
+function _entFOVInfo(ent, isNight) {
+    switch (ent.type) {
+        case 'zombie':  return { range: isNight ? 500 : 300, halfAngle: 1.14, noise: 55 }; // 130° cono
+        case 'spider':  return { range: isNight ? 430 : 280, halfAngle: 1.40, noise: 50 }; // 160° cono
+        case 'archer':  return { range: isNight ? 860 : 660, halfAngle: 1.75, noise: 55 }; // 200° cono
+        case 'wolf':    return { range: isNight ? 600 : 400, halfAngle: 1.83, noise: 65 }; // 210° cono
+        default:        return { range: 200, halfAngle: Math.PI, noise: 40 };
+    }
+}
+
+/** @private – raycast de línea de visión; devuelve false si hay obstáculo sólido */
+function _entLOS(x0, y0, x1, y1) {
+    const bs    = window.game.blockSize;
+    const dx    = x1 - x0, dy = y1 - y0;
+    const dist  = Math.hypot(dx, dy);
+    if (dist < 2) return true;
+    const steps = Math.max(2, Math.ceil(dist / (bs * 0.55)));
+    const sx    = dx / steps, sy = dy / steps;
+
+    for (let i = 1; i < steps; i++) {
+        const px = x0 + sx * i;
+        const py = y0 + sy * i;
+
+        // ── Bloques construidos sólidos ──────────────────────────────────────
+        for (const b of window.blocks) {
+            if (b.type === 'ladder' || b.type === 'placed_torch' ||
+                b.type === 'box'   || b.type === 'campfire' ||
+                b.type === 'bed'   || b.type === 'grave'    ||
+                (b.type === 'door' && b.open)) continue;
+            const bh = b.type === 'door' ? bs * 2 : bs;
+            if (px >= b.x && px < b.x + bs && py >= b.y && py < b.y + bh) return false;
+        }
+
+        // ── Celdas UG sólidas (incluida la superficie del terreno) ───────────
+        if (window.getUGCellV && window.getTerrainCol) {
+            const col = Math.floor(px / bs);
+            const cd  = window.getTerrainCol(col);
+            if (cd && cd.type !== 'hole') {
+                const row = Math.floor((py - cd.topY) / bs);
+                if (row >= 0) {
+                    const mat = window.getUGCellV(col, row);
+                    if (mat && mat !== 'air') return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * @private
+ * Devuelve true si la entidad puede ver el punto (tx, ty).
+ * Criterios: dentro de rango + dentro del cono FOV + línea de visión libre.
+ * Excepción: si el objetivo está dentro del radio de "ruido" siempre detecta.
+ */
+function _entCanSeeTarget(ent, tx, ty, isNight) {
+    const fov  = _entFOVInfo(ent, isNight);
+    const cx   = ent.x + ent.width  / 2;
+    const cy   = ent.y + ent.height / 2;
+    const dist = Math.hypot(tx - cx, ty - cy);
+
+    // Detección por ruido/proximidad (independiente de orientación y LOS)
+    if (dist <= fov.noise) return true;
+    if (dist > fov.range)  return false;
+
+    // Actualizar dirección mirada
+    if (ent.vx !== 0) ent._facing = ent.vx > 0 ? 1 : -1;
+    const facing      = ent._facing || 1;
+    const facingAngle = facing > 0 ? 0 : Math.PI;
+    let angleDiff     = Math.abs(Math.atan2(ty - cy, tx - cx) - facingAngle);
+    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+    if (angleDiff > fov.halfAngle) return false;
+
+    // Línea de visión
+    return _entLOS(cx, cy, tx, ty);
+}
+
 /** @private */
 function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, isNight, isHoldingTorch, hitWall, lastX, entGY, isGrounded) {
     // isGrounded viene ya calculado desde el loop principal (incluye UG cells)
@@ -357,6 +496,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         const hpPct      = ent.hp / ent.maxHp;
         const enraged    = (ent.enragedFrames || 0) > 0;
         const baseSpd    = ent.type === 'zombie' ? 0.45 : 1.05; // araña más rápida
+
+        // ── Campo de visión ──────────────────────────────────────────────────
+        const canSeeTarget = _entCanSeeTarget(ent, targetCX, targetCY, isNight);
 
         // Stamina: se drena en chase, se recarga en reposo
         if (ent.aiState === 'chase' || ent.aiState === 'flank') {
@@ -392,16 +534,45 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         }
 
         // ── Máquina de estados ────────────────────────────────────────────────
-        // Araña huye con HP < 28% o sin stamina. Zombie nunca huye (es implacable).
+        // Araña huye con HP < 28% o sin stamina. Zombie nunca huye.
         if (ent.type === 'spider') {
             if ((hpPct < 0.28 || ent.stamina <= 0) && ent.aiState !== 'flee') {
                 ent.aiState = 'flee'; ent.fleeCool = hpPct < 0.28 ? 240 : 140;
                 ent.ignorePlayer = ent.fleeCool;
             }
         }
+
+        // ── Pérdida de visión → estado búsqueda ──────────────────────────────
+        if (!canSeeTarget && ent.aiState !== 'flee') {
+            // Si estaba persiguiendo, guardar última posición conocida
+            if (ent.aiState === 'chase' || ent.aiState === 'flank' || ent.aiState === 'lunge') {
+                if ((ent._lostTimer || 0) === 0) {
+                    // Primera vez que pierde visión: guardar posición y arrancar timer
+                    ent._lostX     = targetCX;
+                    ent._lostY     = targetCY;
+                    ent._lostTimer = 180; // 3 s a 60fps
+                }
+                ent.aiState = 'idle';
+            }
+            if ((ent._lostTimer || 0) > 0) {
+                ent._lostTimer--;
+                // Caminar despacio hacia la última posición conocida
+                const lostDir = (ent._lostX || targetCX) > ent.x + ent.width / 2 ? 1 : -1;
+                ent.vx = lostDir * baseSpd * 0.45;
+                if (ent.attackCooldown > 0) ent.attackCooldown--;
+                return;
+            }
+            // Sin visión y timer agotado: reposo total
+            ent.aiState = 'idle'; ent.vx *= 0.85;
+            if (ent.attackCooldown > 0) ent.attackCooldown--;
+            return;
+        }
+        // Objetivo recuperado: limpiar timer de búsqueda
+        if (canSeeTarget) ent._lostTimer = 0;
+
         if (ent.aiState === 'flee') {
-            if (ent.fleeCool <= 0) ent.aiState = minDist < aggroRange && ent.stamina > 40 ? 'chase' : 'idle';
-        } else if (ent.ignorePlayer <= 0 && minDist < aggroRange) {
+            if (ent.fleeCool <= 0) ent.aiState = (canSeeTarget && minDist < aggroRange && ent.stamina > 40) ? 'chase' : 'idle';
+        } else if (ent.ignorePlayer <= 0 && canSeeTarget && minDist < aggroRange) {
             if (ent.type === 'spider') {
                 // Araña: tres modos tácticos según distancia
                 if (minDist > 200) {
@@ -456,7 +627,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             const fd  = ent.x > targetCX ? 1 : -1;
             const fsp = ent.type === 'spider' ? 1.6 : 0.85;
             ent.vx = fd * fsp * (enraged ? 1.2 : 1.0);
-            if ((hitWall || Math.abs(ent.x - lastX) < 0.1) && isGrounded) ent.vy = -8;
+            if (isGrounded && (ent._jumpCooldown || 0) === 0 && _entObstacleAhead(ent, fd) === 2) {
+                ent.vy = -8; ent._jumpCooldown = 18;
+            }
 
         } else if (ent.aiState === 'flank') {
             // Araña rodea al jugador lateralmente a buena velocidad
@@ -483,33 +656,31 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 if (gAhead < gHere - window.game.blockSize * 1.2) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; }
             }
 
-            // ── Desatascar: atacar bloque obstructor ──────────────────────────
+            // ── Salto proactivo: detectar pared de 2+ bloques adelante cada frame ──
+            // La física auto-escala escalones de 1 bloque; aquí sólo actuamos si la
+            // pared es más alta y el mob REALMENTE necesita saltar para cruzarla.
+            if (isGrounded && (ent._jumpCooldown || 0) === 0 && Math.abs(ent.vx) > 0.1) {
+                if (_entObstacleAhead(ent, dirX) === 2) {
+                    ent.vy = ent.type === 'zombie' ? -7 : -9;
+                    ent._jumpCooldown = 20;
+                    ent.stuckFrames   = 0;
+                }
+            }
+
+            // ── Fallback de desatascado: por si el look-ahead falla (lags de física) ──
             if (hitWall || Math.abs(ent.x - lastX) < 0.4) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
 
-                // Detectar si hay un escalón pequeño o puerta inmediatamente adelante
-                if (ent.stuckFrames > 4 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                // Puerta cerrada: intentar abrir o saltar
+                if (ent.stuckFrames > 3 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     const bs     = window.game.blockSize;
-                    const feetY  = ent.y + ent.height;
                     const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
-
-                    // ¿Hay un bloque cuyo techo está ≤ 1 bloque sobre el suelo actual? → salto de escalón
-                    const stepBlock = window.blocks.find(b => {
-                        if (b.type === 'ladder') return false;
-                        const bh = b.type === 'door' ? bs * 2 : bs;
-                        return checkX >= b.x && checkX <= b.x + bs &&
-                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
-                    });
-                    if (stepBlock) { ent.vy = ent.type === 'zombie' ? -7 : -9; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
-
-                    // ¿Hay una puerta cerrada? → intentar abrir o saltar por encima
                     const doorBlock = window.blocks.find(b => {
                         if (b.type !== 'door' || b.open) return false;
                         return checkX >= b.x && checkX <= b.x + bs &&
                                ent.y + ent.height >= b.y && ent.y <= b.y + bs * 2;
                     });
                     if (doorBlock) {
-                        // Zombies y lobos intentan romperla
                         if (ent.attackCooldown <= 0 && (ent.type === 'zombie' || ent.type === 'wolf')) {
                             const dmg = ent.damage * 0.7;
                             doorBlock.hp = (doorBlock.hp || doorBlock.maxHp || 100) - dmg;
@@ -519,26 +690,25 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                             else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
                             ent.attackCooldown = ent.type === 'zombie' ? 80 : 55;
                             ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
-                        } else if (ent.stuckFrames > 15 && (ent._jumpCooldown || 0) === 0) {
-                            // Si no puede romperla, intenta saltar por encima
+                        } else if (ent.stuckFrames > 12 && (ent._jumpCooldown || 0) === 0) {
                             ent.vy = -11; ent._jumpCooldown = 20;
                             ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
                         }
                     }
                 }
 
-                if (ent.stuckFrames > 10 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                if (ent.stuckFrames > 8 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     ent.vy = ent.type === 'zombie' ? -7 : -9;
                     ent._jumpCooldown = 16;
                 }
 
-                // Buscar bloque destructible que está bloqueando el paso
-                if (ent.stuckFrames > 20 && ent.attackCooldown <= 0) {
+                // Romper bloque obstructor si lleva mucho tiempo bloqueado
+                if (ent.stuckFrames > 18 && ent.attackCooldown <= 0) {
                     const bs = window.game.blockSize;
                     const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
                     const checkY = ent.y + ent.height / 2;
                     const obstacle = window.blocks.find(b => {
-                        if (b.type === 'ladder' || b.type === 'stair') return false;
+                        if (b.type === 'ladder' || b.type === 'stair' || b.type === 'placed_torch') return false;
                         const bh = b.type === 'door' ? bs * 2 : bs;
                         return checkX >= b.x && checkX <= b.x + bs &&
                                checkY >= b.y && checkY <= b.y + bh;
@@ -581,7 +751,7 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 const bs = window.game.blockSize;
                 // Buscar bloque de suelo/plataforma debajo del jugador
                 const support = window.blocks.find(b => {
-                    if (b.type === 'ladder' || b.type === 'stair') return false;
+                    if (b.type === 'ladder' || b.type === 'stair' || b.type === 'placed_torch') return false;
                     return Math.abs((b.x + bs/2) - (target.x + (target.width||20)/2)) < bs &&
                            b.y > ent.y && b.y < target.y + 10;
                 });
@@ -620,15 +790,29 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         const hpPct      = ent.hp / ent.maxHp;
         if (ent.fleeCool > 0) ent.fleeCool--;
 
+        // ── Campo de visión ──────────────────────────────────────────────────
+        const canSeeTarget = _entCanSeeTarget(ent, targetCX, targetCY, isNight);
+
         // ── Estados ───────────────────────────────────────────────────────────
         if (hpPct < 0.25 && ent.aiState !== 'flee') {
             ent.aiState = 'flee'; ent.fleeCool = 200; ent.ignorePlayer = 200;
         }
         if (ent.aiState === 'flee') {
-            if (ent.fleeCool <= 0) ent.aiState = minDist < aggroRange ? 'kite' : 'idle';
-        } else if (minDist < aggroRange && ent.ignorePlayer <= 0 && !target.inBackground && !target.isDead) {
+            if (ent.fleeCool <= 0) ent.aiState = (canSeeTarget && minDist < aggroRange) ? 'kite' : 'idle';
+        } else if (!canSeeTarget && ent.aiState !== 'idle') {
+            // Pérdida de visión durante kite
+            if ((ent._lostTimer || 0) === 0) { ent._lostX = targetCX; ent._lostTimer = 150; }
+            ent._lostTimer--;
+            const lostDir = (ent._lostX || targetCX) > ent.x + ent.width / 2 ? 1 : -1;
+            ent.vx = lostDir * 0.5;
+            ent.aiState = 'idle';
+            if (ent.attackCooldown > 0) ent.attackCooldown--;
+            return;
+        } else if (canSeeTarget && minDist < aggroRange && ent.ignorePlayer <= 0 && !target.inBackground && !target.isDead) {
+            ent._lostTimer = 0;
             ent.aiState = 'kite';
         } else if (ent.aiState !== 'flee') {
+            if (canSeeTarget) ent._lostTimer = 0;
             ent.aiState = 'idle';
         }
 
@@ -641,7 +825,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         if (ent.aiState === 'flee') {
             const fd = ent.x > targetCX ? 1 : -1;
             ent.vx = fd * 1.8;
-            if ((hitWall || Math.abs(ent.x - lastX) < 0.1) && isGrounded) ent.vy = -8;
+            if (isGrounded && (ent._jumpCooldown || 0) === 0 && _entObstacleAhead(ent, fd) === 2) {
+                ent.vy = -8; ent._jumpCooldown = 18;
+            }
 
         } else if (ent.aiState === 'kite') {
             const dirX = target.x > ent.x ? 1 : -1;
@@ -666,26 +852,20 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 if (gAhead < gHere - window.game.blockSize * 1.2) { ent.vy = -7; ent.stuckFrames = 0; }
             }
 
-            // Desatascar
+            // Salto proactivo de pared
+            if (isGrounded && (ent._jumpCooldown || 0) === 0 && Math.abs(ent.vx) > 0.1) {
+                const _mvDir = ent.vx > 0 ? 1 : -1;
+                if (_entObstacleAhead(ent, _mvDir) === 2) {
+                    ent.vy = -7; ent._jumpCooldown = 20; ent.stuckFrames = 0;
+                }
+            }
+
+            // Fallback de desatascado
             if (hitWall || (Math.abs(ent.x - lastX) < 0.1 && Math.abs(ent.vx) > 0.05)) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
-
-                // Detectar escalón pequeño
-                if (ent.stuckFrames > 4 && isGrounded) {
-                    const bs     = window.game.blockSize;
-                    const mvDir  = ent.vx >= 0 ? 1 : -1;
-                    const feetY  = ent.y + ent.height;
-                    const checkX = ent.x + (mvDir > 0 ? ent.width + 4 : -4);
-                    const stepBlock = window.blocks.find(b => {
-                        if (b.type === 'ladder') return false;
-                        const bh = b.type === 'door' ? bs * 2 : bs;
-                        return checkX >= b.x && checkX <= b.x + bs &&
-                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
-                    });
-                    if (stepBlock) { ent.vy = -7; ent.stuckFrames = 0; }
+                if (ent.stuckFrames > 8 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                    ent.vy = -7; ent.stuckFrames = 0; ent._jumpCooldown = 16;
                 }
-
-                if (ent.stuckFrames > 20 && isGrounded) ent.vy = -7;
                 if (ent.stuckFrames > 55) {
                     ent.ignorePlayer = 60; ent.stuckFrames = 0;
                     ent.strafeDir = -ent.strafeDir; ent.strafeT = 60;
@@ -731,6 +911,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
 
         const aggroRange  = isNight ? 750 : 420;
         const repelTorch  = isHoldingTorch && minDist < 240 && target === window.player;
+        // ── Campo de visión (lobo) ───────────────────────────────────────────
+        const canSeeTarget = _entCanSeeTarget(ent, targetCX, targetCY, isNight);
+
         // Antorchas clavadas también ahuyentan lobos si nivel ≤ player+2
         const _pLvlW = window.player?.level || 1;
         let _ptRepelWolf = false;
@@ -777,13 +960,25 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 if (Math.abs(ent.x - gx) > 70) ent.vx = (gx > ent.x ? 1 : -1) * 0.7;
             }
 
-            // Detectar jugador → stalk
-            if (minDist < aggroRange && !target.isDead) {
+            // Detectar jugador → stalk (solo si hay visión directa)
+            if (canSeeTarget && minDist < aggroRange && !target.isDead) {
                 ent.wolfState     = 'stalk';
                 ent.wolfStateTimer = 0;
             }
 
         } else if (ent.wolfState === 'stalk') {
+            // ── Pérdida de visión en stalk ───────────────────────────────────
+            if (!canSeeTarget) {
+                if ((ent._lostTimer || 0) === 0) { ent._lostX = targetCX; ent._lostTimer = 180; }
+                ent._lostTimer--;
+                const lostDir = (ent._lostX || targetCX) > ent.x + ent.width / 2 ? 1 : -1;
+                ent.vx = lostDir * 0.4;
+                if (ent._lostTimer <= 0) { ent.wolfState = 'patrol'; ent._lostTimer = 0; }
+                if (ent.attackCooldown > 0) ent.attackCooldown--;
+                return;
+            }
+            ent._lostTimer = 0;
+
             // Acercarse cautelosamente hasta ~100px, manteniendo manada junta
             const dirX    = target.x > ent.x ? 1 : -1;
             const stalkSpd = 0.75 * packBonus;
@@ -801,25 +996,21 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 if (gAhead < gHere - window.game.blockSize) { ent.vy = -10; }
             }
 
-            // Desatascar — con abandon si lleva demasiado tiempo bloqueado
+            // Salto proactivo de pared
+            if (isGrounded && (ent._jumpCooldown || 0) === 0 && Math.abs(ent.vx) > 0.1) {
+                if (_entObstacleAhead(ent, dirX) === 2) {
+                    ent.vy = -10; ent._jumpCooldown = 20; ent.stuckFrames = 0;
+                }
+            }
+
+            // Fallback de desatascado
             if (hitWall || Math.abs(ent.x - lastX) < 0.4) {
                 ent.stuckFrames = (ent.stuckFrames || 0) + 1;
 
-                // Detectar escalón pequeño adelante → saltar inmediatamente
+                // Puerta → intentar romperla (lobo) o saltar
                 if (ent.stuckFrames > 3 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     const bs     = window.game.blockSize;
-                    const dirX   = target.x > ent.x ? 1 : -1;
-                    const feetY  = ent.y + ent.height;
                     const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
-                    const stepBlock = window.blocks.find(b => {
-                        if (b.type === 'ladder') return false;
-                        const bh = b.type === 'door' ? bs * 2 : bs;
-                        return checkX >= b.x && checkX <= b.x + bs &&
-                               b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
-                    });
-                    if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
-
-                    // Puerta → intentar romperla (lobo) o saltar por encima
                     const doorBlock = window.blocks.find(b => {
                         if (b.type !== 'door' || b.open) return false;
                         return checkX >= b.x && checkX <= b.x + bs &&
@@ -834,12 +1025,12 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                         else window.sendWorldUpdate('hit_block', { x: doorBlock.x, y: doorBlock.y, dmg });
                         ent.attackCooldown = 55;
                         ent.stuckFrames = Math.max(0, ent.stuckFrames - 10);
-                    } else if (doorBlock && ent.stuckFrames > 15 && (ent._jumpCooldown || 0) === 0) {
+                    } else if (doorBlock && ent.stuckFrames > 12 && (ent._jumpCooldown || 0) === 0) {
                         ent.vy = -12; ent._jumpCooldown = 20; ent.stuckFrames = Math.max(0, ent.stuckFrames - 12);
                     }
                 }
 
-                if (ent.stuckFrames > 10 && isGrounded && (ent._jumpCooldown || 0) === 0) {
+                if (ent.stuckFrames > 8 && isGrounded && (ent._jumpCooldown || 0) === 0) {
                     ent.vy = -10; ent._jumpCooldown = 16;
                 }
                 if (ent.stuckFrames > 70) {
@@ -879,26 +1070,18 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
                 const chargeSpd = (1.4 + nearMates.length * 0.15) * packBonus;
                 ent.vx = dirX * chargeSpd;
 
-                // Salto de obstáculo durante la carga
+                // Salto proactivo de pared durante la carga
+                if (isGrounded && (ent._jumpCooldown || 0) === 0 && Math.abs(ent.vx) > 0.1) {
+                    if (_entObstacleAhead(ent, dirX) === 2) {
+                        ent.vy = -10; ent._jumpCooldown = 20; ent.stuckFrames = 0;
+                    }
+                }
+
+                // Fallback de desatascado en carga
                 if ((hitWall || Math.abs(ent.x - lastX) < 0.4) && isGrounded) {
                     ent.stuckFrames = (ent.stuckFrames || 0) + 1;
-
-                    // Detectar escalón → saltar inmediatamente sin contar stuckFrames
-                    if (ent.stuckFrames > 2 && (ent._jumpCooldown || 0) === 0) {
-                        const bs     = window.game.blockSize;
-                        const feetY  = ent.y + ent.height;
-                        const checkX = ent.x + (dirX > 0 ? ent.width + 4 : -4);
-                        const stepBlock = window.blocks.find(b => {
-                            if (b.type === 'ladder') return false;
-                            const bh = b.type === 'door' ? bs * 2 : bs;
-                            return checkX >= b.x && checkX <= b.x + bs &&
-                                   b.y + bh >= feetY - bs * 1.8 && b.y + bh <= feetY + 8;
-                        });
-                        if (stepBlock) { ent.vy = -10; ent.stuckFrames = 0; ent._jumpCooldown = 18; }
-                    }
-
-                    if (ent.stuckFrames > 8 && (ent._jumpCooldown || 0) === 0) {
-                        ent.vy = -9; ent._jumpCooldown = 16;
+                    if (ent.stuckFrames > 6 && (ent._jumpCooldown || 0) === 0) {
+                        ent.vy = -10; ent._jumpCooldown = 18; ent.stuckFrames = 0;
                     }
                     if (ent.stuckFrames > 55) {
                         ent.wolfState = 'cooldown'; ent.wolfStateTimer = 45;
@@ -998,9 +1181,9 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
             }
         }
 
-        // Reset global si pierde al jugador
-        if (minDist > aggroRange + 200 && ent.wolfState !== 'patrol') {
-            ent.wolfState = 'patrol'; ent.wolfStateTimer = 0;
+        // Reset global si pierde al jugador (sin LOS y fuera de rango)
+        if (!canSeeTarget && minDist > aggroRange + 200 && ent.wolfState !== 'patrol') {
+            ent.wolfState = 'patrol'; ent.wolfStateTimer = 0; ent._lostTimer = 0;
         }
 
         if (ent.attackCooldown > 0) ent.attackCooldown--;

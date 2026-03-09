@@ -750,6 +750,30 @@ window.draw = function() {
                 }
             }
         }
+
+        // ── Signo de interrogación: mob perdió de vista al jugador ─────────
+        if ((ent._lostTimer || 0) > 0 && ent.type !== 'chicken') {
+            const _qFade  = Math.min(1, ent._lostTimer / 20);      // fade-in y fade-out en 20 frames
+            const _qBob   = Math.sin(window.game.frameCount * 0.18) * 2.5;
+            const _qCX    = ent.x + ent.width  / 2;
+            const _qCY    = ent.y - 28 + _qBob;
+            C.save();
+            C.globalAlpha = _qFade * 0.92;
+            // Globo amarillo
+            C.fillStyle = '#f5d020'; C.strokeStyle = '#b8960a'; C.lineWidth = 1.5;
+            C.beginPath(); C.arc(_qCX, _qCY, 11, 0, Math.PI * 2); C.fill(); C.stroke();
+            // Colita del globo apuntando al mob
+            C.fillStyle = '#f5d020';
+            C.beginPath(); C.moveTo(_qCX - 4, _qCY + 8); C.lineTo(_qCX + 4, _qCY + 8); C.lineTo(_qCX, _qCY + 16); C.closePath(); C.fill();
+            C.strokeStyle = '#b8960a'; C.lineWidth = 1.2;
+            C.beginPath(); C.moveTo(_qCX - 4, _qCY + 8); C.lineTo(_qCX, _qCY + 16); C.lineTo(_qCX + 4, _qCY + 8); C.stroke();
+            // Signo ?
+            C.globalAlpha = _qFade;
+            C.font = 'bold 13px sans-serif'; C.fillStyle = '#5a3e00';
+            C.textAlign = 'center'; C.textBaseline = 'middle';
+            C.fillText('?', _qCX, _qCY + 1);
+            C.restore();
+        }
         C.restore();
     });
 

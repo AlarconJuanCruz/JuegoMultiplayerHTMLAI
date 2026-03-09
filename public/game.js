@@ -1195,8 +1195,9 @@ function update() {
         window.player.x += window.player.vx;
         if (window.player.x < window.game.shoreX) { window.player.x = window.game.shoreX; if (window.player.vx < 0) window.player.vx = 0; }
         const _hitWallX = window.checkBlockCollisions('x');
-        // Si chocó contra una pared, frenar el ramp de aceleración para evitar vibración
-        if (_hitWallX) window.player._accelRamp = Math.min(window.player._accelRamp || 0, 0.15);
+        // Pared: resetear ramp a 0 para que vx no alcance el umbral de animación
+        // en los frames siguientes, y forzar animTime=0 inmediatamente.
+        if (_hitWallX) { window.player._accelRamp = 0; window.player.animTime = 0; }
 
         // ── animTime: recalcular con el vx REAL post-colisión ──────────────────
         // Si _hitWallX=true, vx ya fue puesto a 0 por la colisión → animTime=0 (Idle).
