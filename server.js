@@ -1,6 +1,8 @@
 const express = require('express');
 const cors    = require('cors');
 const http    = require('http');
+const fs      = require('fs');
+const path    = require('path');
 const { Server } = require('socket.io');
 
 const app    = express();
@@ -10,17 +12,83 @@ const io     = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.static('public'));
 
+// ── Persistencia en disco ─────────────────────────────────────────────────────
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// Clave de persistencia: sala global → '__global__', otras → id aleatorio.
+function _persistKey(room) {
+    return room.name === '__global__' ? '__global__' : room.id;
+}
+
+// Escritura async con debounce por sala.
+// Colapsa múltiples saves rápidos en uno solo (200ms), nunca bloquea el event loop.
+const _pendingWrites = new Map();
+function saveRoomState(room) {
+    const key  = _persistKey(room);
+    const file = path.join(DATA_DIR, `${key}.json`);
+    if (_pendingWrites.has(key)) clearTimeout(_pendingWrites.get(key));
+    const payload = JSON.stringify(room.worldState); // capturar estado ahora
+    const tid = setTimeout(() => {
+        _pendingWrites.delete(key);
+        fs.writeFile(file, payload, 'utf8', err => {
+            if (err) console.error(`[persist] Error guardando ${key}:`, err.message);
+        });
+    }, 200);
+    _pendingWrites.set(key, tid);
+}
+
+// Guardado inmediato (síncrono) — solo para eventos críticos donde el proceso
+// puede terminar poco después (disconnect, vaciado de sala, mine_cell roto).
+function saveRoomStateNow(room) {
+    const key  = _persistKey(room);
+    const file = path.join(DATA_DIR, `${key}.json`);
+    // Cancelar cualquier write pendiente para esta sala (ya lo incluimos aquí)
+    if (_pendingWrites.has(key)) { clearTimeout(_pendingWrites.get(key)); _pendingWrites.delete(key); }
+    try {
+        fs.writeFileSync(file, JSON.stringify(room.worldState), 'utf8');
+    } catch (e) {
+        console.error(`[persist] Error guardando (sync) ${key}:`, e.message);
+    }
+}
+
+function loadRoomState(persistKey) {
+    try {
+        const file = path.join(DATA_DIR, `${persistKey}.json`);
+        if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (e) {
+        console.error(`[persist] Error cargando ${persistKey}:`, e.message);
+    }
+    return null;
+}
+
 // ── Límites globales ──────────────────────────────────────────────────────────
 const MAX_ROOMS     = 10;
 const MAX_PLAYERS   = 10;
 const ROOM_ID_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // ── Registro de salas ─────────────────────────────────────────────────────────
-// rooms[roomId] = { id, name, hostName, players:{}, worldState:{}, createdAt, seedCode }
 const rooms = {};
 
-// ── Utilidades ────────────────────────────────────────────────────────────────
+// ── Respaldo periódico (salas activas, cada 60s) ──────────────────────────────
+setInterval(() => {
+    for (const room of Object.values(rooms)) {
+        if (Object.keys(room.players).length > 0) saveRoomState(room);
+    }
+}, 60_000);
 
+// ── Limpieza de salas vacías (cada 60s) ───────────────────────────────────────
+setInterval(() => {
+    for (const [id, room] of Object.entries(rooms)) {
+        if (Object.keys(room.players).length === 0) {
+            saveRoomState(room); // usa _persistKey(room) → key correcto
+            delete rooms[id];
+            console.log(`[rooms] Sala ${id} guardada y eliminada por inactividad`);
+        }
+    }
+}, 60_000);
+
+// ── Utilidades ────────────────────────────────────────────────────────────────
 function makeRoomId() {
     let id = '';
     for (let i = 0; i < 6; i++) id += ROOM_ID_CHARS[Math.floor(Math.random() * ROOM_ID_CHARS.length)];
@@ -31,6 +99,7 @@ function freshWorldState(seedCode) {
     return {
         blocks: [], droppedItems: [], removedTrees: [], removedRocks: [],
         treeState: {}, killedEntities: [], stuckArrows: [],
+        minedCells: {},
         seedCode: seedCode || null
     };
 }
@@ -47,35 +116,21 @@ function publicRoomList() {
     }));
 }
 
-// ── Sanitización de strings de entrada ───────────────────────────────────────
 function sanitize(str, maxLen = 30) {
     if (typeof str !== 'string') return '';
     return str.replace(/[<>"'`]/g, '').substring(0, maxLen).trim();
 }
 
-// ── Limpieza periódica de salas vacías ────────────────────────────────────────
-setInterval(() => {
-    for (const [id, room] of Object.entries(rooms)) {
-        if (Object.keys(room.players).length === 0) {
-            delete rooms[id];
-            console.log(`[rooms] Sala ${id} eliminada por inactividad`);
-        }
-    }
-}, 60_000);
-
 // ── REST API ──────────────────────────────────────────────────────────────────
-
 app.get('/api/rooms', (_req, res) => res.json(publicRoomList()));
 
 app.post('/api/rooms', express.json(), (req, res) => {
-    if (Object.keys(rooms).length >= MAX_ROOMS) {
+    if (Object.keys(rooms).length >= MAX_ROOMS)
         return res.status(429).json({ error: `Límite de ${MAX_ROOMS} salas alcanzado.` });
-    }
     const name     = sanitize(req.body?.name || 'Sala sin nombre');
     const hostName = sanitize(req.body?.hostName || 'Anónimo', 15);
     const seedCode = sanitize(req.body?.seedCode || '', 10) || null;
     const id       = makeRoomId();
-
     rooms[id] = { id, name, hostName, players: {}, worldState: freshWorldState(seedCode), createdAt: Date.now() };
     console.log(`[rooms] Sala creada: ${id} "${name}" por ${hostName}`);
     res.json({ id, name, seedCode: rooms[id].worldState.seedCode });
@@ -94,33 +149,30 @@ app.get('/api/status', (_req, res) => {
     });
 });
 
-// ── Rate limiting por socket (worldUpdate) ────────────────────────────────────
-// Permite hasta 60 updates/seg para prevenir spam; ajustar según necesidad.
-const RATE_LIMIT_MS   = 1000;
-const RATE_LIMIT_MAX  = 60;
-const socketRates     = new Map(); // socketId → { count, windowStart }
+// ── Rate limiting por socket ──────────────────────────────────────────────────
+const RATE_LIMIT_MS  = 1000;
+const RATE_LIMIT_MAX = 60;
+const socketRates    = new Map();
 
 function isRateLimited(socketId) {
     const now  = Date.now();
     const data = socketRates.get(socketId) ?? { count: 0, windowStart: now };
-    if (now - data.windowStart > RATE_LIMIT_MS) {
-        data.count = 0;
-        data.windowStart = now;
-    }
+    if (now - data.windowStart > RATE_LIMIT_MS) { data.count = 0; data.windowStart = now; }
     data.count++;
     socketRates.set(socketId, data);
     return data.count > RATE_LIMIT_MAX;
 }
 
 // ── Socket.IO ─────────────────────────────────────────────────────────────────
-
 io.on('connection', (socket) => {
 
     // ── joinRoom ──────────────────────────────────────────────────────────────
     socket.on('joinRoom', ({ roomId, playerData }) => {
         const room = rooms[roomId];
-        if (!room)                                          return socket.emit('roomError', { code: 'NOT_FOUND',  message: 'La sala no existe o ya fue cerrada.' });
-        if (Object.keys(room.players).length >= MAX_PLAYERS) return socket.emit('roomError', { code: 'FULL',      message: 'La sala está llena.' });
+        if (!room)
+            return socket.emit('roomError', { code: 'NOT_FOUND', message: 'La sala no existe o ya fue cerrada.' });
+        if (Object.keys(room.players).length >= MAX_PLAYERS)
+            return socket.emit('roomError', { code: 'FULL', message: 'La sala está llena.' });
 
         const safeData = {
             name:     sanitize(playerData?.name ?? 'Jugador', 15),
@@ -132,34 +184,34 @@ io.on('connection', (socket) => {
 
         socket.roomId = roomId;
         socket.join(roomId);
-
         socket.emit('timeSync', Date.now() - room.createdAt);
         socket.emit('initWorldState', room.worldState);
-        if (room.worldState.seedCode) socket.emit('worldSeed', { seed: room.worldState.seedCode });
 
-        room.players[socket.id] = { id: socket.id, ...safeData };
-
-        if (Object.keys(room.players).length === 1 && !room.worldState.seedCode && safeData.seedCode) {
+        if (Object.keys(room.players).length === 0 && !room.worldState.seedCode && safeData.seedCode) {
+            // Primera persona en entrar: registrar la semilla del cliente como semilla del mundo
             room.worldState.seedCode = safeData.seedCode;
-            socket.emit('worldSeed', { seed: room.worldState.seedCode });
-        } else if (room.worldState.seedCode) {
-            socket.emit('worldSeed', { seed: room.worldState.seedCode });
         }
+        // Enviar worldSeed UNA SOLA VEZ (evitar doble applySeed en el cliente)
+        if (room.worldState.seedCode) socket.emit('worldSeed', { seed: room.worldState.seedCode });
 
         io.to(roomId).emit('currentPlayers', room.players);
         io.emit('roomListUpdate', publicRoomList());
         console.log(`[rooms] ${safeData.name} unido a sala ${roomId} (${Object.keys(room.players).length}/${MAX_PLAYERS})`);
     });
 
-    // ── joinGame (retrocompatibilidad → sala global) ───────────────────────────
+    // ── joinGame (sala global) ────────────────────────────────────────────────
     socket.on('joinGame', (playerData) => {
         if (socket.roomId) return;
 
         let globalRoom = Object.values(rooms).find(r => r.name === '__global__');
         if (!globalRoom) {
-            const id = makeRoomId();
-            rooms[id] = { id, name: '__global__', hostName: 'Sistema', players: {}, worldState: freshWorldState(playerData?.seedCode ?? null), createdAt: Date.now() };
-            globalRoom = rooms[id];
+            const id         = makeRoomId();
+            const savedGlobal = loadRoomState('__global__');
+            const ws          = savedGlobal || freshWorldState(playerData?.seedCode ?? null);
+            rooms[id]    = { id, name: '__global__', hostName: 'Sistema', players: {}, worldState: ws, createdAt: Date.now() };
+            globalRoom   = rooms[id];
+            if (savedGlobal)
+                console.log(`[persist] Sala global restaurada (${Object.keys(savedGlobal.minedCells || {}).length} celdas minadas, ${(savedGlobal.blocks||[]).length} bloques)`);
         }
         if (Object.keys(globalRoom.players).length >= MAX_PLAYERS) return socket.emit('serverFull');
 
@@ -178,9 +230,9 @@ io.on('connection', (socket) => {
         if (globalRoom.worldState.seedCode) socket.emit('worldSeed', { seed: globalRoom.worldState.seedCode });
 
         globalRoom.players[socket.id] = { id: socket.id, ...safeData };
-        if (Object.keys(globalRoom.players).length === 1 && !globalRoom.worldState.seedCode && safeData.seedCode) {
+        if (Object.keys(globalRoom.players).length === 1 && !globalRoom.worldState.seedCode && safeData.seedCode)
             globalRoom.worldState.seedCode = safeData.seedCode;
-        }
+
         io.to(globalRoom.id).emit('currentPlayers', globalRoom.players);
         io.emit('roomListUpdate', publicRoomList());
     });
@@ -189,28 +241,27 @@ io.on('connection', (socket) => {
     socket.on('playerMovement', (data) => {
         const room = rooms[socket.roomId];
         if (!room || !room.players[socket.id]) return;
-        // Solo actualizar campos seguros (no dejar que el cliente sobreescriba id)
         const p = room.players[socket.id];
         Object.assign(p, {
             x: Number(data.x) || p.x, y: Number(data.y) || p.y,
             vx: Number(data.vx) || 0,  vy: Number(data.vy) || 0,
-            isGrounded:  !!data.isGrounded,
-            facingRight: !!data.facingRight,
-            activeTool:  sanitize(data.activeTool ?? 'hand', 20),
-            animTime:    Number(data.animTime) || 0,
-            attackFrame: Number(data.attackFrame) || 0,
-            isAiming:    !!data.isAiming,
-            isCharging:  !!data.isCharging,
-            chargeLevel: Math.max(0, Math.min(100, Number(data.chargeLevel) || 0)),
-            mouseX:      Number(data.mouseX) || 0,
-            mouseY:      Number(data.mouseY) || 0,
-            isDead:      !!data.isDead,
-            level:       Math.max(1, Math.min(9999, parseInt(data.level) || p.level)),
-            isTyping:    !!data.isTyping,
-            isDancing:   !!data.isDancing,
-            danceStart:  Number(data.danceStart) || 0,
+            isGrounded:     !!data.isGrounded,
+            facingRight:    !!data.facingRight,
+            activeTool:     sanitize(data.activeTool ?? 'hand', 20),
+            animTime:       Number(data.animTime)    || 0,
+            attackFrame:    Number(data.attackFrame) || 0,
+            isAiming:       !!data.isAiming,
+            isCharging:     !!data.isCharging,
+            chargeLevel:    Math.max(0, Math.min(100, Number(data.chargeLevel) || 0)),
+            mouseX:         Number(data.mouseX)  || 0,
+            mouseY:         Number(data.mouseY)  || 0,
+            isDead:         !!data.isDead,
+            level:          Math.max(1, Math.min(9999, parseInt(data.level) || p.level)),
+            isTyping:       !!data.isTyping,
+            isDancing:      !!data.isDancing,
+            danceStart:     Number(data.danceStart) || 0,
             deathAnimFrame: Number(data.deathAnimFrame) || 0,
-            isClimbing:  !!data.isClimbing
+            isClimbing:     !!data.isClimbing
         });
         socket.to(socket.roomId).emit('playerMoved', { ...p, id: socket.id });
     });
@@ -219,8 +270,6 @@ io.on('connection', (socket) => {
     socket.on('worldUpdate', (data) => {
         const room = rooms[socket.roomId];
         if (!room) return;
-
-        // Rate limiting: silenciosamente ignorar si supera el límite
         if (isRateLimited(socket.id)) return;
 
         const ws = room.worldState;
@@ -300,23 +349,27 @@ io.on('connection', (socket) => {
                 if (data.payload) ws.stuckArrows.push(data.payload);
                 break;
 
+            case 'mine_cell': {
+                const mc = data.payload;
+                if (mc && typeof mc.col === 'number' && typeof mc.row === 'number') {
+                    if (!ws.minedCells) ws.minedCells = {};
+                    if (mc.broken === true) {
+                        ws.minedCells[mc.col + '_' + mc.row] = true;
+                        // Guardar de forma inmediata/síncrona para que ningún disconnect
+                        // o cierre de proceso pierda la celda recién rota.
+                        saveRoomStateNow(room);
+                    }
+                }
+                break;
+            }
+
             case 'remove_stuck_arrow':
                 ws.stuckArrows = ws.stuckArrows.filter(sa => sa.id !== data.payload?.id);
                 break;
 
-            // FIX: remove_old_bed ahora usa socket.id en lugar de owner (string),
-            // evitando bugs cuando un jugador se desconecta inesperadamente y otro
-            // jugador comparte el mismo nombre.
-            // El cliente sigue enviando { owner } para retrocompatibilidad, pero el
-            // servidor ignora ese campo y usa el socket.id del emisor.
             case 'remove_old_bed':
                 ws.blocks = ws.blocks.filter(b => !(b.type === 'bed' && b.ownerSocketId === socket.id));
                 break;
-
-            // FIX: place_block para camas: registrar ownerSocketId además de owner
-            // Se parchea aquí al recibir el bloque del cliente.
-            // El cliente envía { block } con block.owner = playerName.
-            // Añadimos ownerSocketId para el lookup seguro en remove_old_bed.
         }
 
         // Parchar ownerSocketId en camas recién colocadas
@@ -325,7 +378,11 @@ io.on('connection', (socket) => {
             if (newBed && newBed.type === 'bed') newBed.ownerSocketId = socket.id;
         }
 
-        // Broadcast a todos los demás en la sala
+        // Guardar en disco cuando cambian bloques construidos (colapsa en 200ms)
+        if (data.action === 'place_block' || data.action === 'hit_block' || data.action === 'destroy_grave')
+            saveRoomState(room);
+
+        // Broadcast
         socket.to(socket.roomId).emit('worldUpdate', data);
     });
 
@@ -343,25 +400,24 @@ io.on('connection', (socket) => {
         const room = rooms[socket.roomId];
         if (!room) return;
 
-        // FIX: Al desconectarse, eliminar las camas del jugador usando socket.id
-        // Esto previene el bug donde un jugador que se desconecta inesperadamente
-        // deja una cama "huérfana" que nunca se limpia (el remove_old_bed del cliente
-        // nunca llegaría si la conexión se cortó).
-        ws_cleanup: {
-            const ws = room.worldState;
-            const removed = ws.blocks.filter(b => b.type === 'bed' && b.ownerSocketId === socket.id);
-            if (removed.length > 0) {
-                ws.blocks = ws.blocks.filter(b => !(b.type === 'bed' && b.ownerSocketId === socket.id));
-                // Notificar a los demás para que limpien su estado local
-                socket.to(socket.roomId).emit('worldUpdate', {
-                    action: 'cleanup_player_beds',
-                    payload: { socketId: socket.id }
-                });
-            }
+        // Limpiar camas del jugador desconectado
+        const hasBeds = room.worldState.blocks.some(b => b.type === 'bed' && b.ownerSocketId === socket.id);
+        if (hasBeds) {
+            room.worldState.blocks = room.worldState.blocks.filter(b => !(b.type === 'bed' && b.ownerSocketId === socket.id));
+            socket.to(socket.roomId).emit('worldUpdate', {
+                action: 'cleanup_player_beds',
+                payload: { socketId: socket.id }
+            });
         }
 
         delete room.players[socket.id];
         socketRates.delete(socket.id);
+
+        // Guardar de forma inmediata al desconectar: si el servidor termina justo
+        // después del disconnect, saveRoomState (debounced) podría no ejecutarse.
+        saveRoomStateNow(room);
+        if (Object.keys(room.players).length === 0)
+            console.log(`[persist] Sala ${room.id} (${_persistKey(room)}) guardada al quedar vacía`);
 
         io.to(socket.roomId).emit('playerDisconnected', socket.id);
         io.to(socket.roomId).emit('currentPlayers', room.players);
