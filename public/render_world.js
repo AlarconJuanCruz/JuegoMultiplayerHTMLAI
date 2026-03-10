@@ -408,97 +408,98 @@ window.draw = function() {
                     }
                 }
             } else {
-                // ── Underground: terrain cache canvas ─────────────────────────────
+                // ── Underground: terrain cache canvas (viewport-relative) ─────────
+                // offY se snappea al bloque para que el cache no invalide al scrollear 1px.
+                // El canvas tiene el tamaño del viewport (~1280×750), no del mundo.
+                const _offX       = startCol * bs;
+                const _offY       = Math.floor(_iCamY / bs) * bs; // snap a bloque
+                const _vpW        = Math.ceil((endCol - startCol + 4) * bs);
+                const _vpH        = Math.ceil(H / z) + bs * 6;    // solo viewport height
                 const _exploreCount = _fogEnabled ? window._caveExplored.size : 0;
                 const _mineStamp    = window._mineStamp || 0;
                 const _tDirty = !window._terrainCache
-                    || window._tCacheStartCol  !== startCol
-                    || window._tCacheEndCol    !== endCol
-                    || window._tCacheExplore   !== _exploreCount
-                    || window._tCacheMine      !== _mineStamp;
+                    || window._tCacheStartCol !== startCol
+                    || window._tCacheEndCol   !== endCol
+                    || window._tCacheOffY     !== _offY
+                    || window._tCacheExplore  !== _exploreCount
+                    || window._tCacheMine     !== _mineStamp;
 
                 if (_tDirty) {
-                    // ── Construir / reconstruir el offscreen terrain canvas ──
-                    const _numCols  = endCol - startCol + 4;
-                    const _cacheW   = _numCols * bs + 4;
-                    const _cacheH   = Math.ceil(bottomYu) + bs * 2;
                     if (!window._terrainCache
-                        || window._terrainCache.width  < _cacheW
-                        || window._terrainCache.height < _cacheH) {
+                        || window._terrainCache.width  < _vpW
+                        || window._terrainCache.height < _vpH) {
                         window._terrainCache    = document.createElement('canvas');
-                        window._terrainCache.width  = _cacheW  + bs * 4;
-                        window._terrainCache.height = _cacheH  + bs * 4;
+                        window._terrainCache.width  = _vpW + bs * 4;
+                        window._terrainCache.height = _vpH + bs * 4;
                         window._terrainCacheCtx = window._terrainCache.getContext('2d');
                     }
-                    const CC   = window._terrainCacheCtx;
-                    const offX = startCol * bs; // world X de la esquina izquierda del cache
+                    const CC = window._terrainCacheCtx;
                     CC.clearRect(0, 0, window._terrainCache.width, window._terrainCache.height);
+                    const _botYu = _offY + _vpH;
 
                     for (let col = startCol; col <= endCol + 1; col++) {
                         const cd = window.getTerrainCol(col);
                         if (!cd || cd.type === 'hole') continue;
                         const topY  = cd.topY;
-                        const cx    = col * bs - offX; // local x en el canvas
+                        const cx    = col * bs - _offX;
                         const dW    = bs + 0.5;
-                        const maxRow = Math.min(window.UG_MAX_DEPTH || 50,
-                                                Math.ceil((bottomYu - topY) / bs) + 1);
+                        const rowStart = Math.max(0, Math.floor((_offY - topY) / bs) - 1);
+                        const maxRow   = Math.min(window.UG_MAX_DEPTH || 50,
+                                                  Math.ceil((_botYu - topY) / bs) + 1);
 
-                        for (let row = 0; row < maxRow; row++) {
+                        for (let row = rowStart; row < maxRow; row++) {
                             const cellY = topY + row * bs;
-                            if (cellY >= bottomYu) break;
-                            const cH = Math.min(bs, bottomYu - cellY) + 1;
-                            const cyFloor = Math.floor(cellY);
+                            if (cellY >= _botYu) break;
+                            if (cellY + bs < _offY) continue;
+                            const cy  = Math.floor(cellY - _offY); // viewport-relative Y
+                            const cH  = Math.min(bs, _botYu - cellY) + 1;
 
-                            // Fog: celdas no exploradas = roca negra, skip detalle
                             if (_fogEnabled && row > 0 && !window._caveExplored.has(`${col}_${row}`)) {
                                 CC.fillStyle = '#0a0a0c';
-                                CC.fillRect(cx, cyFloor, dW, cH);
+                                CC.fillRect(cx, cy, dW, cH);
                                 continue;
                             }
-
                             const mat = window.getUGCellV(col, row);
-
                             if (mat === 'air') {
                                 const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
                                 CC.fillStyle = v > 0.55 ? BG_VAR : BG_DARK;
-                                CC.fillRect(cx, cyFloor, dW, cH);
-                                if (row % 4 === 0) { CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cyFloor,dW,1); }
-                                if (v > 0.82) { CC.fillStyle='rgba(255,255,255,0.025)'; CC.fillRect(cx+Math.floor(v*bs*0.6),cyFloor+2,2,bs-4); }
+                                CC.fillRect(cx, cy, dW, cH);
+                                if (row%4===0){ CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cy,dW,1); }
+                                if (v>0.82){ CC.fillStyle='rgba(255,255,255,0.025)'; CC.fillRect(cx+Math.floor(v*bs*0.6),cy+2,2,bs-4); }
                                 continue;
                             }
-
                             CC.fillStyle = UG_COL[mat] || '#5a5a6a';
-                            CC.fillRect(cx, cyFloor, dW, cH);
+                            CC.fillRect(cx, cy, dW, cH);
                             const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
-                            if (mat === 'stone') {
-                                if (row%3===0) { CC.fillStyle='rgba(255,255,255,0.04)'; CC.fillRect(cx,cyFloor,dW,1); }
-                                if (v>0.7)     { CC.fillStyle='rgba(0,0,0,0.08)';       CC.fillRect(cx,cyFloor,dW,cH); }
-                            } else if (mat === 'dirt') {
-                                if (v>0.6)     { CC.fillStyle='rgba(0,0,0,0.12)';       CC.fillRect(cx,cyFloor,dW,cH); }
-                            } else if (mat === 'coal') {
-                                CC.fillStyle='rgba(80,80,90,0.4)';  CC.fillRect(cx+Math.floor(v*bs*0.4),cyFloor+3,Math.ceil(bs*0.5),3);
-                                CC.fillStyle='rgba(20,20,25,0.6)';  CC.fillRect(cx,cyFloor,dW,2);
-                            } else if (mat === 'sulfur') {
-                                CC.fillStyle='rgba(255,220,0,0.18)'; CC.fillRect(cx+Math.floor(v*bs*0.3),cyFloor+2,Math.ceil(bs*0.4),Math.ceil(bs*0.5));
-                                CC.fillStyle='rgba(200,160,0,0.3)';  CC.fillRect(cx,cyFloor,dW,2);
-                                if (v>0.78) { CC.fillStyle='rgba(255,255,100,0.5)'; CC.fillRect(cx+4,cyFloor+4,3,3); }
-                            } else if (mat === 'diamond') {
-                                CC.fillStyle='rgba(100,240,255,0.22)'; CC.fillRect(cx+Math.floor(v*bs*0.2),cyFloor+1,Math.ceil(bs*0.6),Math.ceil(bs*0.4));
-                                CC.fillStyle='rgba(0,200,230,0.35)';   CC.fillRect(cx,cyFloor,dW,2);
-                                if (v>0.60) { CC.fillStyle='rgba(180,255,255,0.7)';  CC.fillRect(cx+2+Math.floor(v*bs*0.5),cyFloor+2,2,2); }
-                                if (v>0.85) { CC.fillStyle='rgba(255,255,255,0.8)';  CC.fillRect(cx+Math.floor(bs*0.6),cyFloor+5,2,2); }
+                            if (mat==='stone'){
+                                if (row%3===0){CC.fillStyle='rgba(255,255,255,0.04)';CC.fillRect(cx,cy,dW,1);}
+                                if (v>0.7){CC.fillStyle='rgba(0,0,0,0.08)';CC.fillRect(cx,cy,dW,cH);}
+                            } else if (mat==='dirt'){
+                                if (v>0.6){CC.fillStyle='rgba(0,0,0,0.12)';CC.fillRect(cx,cy,dW,cH);}
+                            } else if (mat==='coal'){
+                                CC.fillStyle='rgba(80,80,90,0.4)'; CC.fillRect(cx+Math.floor(v*bs*0.4),cy+3,Math.ceil(bs*0.5),3);
+                                CC.fillStyle='rgba(20,20,25,0.6)'; CC.fillRect(cx,cy,dW,2);
+                            } else if (mat==='sulfur'){
+                                CC.fillStyle='rgba(255,220,0,0.18)'; CC.fillRect(cx+Math.floor(v*bs*0.3),cy+2,Math.ceil(bs*0.4),Math.ceil(bs*0.5));
+                                CC.fillStyle='rgba(200,160,0,0.3)';  CC.fillRect(cx,cy,dW,2);
+                                if (v>0.78){CC.fillStyle='rgba(255,255,100,0.5)';CC.fillRect(cx+4,cy+4,3,3);}
+                            } else if (mat==='diamond'){
+                                CC.fillStyle='rgba(100,240,255,0.22)'; CC.fillRect(cx+Math.floor(v*bs*0.2),cy+1,Math.ceil(bs*0.6),Math.ceil(bs*0.4));
+                                CC.fillStyle='rgba(0,200,230,0.35)';   CC.fillRect(cx,cy,dW,2);
+                                if (v>0.60){CC.fillStyle='rgba(180,255,255,0.7)'; CC.fillRect(cx+2+Math.floor(v*bs*0.5),cy+2,2,2);}
+                                if (v>0.85){CC.fillStyle='rgba(255,255,255,0.8)'; CC.fillRect(cx+Math.floor(bs*0.6),cy+5,2,2);}
                             }
                         }
                     }
                     window._tCacheStartCol = startCol;
                     window._tCacheEndCol   = endCol;
+                    window._tCacheOffY     = _offY;
                     window._tCacheExplore  = _exploreCount;
                     window._tCacheMine     = _mineStamp;
-                    window._tCacheOffX     = offX;
                 }
 
-                // ── Blit: UN drawImage en lugar de ~2500 fillRect ──────────────
-                C.drawImage(window._terrainCache, window._tCacheOffX, 0);
+                // ── Blit viewport-sized canvas: siempre ~1280×750px ─────────────
+                C.drawImage(window._terrainCache, _offX, _offY);
 
                 // ── Overlay: grietas de minado en progreso (pocos bloques, no cacheados) ──
                 if (window._cellDamage && Object.keys(window._cellDamage).length > 0) {
@@ -1744,42 +1745,50 @@ window.draw = function() {
         }
     });
 
-    // Marcas de quemado (scorch marks) con degradé radial y cenizas (Q≠low)
+    // Marcas de quemado (simplificado: ellipse oscura flat)
     if (Q !== 'low' && window.scorchMarks && window.scorchMarks.length > 0) {
         const C = window.ctx; const now2 = Date.now();
         for (let si = window.scorchMarks.length - 1; si >= 0; si--) {
-            const sm = window.scorchMarks[si]; if (!sm.born) sm.born = Date.now(); if (!sm.lifetime) sm.lifetime = 120000 + Math.random() * 60000;
-            const age = now2 - sm.born; const frac = Math.max(0, 1 - age / sm.lifetime); if (frac <= 0) { window.scorchMarks.splice(si, 1); continue; }
+            const sm = window.scorchMarks[si]; if (!sm.born) sm.born = Date.now(); if (!sm.lifetime) sm.lifetime = 120000;
+            const frac = Math.max(0, 1 - (now2 - sm.born) / sm.lifetime);
+            if (frac <= 0) { window.scorchMarks.splice(si, 1); continue; }
             if (sm.x + sm.w < _visLeft || sm.x > _visRight + 80) continue;
-            const sr3 = (n) => { let v = ((sm.seed ^ (sm.seed >> 5)) * 0x45d9f3b + n * 0x9e3779b9) >>> 0; return (v >>> 0) / 0xFFFFFFFF; };
-            const cx = sm.x + sm.w / 2; const cy = sm.y + sm.h / 2; const rx = sm.w * 0.5; const ry = sm.h * 0.5;
-            C.save(); const numPts = 18;
-            C.beginPath();
-            for (let pi = 0; pi <= numPts; pi++) { const ang = (pi / numPts) * Math.PI * 2; const jag = 0.72 + sr3(pi * 3 + 10) * 0.28; const px = cx + Math.cos(ang) * rx * jag; const py = cy + Math.sin(ang) * ry * jag; pi === 0 ? C.moveTo(px, py) : C.lineTo(px, py); }
-            C.closePath();
-            const grad = C.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry)); grad.addColorStop(0, `rgba(10,5,0,${0.88 * frac * sm.alpha})`); grad.addColorStop(0.45, `rgba(22,10,2,${0.80 * frac * sm.alpha})`); grad.addColorStop(0.80, `rgba(38,18,6,${0.60 * frac * sm.alpha})`); grad.addColorStop(1.0, `rgba(55,28,10,${0.0})`); C.fillStyle = grad; C.fill();
-            C.globalAlpha = frac * sm.alpha * 0.55;
-            for (let k = 0; k < 5; k++) { const ax = cx + (sr3(k*5) - 0.5) * rx * 1.1; const ay = cy + (sr3(k*5+1) - 0.5) * ry * 1.1; const arx = rx * (0.04 + sr3(k*5+2) * 0.14); const ary = ry * (0.03 + sr3(k*5+3) * 0.10); const aAlpha = (0.25 + sr3(k*5+4) * 0.35) * frac; C.fillStyle = `rgba(90,80,70,${aAlpha})`; C.beginPath(); C.ellipse(ax, ay, arx, ary, sr3(k) * Math.PI, 0, Math.PI * 2); C.fill(); }
-            C.globalAlpha = frac * sm.alpha * 0.45; C.strokeStyle = `rgba(30,12,2,0.9)`; C.lineWidth = 1.5;
-            C.beginPath(); for (let pi2 = 0; pi2 <= numPts; pi2++) { const ang2 = (pi2 / numPts) * Math.PI * 2; const jag2 = 0.72 + sr3(pi2 * 3 + 10) * 0.28; const px2 = cx + Math.cos(ang2) * rx * jag2; const py2 = cy + Math.sin(ang2) * ry * jag2; pi2 === 0 ? C.moveTo(px2, py2) : C.lineTo(px2, py2); } C.closePath(); C.stroke();
-            C.restore();
+            C.globalAlpha = frac * sm.alpha * 0.75;
+            C.fillStyle = 'rgba(8,4,0,0.9)';
+            C.beginPath(); C.ellipse(sm.x+sm.w*0.5, sm.y+sm.h*0.5, sm.w*0.52, sm.h*0.45, 0, 0, Math.PI*2); C.fill();
+            C.globalAlpha = 1;
         }
     }
 
-    // Llamas de fuego (partículas con capas: outer glow, 3 capas bezier, brasas)
+    // Llamas de fuego (simplificado: capas de ellipse sin gradientes ni bezier)
     if (window.fires && window.fires.length > 0) {
         const C = window.ctx; const now3 = window.game.frameCount || 0;
         for (const fire of window.fires) {
             if (fire.x + fire.w + 60 < _visLeft || fire.x - 60 > _visRight) continue;
             const lifeFrac = Math.max(0, fire.life / fire.maxLife); if (lifeFrac <= 0) continue;
             const cx = fire.x + fire.w / 2; const baseY = fire.y + fire.h;
-            const flicker = 0.88 + Math.sin(fire.phase + now3 * 0.17) * 0.10 + Math.sin(fire.phase * 2.1 + now3 * 0.13) * 0.06;
+            const flicker = 0.88 + Math.sin(fire.phase + now3 * 0.17) * 0.12;
             const alpha = Math.min(1, lifeFrac * 3) * fire.intensity * flicker;
             C.save();
-            C.globalAlpha = alpha * 0.22; const glowR = fire.w * 1.1 * flicker; const glowG = C.createRadialGradient(cx, baseY - fire.h * 0.25, 0, cx, baseY - fire.h * 0.25, glowR); glowG.addColorStop(0, 'rgba(255,120,20,1)'); glowG.addColorStop(0.5, 'rgba(255,60,0,0.5)'); glowG.addColorStop(1, 'rgba(255,30,0,0)'); C.fillStyle = glowG; C.beginPath(); C.ellipse(cx, baseY - fire.h * 0.25, glowR, fire.h * 0.85, 0, 0, Math.PI * 2); C.fill();
-            const layers = [ { color0: '#ff2200', color1: 'rgba(255,80,0,0)', scale: 1.0, alphaM: 0.85 }, { color0: '#ff7700', color1: 'rgba(255,180,0,0)', scale: 0.68, alphaM: 0.75 }, { color0: '#ffee22', color1: 'rgba(255,255,180,0)', scale: 0.38, alphaM: 0.60 } ];
-            for (const layer of layers) { const lw = fire.w * layer.scale * flicker; const lh = fire.h * layer.scale * (0.85 + Math.sin(fire.phase * 1.3 + now3 * 0.15) * 0.10); const lg = C.createLinearGradient(cx, baseY, cx, baseY - lh); lg.addColorStop(0, layer.color0); lg.addColorStop(0.6, layer.color0); lg.addColorStop(1, layer.color1); C.globalAlpha = alpha * layer.alphaM; C.fillStyle = lg; const wobble = Math.sin(fire.phase * 0.8 + now3 * 0.09) * lw * 0.18; C.beginPath(); C.moveTo(cx - lw * 0.5, baseY); C.bezierCurveTo(cx - lw * 0.65 + wobble, baseY - lh * 0.35, cx - lw * 0.28 - wobble, baseY - lh * 0.75, cx + wobble * 0.5, baseY - lh); C.bezierCurveTo(cx + lw * 0.28 + wobble, baseY - lh * 0.75, cx + lw * 0.65 - wobble, baseY - lh * 0.35, cx + lw * 0.5, baseY); C.closePath(); C.fill(); }
-            if (Math.random() < 0.25 * lifeFrac) { const ex = cx + (Math.random() - 0.5) * fire.w * 0.6; const ey = baseY - fire.h * (0.3 + Math.random() * 0.5); C.globalAlpha = alpha * 0.9; C.fillStyle = Math.random() > 0.4 ? '#fff8aa' : '#ff9900'; C.beginPath(); C.arc(ex, ey, 1.2 + Math.random() * 1.8, 0, Math.PI * 2); C.fill(); }
+            // Capa exterior (naranja)
+            C.globalAlpha = alpha * 0.65;
+            C.fillStyle = '#ff4400';
+            C.beginPath(); C.ellipse(cx, baseY - fire.h*0.45, fire.w*0.52*flicker, fire.h*0.52, 0, 0, Math.PI*2); C.fill();
+            // Capa media (amarillo-naranja)
+            C.globalAlpha = alpha * 0.75;
+            C.fillStyle = '#ff8800';
+            C.beginPath(); C.ellipse(cx, baseY - fire.h*0.35, fire.w*0.34*flicker, fire.h*0.38, 0, 0, Math.PI*2); C.fill();
+            // Núcleo (amarillo brillante)
+            C.globalAlpha = alpha * 0.85;
+            C.fillStyle = '#ffee44';
+            C.beginPath(); C.ellipse(cx, baseY - fire.h*0.22, fire.w*0.18*flicker, fire.h*0.22, 0, 0, Math.PI*2); C.fill();
+            // Brasa ocasional (sin Math.random — usar frameCount)
+            if ((now3 + (fire.x|0)) % 4 === 0) {
+                C.globalAlpha = alpha * 0.9;
+                C.fillStyle = '#fff8aa';
+                const ex = cx + Math.sin(now3*0.3+fire.phase)*fire.w*0.2;
+                C.beginPath(); C.arc(ex, baseY - fire.h*(0.4+Math.abs(Math.sin(now3*0.07+fire.phase))*0.3), 1.5, 0, Math.PI*2); C.fill();
+            }
             C.restore();
         }
     }
@@ -1793,8 +1802,21 @@ window.draw = function() {
         }
     });
 
-    // Partículas genéricas
-    window.particles.forEach(p => { window.ctx.globalAlpha = Math.max(0, Math.min(1, p.life)); window.ctx.fillStyle = p.color; window.ctx.fillRect(p.x, p.y, p.size, p.size); });
+    // Partículas genéricas (agrupadas por color para minimizar cambios de estado)
+    if (window.particles.length > 0) {
+        const _pByColor = {};
+        for (const p of window.particles) {
+            const _k = p.color + '|' + Math.round(Math.max(0,Math.min(1,p.life))*10);
+            if (!_pByColor[_k]) _pByColor[_k] = { color: p.color, alpha: Math.max(0,Math.min(1,p.life)), pts: [] };
+            _pByColor[_k].pts.push(p);
+        }
+        for (const _g of Object.values(_pByColor)) {
+            window.ctx.globalAlpha = _g.alpha;
+            window.ctx.fillStyle = _g.color;
+            for (const p of _g.pts) window.ctx.fillRect(p.x, p.y, p.size, p.size);
+        }
+        window.ctx.globalAlpha = 1;
+    }
 
     // Polvo al correr
     if (window.dustParticles && window.dustParticles.length > 0) {
@@ -1842,7 +1864,7 @@ window.draw = function() {
         fogGrad.addColorStop(0, `rgba(180,210,240,0)`); fogGrad.addColorStop(0.4, `rgba(160,195,225,${fogAlpha})`); fogGrad.addColorStop(0.7, `rgba(140,175,210,${fogAlpha * 0.6})`); fogGrad.addColorStop(1, `rgba(100,140,180,0)`);
         window.ctx.fillStyle = fogGrad; window.ctx.fillRect(0, groundScreenY - 80, _hW, 140);
         window.ctx.save(); window.ctx.globalCompositeOperation = 'screen';
-        window.blocks.forEach(b => { if (b.type === 'campfire' && b.isBurning) { const bsx = (b.x + 15 - window.camera.x - _hW/2) * _hz + _hW/2; const bsy = (b.y + 10 - window.camera.y - _hH/2) * _hz + _hH/2; const flicker = 0.92 + Math.sin(window.game.frameCount * 0.19 + b.x) * 0.08; const bloomR = 55 * _hz * flicker; const bloomG = window.ctx.createRadialGradient(bsx, bsy, 0, bsx, bsy, bloomR); bloomG.addColorStop(0, 'rgba(255,140,20,0.18)'); bloomG.addColorStop(0.5,'rgba(255,90,0,0.07)'); bloomG.addColorStop(1, 'rgba(255,60,0,0)'); window.ctx.fillStyle = bloomG; window.ctx.beginPath(); window.ctx.arc(bsx, bsy, bloomR, 0, Math.PI*2); window.ctx.fill(); } });
+        // campfire bloom now handled by staticLightCanvas — skip per-frame gradient here
         if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) { const tsx = (window.player.x + window.player.width/2 - window.camera.x - _hW/2) * _hz + _hW/2; const tsy = (window.player.y + window.player.height/2 - window.camera.y - _hH/2) * _hz + _hH/2; const tf = 0.9 + Math.sin(window.game.frameCount * 0.23) * 0.1; const tBG = window.ctx.createRadialGradient(tsx, tsy, 0, tsx, tsy, 80 * _hz * tf); tBG.addColorStop(0, 'rgba(255,180,50,0.16)'); tBG.addColorStop(1, 'rgba(255,130,0,0)'); window.ctx.fillStyle = tBG; window.ctx.beginPath(); window.ctx.arc(tsx, tsy, 80 * _hz * tf, 0, Math.PI*2); window.ctx.fill(); }
         window.ctx.restore();
         { let currentUptimeHQ = window.game.serverStartTime ? (Date.now() - window.game.serverStartTime) : (window.game.frameCount * (1000/60)); let totalFramesHQ = Math.floor(currentUptimeHQ / (1000/60)) + 28800; let hourFloatHQ = (totalFramesHQ / 3600) % 24;
