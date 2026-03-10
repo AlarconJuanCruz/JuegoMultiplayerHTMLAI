@@ -183,15 +183,24 @@ window.draw = function() {
 
     // === ZOOM + TRANSFORMACIÓN DE CÁMARA ===
     const z = window.game.zoom || 1;
+    // ── Interpolación de cámara para suavidad en 120/144Hz ──────────────
+    const _ra = window._renderAlpha ?? 1;
+    const _iCamX = window._prevCamX !== undefined
+        ? window._prevCamX + (window.camera.x - window._prevCamX) * _ra
+        : window.camera.x;
+    const _iCamY = window._prevCamY !== undefined
+        ? window._prevCamY + (window.camera.y - window._prevCamY) * _ra
+        : window.camera.y;
+
     window.ctx.save();
-    window.ctx.translate(W / 2, H / 2); window.ctx.scale(z, z); window.ctx.translate(-W / 2, -H / 2); window.ctx.translate(-window.camera.x, -window.camera.y);
+    window.ctx.translate(W / 2, H / 2); window.ctx.scale(z, z); window.ctx.translate(-W / 2, -H / 2); window.ctx.translate(-_iCamX, -_iCamY);
 
     const step = 15;
-    const _visHalfW = (W / 2) / z; const _visCenterX = window.camera.x + W / 2;
+    const _visHalfW = (W / 2) / z; const _visCenterX = _iCamX + W / 2;
     const _visLeft  = _visCenterX - _visHalfW; const _visRight = _visCenterX + _visHalfW;
     const startX = Math.floor((_visLeft - 120) / step) * step;
     const endX   = Math.ceil((_visRight + 120) / step) * step;
-    const bottomY = window.camera.y + H / z + 300;
+    const bottomY = _iCamY + H / z + 300;
 
     if (!window.hitCanvas) { window.hitCanvas = document.createElement('canvas'); window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true }); }
 
@@ -345,7 +354,7 @@ window.draw = function() {
         //   • Cache por frame para evitar recalcular noise varias veces por columna
         if (window.getUGCellV && window.getTerrainCol) {
             const C        = window.ctx;
-            const bottomYu = window.camera.y + H / z + bs * 4;
+            const bottomYu = _iCamY + H / z + bs * 4;
             const UG_COLOR = {
                 dirt:    '#5c3d22', stone:   '#5a5a6a',
                 coal:    '#2a2a30', sulfur:  '#7a6a10',
@@ -355,10 +364,14 @@ window.draw = function() {
             const BG_VAR   = '#181512';
 
             // ── Player UG row para fog-of-war ──
-            const _fogEnabled = !!window._caveExplored;
-            const _playerUGCol = Math.floor((window.player.x + window.player.width/2) / bs);
-            const _playerUGCD  = window.getTerrainCol ? window.getTerrainCol(_playerUGCol) : null;
-            const _playerSurfY = _playerUGCD ? _playerUGCD.topY : (window.game.baseGroundLevel || 510);
+            const _fogEnabled    = !!window._caveExplored;
+            const _playerUGCol   = Math.floor((window.player.x + window.player.width/2) / bs);
+            const _playerUGCD    = window.getTerrainCol ? window.getTerrainCol(_playerUGCol) : null;
+            const _playerSurfY   = _playerUGCD ? _playerUGCD.topY : (window.game.baseGroundLevel || 510);
+            // ¿Está el jugador sobre la superficie (no en cueva)?
+            const _playerOnSurf  = (window.player.y + window.player.height) <= _playerSurfY + bs * 2.5;
+            // Máximo de filas visibles desde superficie (3 bloques)
+            const _surfBlackRow  = 3;
 
             window._ugFrameCache = {};
 
@@ -376,19 +389,19 @@ window.draw = function() {
                     if (cellY >= bottomYu) break;
                     const cH = Math.min(bs, bottomYu - cellY) + 1;
 
-                    // ── Fog de cueva: solo renderizar detalle de celdas exploradas ──
-                    // Row 0 (superficie) siempre visible. Celdas subterráneas no exploradas
-                    // se muestran como roca oscura sólida (no revela forma de la cueva).
-                    if (_fogEnabled && row > 0) {
-                        const cellWorldY = topY + row * bs;
-                        // Solo aplica fog si estamos claramente bajo tierra
-                        if (cellWorldY > _playerSurfY + bs) {
-                            if (!window._caveExplored.has(`${col}_${row}`)) {
-                                // Celda no explorada: roca oscura uniforme
-                                C.fillStyle = '#111013';
-                                C.fillRect(x, Math.floor(cellY), drawW, cH);
-                                continue;
-                            }
+                    // ── Blackout de superficie: desde la superficie, >3 bloques = negro ──
+                    if (_playerOnSurf && row >= _surfBlackRow) {
+                        C.fillStyle = '#000000';
+                        C.fillRect(x, Math.floor(cellY), drawW, cH);
+                        continue;
+                    }
+
+                    // ── Fog de cueva: celdas no exploradas = roca oscura ──
+                    if (_fogEnabled && row > 0 && !_playerOnSurf) {
+                        if (!window._caveExplored.has(`${col}_${row}`)) {
+                            C.fillStyle = '#0a0a0c';
+                            C.fillRect(x, Math.floor(cellY), drawW, cH);
+                            continue;
                         }
                     }
 
@@ -592,7 +605,6 @@ window.draw = function() {
         // ── Plantas fluorescentes de cueva ──────────────────────────────────────
         if (window.cavePlants?.length > 0) {
             const C   = window.ctx;
-            const _fc = window.game.frameCount;
             // Paleta: [color principal, color brillo, color glow]
             const _shroomPalette = [
                 ['#1a4aff','#88aaff','rgba(40,80,255,'],   // azul
@@ -605,7 +617,8 @@ window.draw = function() {
                 // Fog de cueva: no mostrar si no explorada
                 if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
                 C.save();
-                const _pulse = 0.7 + Math.sin(_fc * 0.08 + _cp.seed * 6.28) * 0.3;
+                // Brillo fijo por planta (sin animación — determinado solo por seed)
+                const _brightness = 0.65 + _cp.seed * 0.35;
                 if (_cp.type === 'shroom') {
                     const _pal = _shroomPalette[_cp.variant % 3];
                     const _h = 8 + _cp.seed * 10;
@@ -617,41 +630,42 @@ window.draw = function() {
                     C.beginPath();
                     C.ellipse(_cp.x, _cp.y + bs - _h - 1, 7 + _cp.seed * 4, 5, 0, 0, Math.PI * 2);
                     C.fill();
-                    // Brillo
-                    C.globalAlpha = 0.5 * _pulse;
+                    // Brillo estático (no se mueve)
+                    C.globalAlpha = 0.55 * _brightness;
                     C.fillStyle = _pal[1];
                     C.beginPath();
                     C.ellipse(_cp.x - 2, _cp.y + bs - _h - 2, 3, 2, 0, 0, Math.PI * 2);
                     C.fill();
-                    // Halo de luz
-                    C.globalAlpha = 0.12 * _pulse;
+                    // Halo de luz estático
+                    C.globalAlpha = 0.13 * _brightness;
                     const _gr = C.createRadialGradient(_cp.x, _cp.y + bs - _h, 0, _cp.x, _cp.y + bs - _h, 28);
-                    _gr.addColorStop(0, _pal[2] + '0.6)');
+                    _gr.addColorStop(0, _pal[2] + '0.7)');
                     _gr.addColorStop(1, _pal[2] + '0)');
                     C.fillStyle = _gr;
                     C.beginPath(); C.arc(_cp.x, _cp.y + bs - _h, 28, 0, Math.PI * 2); C.fill();
                 } else if (_cp.type === 'moss') {
-                    // Musgo colgante del techo — hebras verdes que brillan
+                    // Musgo colgante del techo — hebras estáticas (sin movimiento de onda)
                     const _len = 8 + _cp.seed * 14;
-                    C.globalAlpha = 0.55 + _pulse * 0.25;
+                    C.globalAlpha = 0.6 * _brightness;
                     C.strokeStyle = '#22cc55';
                     C.lineWidth = 1.5;
                     const _strands = 3 + Math.floor(_cp.seed * 3);
                     for (let _s = 0; _s < _strands; _s++) {
-                        const _sx = _cp.x + (_s / (_strands-1)) * 10 - 5;
+                        const _sx = _cp.x + (_s / Math.max(1,_strands-1)) * 10 - 5;
                         const _sLen = _len * (0.6 + ((_cp.seed + _s*0.3)%1) * 0.4);
-                        const _sWave = Math.sin(_fc * 0.04 + _s + _cp.seed * 3) * 2;
+                        // Curva estática por strand (sin _fc)
+                        const _sCurve = Math.sin(_s * 2.1 + _cp.seed * 5.7) * 2.5;
                         C.beginPath();
                         C.moveTo(_sx, _cp.y);
-                        C.quadraticCurveTo(_sx + _sWave, _cp.y + _sLen * 0.5, _sx + _sWave * 0.5, _cp.y + _sLen);
+                        C.quadraticCurveTo(_sx + _sCurve, _cp.y + _sLen * 0.5, _sx + _sCurve * 0.5, _cp.y + _sLen);
                         C.stroke();
                         // Punta brillante
                         C.fillStyle = '#88ffbb';
-                        C.globalAlpha = _pulse * 0.5;
-                        C.beginPath(); C.arc(_sx + _sWave*0.5, _cp.y + _sLen, 1.5, 0, Math.PI * 2); C.fill();
+                        C.globalAlpha = _brightness * 0.55;
+                        C.beginPath(); C.arc(_sx + _sCurve*0.5, _cp.y + _sLen, 1.5, 0, Math.PI * 2); C.fill();
                     }
-                    // Halo tenue
-                    C.globalAlpha = 0.07 * _pulse;
+                    // Halo tenue estático
+                    C.globalAlpha = 0.08 * _brightness;
                     const _mgr = C.createRadialGradient(_cp.x, _cp.y + _len*0.5, 0, _cp.x, _cp.y + _len*0.5, 22);
                     _mgr.addColorStop(0, 'rgba(40,200,80,0.5)');
                     _mgr.addColorStop(1, 'rgba(40,200,80,0)');
@@ -864,12 +878,29 @@ window.draw = function() {
     });
 
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
-    if (!window.player.inBackground) window.drawCharacter(window.player, true);
+    // Interpolar posición del jugador local para render suave en 120/144Hz
+    if (!window.player.inBackground) {
+        const _ra2 = window._renderAlpha ?? 1;
+        const _origX = window.player.x, _origY = window.player.y;
+        if (window.player._prevX !== undefined) {
+            window.player.x = window.player._prevX + (_origX - window.player._prevX) * _ra2;
+            window.player.y = window.player._prevY + (_origY - window.player._prevY) * _ra2;
+        }
+        window.drawCharacter(window.player, true);
+        window.player.x = _origX; window.player.y = _origY;
+    }
 
     // === ENTIDADES (chicken, spider, zombie, archer, wolf) ===
     window.entities.forEach(ent => {
         if (!(ent.x + ent.width > _visLeft && ent.x < _visRight + 120)) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
+        // Interpolación de posición de entidad
+        const _ra3 = window._renderAlpha ?? 1;
+        const _eOrigX = ent.x, _eOrigY = ent.y;
+        if (ent._prevX !== undefined) {
+            ent.x = ent._prevX + (_eOrigX - ent._prevX) * _ra3;
+            ent.y = ent._prevY + (_eOrigY - ent._prevY) * _ra3;
+        }
         C.save();
         if (ent.type === 'chicken') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height; const moving = Math.abs(ent.vx) > 0.05; const bob = moving ? Math.sin(T*0.28)*2.5 : 0; const headBob = moving ? Math.sin(T*0.28+0.5)*3 : 0;
@@ -1045,6 +1076,8 @@ window.draw = function() {
             C.globalAlpha = 1;
         }
         C.restore();
+        // Restaurar posición real post-render
+        ent.x = _eOrigX; ent.y = _eOrigY;
     });
 
     // === MODO COLOCACIÓN: ghost del objeto a colocar ===
@@ -1498,21 +1531,28 @@ window.draw = function() {
 
     window.ctx.restore(); // cierra screenShake (save más externo)
 
-    // ── Contador de FPS — abajo-derecha, fuente pequeña, fuera del screenShake ──
+    // ── Contador de UPS/FPS — abajo-derecha, fuera del screenShake ──
     {
-        const fps  = window._fps || 0;
+        const ups  = window._ups  || 0;   // actualizaciones de lógica/seg (debería ser ~60)
+        const fps  = window._fps  || 0;   // frames de render/seg (depende del monitor)
         const C    = window.ctx;
-        const fCol = fps >= 55 ? '#44ff88' : fps >= 35 ? '#ffdd00' : '#ff4444';
+        const uCol = ups >= 58 ? '#44ff88' : ups >= 40 ? '#ffdd00' : '#ff4444';
+        const fCol = '#888888';  // FPS de render es solo info, no crítico
         C.save();
         C.font         = '9px "Press Start 2P"';
         C.textAlign    = 'right';
         C.textBaseline = 'bottom';
-        const label    = fps + ' FPS';
+        const label    = ups + ' UPS  ' + fps + ' FPS';
         const tw       = C.measureText(label).width;
         C.fillStyle    = 'rgba(0,0,0,0.5)';
         C.fillRect(_ppW - tw - 10, _ppH - 16, tw + 8, 13);
-        C.fillStyle    = fCol;
-        C.fillText(label, _ppW - 6, _ppH - 4);
+        // UPS en color diagnóstico
+        const uLabel = ups + ' UPS  ';
+        const utw    = C.measureText(uLabel).width;
+        C.fillStyle  = uCol;
+        C.fillText(uLabel, _ppW - 6 - C.measureText(fps + ' FPS').width, _ppH - 4);
+        C.fillStyle  = fCol;
+        C.fillText(fps + ' FPS', _ppW - 6, _ppH - 4);
         C.restore();
     }
 

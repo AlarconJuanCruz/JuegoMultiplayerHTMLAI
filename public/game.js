@@ -2017,21 +2017,40 @@ window.gameLoop = function(timestamp) {
     }
 
     // ── Fixed-timestep accumulator ────────────────────────────────────
-    // update() asume exactamente 1/60s por llamada (física, contadores, animaciones).
-    // Sin esto, en monitores de 120/144 Hz update() se llamaba 2-2.4x por segundo
-    // causando física acelerada y animaciones "lentas" (en relación al tiempo real).
-    const FIXED_DT = 1000 / 60;  // 16.666 ms por step lógico
-    if (window._lastLoopTime === undefined) { window._gameAccum = 0; window._lastLoopTime = timestamp; }
+    const FIXED_DT = 1000 / 60;
+    if (window._lastLoopTime === undefined) { window._gameAccum = 0; window._lastLoopTime = timestamp; window._upsFrames = 0; window._upsLastTime = timestamp; window._ups = 60; }
     let elapsed = timestamp - window._lastLoopTime;
     window._lastLoopTime = timestamp;
-    // Cap: si la pestaña estuvo en background, no ejecutar más de 3 steps para evitar
-    // el "spiral of death" (el juego intenta ponerse al día infinitamente).
     if (elapsed > FIXED_DT * 3) elapsed = FIXED_DT * 3;
     window._gameAccum += elapsed;
 
     while (window._gameAccum >= FIXED_DT) {
-        if (window.game?.isRunning && !document.hidden) update();
+        if (window.game?.isRunning && !document.hidden) {
+            // Guardar posiciones previas ANTES de update para interpolación de render
+            if (window.player) {
+                window.player._prevX = window.player.x;
+                window.player._prevY = window.player.y;
+            }
+            if (window.camera) {
+                window._prevCamX = window.camera.x;
+                window._prevCamY = window.camera.y;
+            }
+            window.entities?.forEach(e => { e._prevX = e.x; e._prevY = e.y; });
+            update();
+            window._upsFrames++;
+        }
         window._gameAccum -= FIXED_DT;
+    }
+
+    // Fracción de interpolación: cuánto del siguiente step ya transcurrió
+    window._renderAlpha = Math.min(1, window._gameAccum / FIXED_DT);
+
+    // UPS real (actualizaciones de lógica por segundo)
+    const _upsDelta = timestamp - window._upsLastTime;
+    if (_upsDelta >= 500) {
+        window._ups = Math.round(window._upsFrames / (_upsDelta / 1000));
+        window._upsFrames = 0;
+        window._upsLastTime = timestamp;
     }
 
     if (typeof window.draw === 'function' && !document.hidden) window.draw();
