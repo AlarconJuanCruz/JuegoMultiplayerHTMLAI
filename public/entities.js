@@ -192,6 +192,92 @@ window.generateWorldSector = function (startX, endX) {
     } else {
         window.entities.push({ id: newId, type: 'chicken', name: 'Pollo', level: 1, x: cx, y: cGY - 20, width: 20, height: 20, vx: sRandom() > 0.5 ? 0.3 : -0.3, vy: 0, hp: 25, maxHp: 25, isHit: false, attackCooldown: 0, stuckFrames: 0, fleeTimer: 0, fleeDir: 1, lastX: cx });
     }
+
+    // ── Plantas fluorescentes + murciélagos de cueva ─────────────────────────
+    // Se pre-generan al crear el sector, determinísticamente (misma semilla = misma cueva).
+    // Así ya están en el mundo esperando ser descubiertos, igual que Terraria.
+    if (window.getUGCellV && window.getTerrainCol) {
+        if (!window.cavePlants)   window.cavePlants   = [];
+        if (!window.entities)     window.entities     = [];
+        const _ugBs   = bs;
+        const _startCol = Math.floor(startX / _ugBs);
+        const _endCol   = Math.floor(endX   / _ugBs);
+        const _maxDepth = window.UG_MAX_DEPTH || 50;
+        const _distFactor = Math.max(1, Math.floor(distShore / 4000)); // profundidad → más vida
+
+        for (let _gc = _startCol; _gc <= _endCol; _gc++) {
+            const _gcd = window.getTerrainCol(_gc);
+            if (!_gcd || _gcd.type === 'hole') continue;
+            const _gtopY = _gcd.topY;
+
+            for (let _gr = 1; _gr < _maxDepth; _gr++) {
+                const _gmat = window.getUGCellV(_gc, _gr);
+                if (_gmat !== 'air') continue;
+
+                const _gBelow  = window.getUGCellV(_gc, _gr + 1);
+                const _gAbove  = window.getUGCellV(_gc, _gr - 1);
+                // Hash determinista de la celda (misma semilla siempre)
+                const _gh = ((_gc * 374761393) ^ (_gr * 1103515245) ^ ((window.worldSeed||12345) * 6364136)) >>> 0;
+                const _ghF = (_gh / 0xFFFFFFFF);
+                const _gh2 = ((_gc * 48271) ^ (_gr * 16807) ^ ((window.worldSeed||12345) * 2654435761)) >>> 0;
+                const _gh2F = (_gh2 / 0xFFFFFFFF);
+
+                // ── Hongo fluorescente desde el suelo ──
+                if (_gBelow !== 'air' && _gBelow !== 'bedrock' && _ghF < 0.025) {
+                    const _pKey = `p_${_gc}_${_gr}`;
+                    if (!window.cavePlants.some(p => p.key === _pKey)) {
+                        window.cavePlants.push({
+                            key: _pKey, col: _gc, row: _gr,
+                            x: _gc * _ugBs + _ugBs * 0.15 + _ghF * _ugBs * 0.7,
+                            y: _gtopY + _gr * _ugBs,
+                            type: 'shroom',
+                            variant: _gh % 3,
+                            seed: _ghF,
+                        });
+                    }
+                }
+                // ── Musgo colgante del techo ──
+                else if (_gAbove !== 'air' && _gAbove !== 'bedrock' && _ghF > 0.976) {
+                    const _pKey = `p_${_gc}_${_gr}`;
+                    if (!window.cavePlants.some(p => p.key === _pKey)) {
+                        window.cavePlants.push({
+                            key: _pKey, col: _gc, row: _gr,
+                            x: _gc * _ugBs + _ugBs * 0.1 + _ghF * _ugBs * 0.8,
+                            y: _gtopY + _gr * _ugBs,
+                            type: 'moss',
+                            seed: _ghF,
+                        });
+                    }
+                }
+
+                // ── Murciélago en techo de cueva ── (solo primer row de aire por columna)
+                if (_gr >= 1 && _gAbove !== 'air' && _gh2F < (0.018 * _distFactor)) {
+                    const _bId = `bat_${_gc}_${_gr}`;
+                    if (!window.entities.some(e => e.id === _bId) && !window.killedEntities.includes(_bId)) {
+                        const _bCeilY = _gtopY + _gr * _ugBs;
+                        const _bLvl   = Math.max(1, _distFactor - 1 + (lvl > 1 ? 1 : 0));
+                        const _bHp    = 10 + _bLvl * 5;
+                        const _bX     = _gc * _ugBs + _ugBs * 0.4;
+                        window.entities.push({
+                            id: _bId, type: 'bat', name: 'Murciélago',
+                            level: _bLvl, x: _bX, y: _bCeilY + 4,
+                            width: 20, height: 12,
+                            vx: 0, vy: 0,
+                            hp: _bHp, maxHp: _bHp,
+                            damage: 2 + _bLvl,
+                            isHit: false, attackCooldown: 0,
+                            stuckFrames: 0, ignorePlayer: 0, lastX: _bX,
+                            batState: 'roost',
+                            batAltY: _bCeilY + 4,
+                            inCave: true,
+                        });
+                    }
+                }
+            }
+        }
+        // Limitar cavePlants total para no crecer sin fin
+        if (window.cavePlants.length > 600) window.cavePlants.splice(0, window.cavePlants.length - 600);
+    }
 };
 
 // ─── Actualización de IA de entidades ─────────────────────────────────────────
@@ -960,57 +1046,49 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
     else if (ent.type === 'bat') {
         // ── Murciélago: duerme en el techo, se lanza en picado cuando el jugador se acerca ──
         if (!ent.batState) { ent.batState = 'roost'; ent.batAltY = ent.y; }
-        const _batDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
+        const _batDist = Math.hypot(targetCX - (ent.x + ent.width/2), targetCY - (ent.y + ent.height/2));
         const _batAggroRange = 280;
 
         if (ent.batState === 'roost') {
-            // Dormido en el techo: vibración mínima, sin moverse
             ent.vx *= 0.5;
             ent.vy  = 0;
-            ent.y   = ent.batAltY; // fijado al techo
+            ent.y   = ent.batAltY;
             if (_batDist < _batAggroRange && (ent.ignorePlayer||0) <= 0) {
                 ent.batState = 'swoop';
                 ent.batTimer = 0;
             }
         } else if (ent.batState === 'swoop') {
-            // Picada hacia el jugador
             ent.batTimer = (ent.batTimer || 0) + 1;
-            const _tdx = pCX - (ent.x + ent.width/2);
-            const _tdy = pCY - (ent.y + ent.height/2);
+            const _tdx = targetCX - (ent.x + ent.width/2);
+            const _tdy = targetCY - (ent.y + ent.height/2);
             const _tdist = Math.hypot(_tdx, _tdy) || 1;
             ent.vx += (_tdx / _tdist) * 0.35;
             ent.vy += (_tdy / _tdist) * 0.25;
-            // Limitar velocidad
             const _spd = Math.hypot(ent.vx, ent.vy);
             if (_spd > 3.5) { ent.vx = ent.vx/_spd*3.5; ent.vy = ent.vy/_spd*3.5; }
-            // Ataque de contacto
             if (_batDist < 22 && (ent.attackCooldown||0) <= 0) {
                 window.damagePlayer(ent.damage, 'murciélago');
                 ent.attackCooldown = 60;
                 ent.batState = 'flee';
                 ent.batTimer = 0;
             }
-            // Si pasa el tiempo sin golpear, huye y vuelve al techo
             if (ent.batTimer > 120) { ent.batState = 'flee'; ent.batTimer = 0; }
         } else if (ent.batState === 'flee') {
             ent.batTimer = (ent.batTimer||0) + 1;
-            // Subir de vuelta al techo
             ent.vy -= 0.18;
             ent.vx *= 0.92;
             if (ent.batTimer > 80 || ent.y <= ent.batAltY + 10) {
                 ent.batState = 'roost';
                 ent.vy = 0;
                 ent.y  = ent.batAltY;
-                ent.attackCooldown = 90; // breve pausa antes del próximo swoop
+                ent.attackCooldown = 90;
             }
         }
         ent.x += ent.vx;
         ent.y += ent.vy;
-        // Mantener dentro de límites razonables
         ent.x = Math.max(window.game.shoreX || 0, ent.x);
         if (ent.attackCooldown > 0) ent.attackCooldown--;
         if ((ent.ignorePlayer||0) > 0) ent.ignorePlayer--;
-        // Los murciélagos no usan física normal del terreno — flotan
         return;
     }
 

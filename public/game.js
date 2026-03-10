@@ -1952,93 +1952,6 @@ function update() {
                     }
                 }
             }
-
-            // ── Spawn de murciélagos de cueva ──────────────────────────────────
-            if (_playerInCave && isMasterClient && window.game.frameCount % 480 === 12) {
-                window._caveBats = window._caveBats; // ya declarado en entities
-                const _batCap = 3 + Math.floor((window.game.days||1) * 0.3);
-                const _curBats = window.entities.filter(e => e.type === 'bat').length;
-                if (_curBats < _batCap) {
-                    // Buscar techo de cueva cerca del jugador (offset 200-600px)
-                    const _bSide = Math.random() > 0.5 ? 1 : -1;
-                    const _bSpX  = window.player.x + _bSide * (200 + Math.random() * 400);
-                    const _bCol  = Math.floor(_bSpX / bs);
-                    const _bCD   = window.getTerrainCol ? window.getTerrainCol(_bCol) : null;
-                    if (_bCD && _bCD.type !== 'hole') {
-                        // Encontrar techo de cueva: primera fila de aire bajo superficie
-                        let _batCeilY = null;
-                        for (let _br = 0; _br < (window.UG_MAX_DEPTH || 50); _br++) {
-                            if (window.getUGCellV && window.getUGCellV(_bCol, _br) === 'air') {
-                                _batCeilY = _bCD.topY + _br * bs;
-                                break;
-                            }
-                        }
-                        if (_batCeilY !== null && _batCeilY > _ugSurfY) {
-                            const _bLvl = Math.max(1, Math.floor(((window.game.days||1)-1)*0.5));
-                            const _bHp  = 10 + _bLvl * 5;
-                            window.entities.push({
-                                id: 'bat_' + Math.random().toString(36).substr(2,8),
-                                type: 'bat', name: 'Murciélago',
-                                level: _bLvl, x: _bSpX, y: _batCeilY + 4,
-                                width: 20, height: 12,
-                                vx: _bSide > 0 ? -0.8 : 0.8, vy: 0,
-                                hp: _bHp, maxHp: _bHp,
-                                damage: 2 + _bLvl,
-                                isHit: false, attackCooldown: 0,
-                                stuckFrames: 0, ignorePlayer: 120, lastX: _bSpX,
-                                batState: 'roost',  // roost → swoop → flee
-                                batAltY: _batCeilY + 6,  // altura de descanso (techo)
-                                inCave: true,
-                            });
-                        }
-                    }
-                }
-            }
-
-            // ── Plantas fluorescentes de cueva ─────────────────────────────────
-            // Generadas determinísticamente — persisten en window.cavePlants
-            if (_playerInCave && window.game.frameCount % 150 === 30) {
-                window.cavePlants = window.cavePlants || [];
-                window._cavePlantSet = window._cavePlantSet || new Set();
-                const _cpStart = Math.floor((window.player.x - 350) / bs);
-                const _cpEnd   = Math.floor((window.player.x + 350) / bs);
-                for (let _cc = _cpStart; _cc <= _cpEnd; _cc++) {
-                    const _cpCD = window.getTerrainCol ? window.getTerrainCol(_cc) : null;
-                    if (!_cpCD || _cpCD.type === 'hole') continue;
-                    for (let _cr = 1; _cr < Math.min(window.UG_MAX_DEPTH || 50, 30); _cr++) {
-                        const _cpKey = `p_${_cc}_${_cr}`;
-                        if (window._cavePlantSet.has(_cpKey)) continue;
-                        const _cpMat = window.getUGCellV ? window.getUGCellV(_cc, _cr) : 'stone';
-                        if (_cpMat !== 'air') continue;
-                        const _cpBelow = window.getUGCellV ? window.getUGCellV(_cc, _cr + 1) : 'stone';
-                        const _cpAbove = window.getUGCellV ? window.getUGCellV(_cc, _cr - 1) : 'stone';
-                        const _cpHash  = ((_cc * 48271 ^ _cr * 16807) >>> 0) / 0xFFFFFFFF;
-                        window._cavePlantSet.add(_cpKey);
-                        // Hongos: crecen desde el suelo (3% chance)
-                        if (_cpBelow !== 'air' && _cpBelow !== 'bedrock' && _cpHash < 0.03) {
-                            window.cavePlants.push({
-                                col: _cc, row: _cr,
-                                x: _cc * bs + bs*0.15 + _cpHash*bs*0.7,
-                                y: _cpCD.topY + _cr * bs,
-                                type: 'shroom',
-                                variant: Math.floor(_cpHash * 3), // 0=azul 1=verde 2=violeta
-                                seed: _cpHash,
-                            });
-                        }
-                        // Musgo: cuelga del techo (2.5% chance)
-                        else if (_cpAbove !== 'air' && _cpAbove !== 'bedrock' && _cpHash > 0.97) {
-                            window.cavePlants.push({
-                                col: _cc, row: _cr,
-                                x: _cc * bs + bs*0.1 + _cpHash*bs*0.8,
-                                y: _cpCD.topY + _cr * bs,
-                                type: 'moss',
-                                seed: _cpHash,
-                            });
-                        }
-                    }
-                }
-                if (window.cavePlants.length > 300) window.cavePlants.splice(0, window.cavePlants.length - 300);
-            }
         }
 
         if (window.game.isMultiplayer && window.socket && isMasterClient && window.game.frameCount % 10 === 0 && window.entities.length > 0) {
@@ -2061,15 +1974,6 @@ function update() {
         window.updateEntities(isDay, isNight, isHoldingTorch, pCX, pCY);
         if (window.fires?.length > 0) window.updateFires();
 
-        // Cámara
-        window.game.zoom += (window.game.zoomTarget - window.game.zoom) * 0.12;
-        window.camera.x = window.player.x + window.player.width/2 - _W/2;
-        if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.62;
-        window.camera._targetY += (window.player.y + window.player.height - _H*0.62 - window.camera._targetY) * 0.08;
-        window.camera.y = window.camera._targetY;
-        if (window.camera.x < window.game.shoreX - _W/2) window.camera.x = window.game.shoreX - _W/2;
-        if (window.player.x + _W/2 > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
-
         // Partículas
         for (let i = window.particles.length - 1; i >= 0; i--) { const p=window.particles[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=window.game.gravity*0.4;p.life-=p.decay; const _pGY=window.getGroundY?window.getGroundY(p.x):window.game.groundLevel; if(p.y>=_pGY){p.y=_pGY;p.vy=-p.vy*0.5;p.vx*=0.8;} if(p.life<=0.05||isNaN(p.life)) window.particles.splice(i,1); }
         if (!window.dustParticles) window.dustParticles = [];
@@ -2087,6 +1991,18 @@ function update() {
         if (typeof window.updateEntityHUD === 'function') window.updateEntityHUD();
 
     } catch (err) { console.error('Motor de juego protegido:', err); }
+
+    // ── Cámara — FUERA del try/catch para que siempre se actualice ──────────
+    if (window.game?.isRunning && window.player && window.camera) {
+        const _W = window._canvasLogicW || 1280, _H = window._canvasLogicH || 720;
+        window.game.zoom += (window.game.zoomTarget - window.game.zoom) * 0.12;
+        window.camera.x = window.player.x + window.player.width/2 - _W/2;
+        if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.62;
+        window.camera._targetY += (window.player.y + window.player.height - _H*0.62 - window.camera._targetY) * 0.08;
+        window.camera.y = window.camera._targetY;
+        if (window.camera.x < (window.game.shoreX||0) - _W/2) window.camera.x = (window.game.shoreX||0) - _W/2;
+        if (window.player.x + _W/2 > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
+    }
 }
 
 window.gameLoop = function(timestamp) {
