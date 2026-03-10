@@ -28,11 +28,29 @@ window.killEntityLoot = function (ent) {
     switch (ent.type) {
         case 'spider':
             drop('web', ent.inCave ? 3 + Math.floor(Math.random() * 3) : 2);
-            window.gainXP((ent.inCave ? 30 : 20) * ent.level);
+            if (ent.isBoss) {
+                drop('diamond', 2 + Math.floor(Math.random() * 3));
+                drop('web', 5);
+                window.gainXP(800 * ent.level);
+                if (window.spawnDamageText) window.spawnDamageText(ent.x + ent.width/2, ent.y - 20, '¡JEFE DERROTADO!', '#ffdd00');
+            } else {
+                window.gainXP((ent.inCave ? 30 : 20) * ent.level);
+            }
             break;
         case 'bat':
             drop('meat', 1);
             window.gainXP(15 * ent.level);
+            break;
+        case 'beetle':
+            drop('stone', 1 + Math.floor(Math.random() * 2));
+            drop('meat', 1);
+            window.gainXP(20 * ent.level);
+            break;
+        case 'slime':
+            // Slimes sueltan web (gel) y a veces sulfuro
+            drop('web', 1 + Math.floor(Math.random() * 2));
+            if (Math.random() < 0.3) drop('sulfur', 1);
+            window.gainXP(18 * ent.level);
             break;
         case 'chicken':
             drop('meat', 1);
@@ -50,6 +68,27 @@ window.killEntityLoot = function (ent) {
             drop('arrows', 2 + Math.floor(Math.random() * 4), -1);
             drop('wood',   3, 1);
             window.gainXP(40 * ent.level);
+            break;
+        case 'worm':
+            drop('meat', 1 + Math.floor(Math.random() * 2));
+            if (Math.random() < 0.4) drop('coal', 1);
+            window.gainXP(22 * ent.level);
+            break;
+        case 'golem':
+            drop('stone', 3 + Math.floor(Math.random() * 3));
+            drop('coal', 1 + Math.floor(Math.random() * 2));
+            if (Math.random() < 0.30) drop('diamond', 1);
+            if (Math.random() < 0.15) drop('sulfur', 2);
+            window.gainXP(85 * ent.level);
+            break;
+        case 'brood_mother':
+            drop('diamond', 4 + Math.floor(Math.random() * 5));
+            drop('web', 8 + Math.floor(Math.random() * 6));
+            if (Math.random() < 0.6) drop('sulfur', 3);
+            if (Math.random() < 0.4) drop('coal', 4);
+            window.gainXP(2500 * ent.level);
+            if (window.spawnDamageText) window.spawnDamageText(ent.x+ent.width/2, ent.y-30, '¡☠ MADRE ARAÑA CAÍDA ☠!', '#ff00cc');
+            if (window.game) window.game.screenShake = 25;
             break;
     }
 };
@@ -277,6 +316,173 @@ window.generateWorldSector = function (startX, endX) {
         }
         // Limitar cavePlants total para no crecer sin fin
         if (window.cavePlants.length > 600) window.cavePlants.splice(0, window.cavePlants.length - 600);
+
+        // ── Criaturas de cueva adicionales + jefes arañas ──────────────────────
+        // Escanear cuevas del sector buscando espacios grandes (≥4 celdas altura)
+        // para spawnar criaturas de cueva y jefes únicos.
+        const _colStep = 4; // escanear cada 4 columnas para perf
+        for (let _gc2 = _startCol; _gc2 <= _endCol; _gc2 += _colStep) {
+            const _gcd2 = window.getTerrainCol(_gc2);
+            if (!_gcd2 || _gcd2.type === 'hole') continue;
+            const _gtopY2 = _gcd2.topY;
+
+            // Medir altura libre en esta columna y posición de suelo de cueva
+            let _airStart = -1, _caveH = 0, _caveFloorRow = -1;
+            for (let _gr2 = 2; _gr2 < _maxDepth - 1; _gr2++) {
+                const _m = window.getUGCellV(_gc2, _gr2);
+                if (_m === 'air') {
+                    if (_airStart < 0) _airStart = _gr2;
+                    _caveH++;
+                } else if (_airStart >= 0) {
+                    _caveFloorRow = _gr2;
+                    break;
+                }
+            }
+            if (_caveFloorRow < 0 || _caveH < 2) continue;
+
+            const _cFloorY = _gtopY2 + _caveFloorRow * _ugBs;
+            const _cCeilY  = _gtopY2 + _airStart * _ugBs;
+            const _cCX     = _gc2 * _ugBs + _ugBs * 0.5;
+            const _depth   = _airStart; // profundidad en filas desde superficie
+
+            // Hash de posición para decisiones probabilísticas
+            const _ch3 = ((_gc2 * 2654435761) ^ (_caveFloorRow * 1013904223) ^ ((window.worldSeed||12345) * 374761393)) >>> 0;
+            const _ch3F = _ch3 / 0xFFFFFFFF;
+
+            // ── Jefe Araña: solo en cuevas grandes (≥5 altura), profundidad ≥12, sector lejano ──
+            const _bossId = `boss_spider_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 5 && _depth >= 12 && distShore > 6000 && _ch3F < 0.06
+                && !window.entities.some(e => e.id === _bossId)
+                && !window.killedEntities.includes(_bossId)) {
+                const _bLvl  = Math.max(3, lvl + 2 + Math.floor(_depth / 8));
+                const _bHp   = 180 + _bLvl * 45;
+                const _bW    = 52 + _bLvl * 2; const _bH = 34 + _bLvl;
+                window.entities.push({
+                    id: _bossId, type: 'spider', name: '🕷 Araña Reina',
+                    level: _bLvl, isBoss: true,
+                    x: _cCX - _bW/2, y: _cFloorY - _bH,
+                    width: _bW, height: _bH,
+                    vx: 0, vy: 0,
+                    hp: _bHp, maxHp: _bHp,
+                    damage: 18 + _bLvl * 4,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true,
+                    // Estado IA extendida para jefes
+                    bossPhase: 1,        // fase 1 (>50% HP) / 2 (<50%)
+                    bossEnrage: false,
+                    bossNextSummon: 300, // frames hasta próxima convocatoria
+                });
+            }
+
+            // ── Escarabajo de cueva: cuevas medias (≥3 altura), profundidad 6-25 ──
+            const _beetleId = `beetle_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 3 && _depth >= 6 && _ch3F > 0.30 && _ch3F < 0.52
+                && !window.entities.some(e => e.id === _beetleId)
+                && !window.killedEntities.includes(_beetleId)) {
+                const _beLvl = Math.max(1, lvl);
+                const _beHp  = 25 + _beLvl * 8;
+                window.entities.push({
+                    id: _beetleId, type: 'beetle', name: 'Escarabajo',
+                    level: _beLvl, x: _cCX, y: _cFloorY - 14,
+                    width: 18, height: 14,
+                    vx: _ch3F > 0.40 ? 0.5 : -0.5, vy: 0,
+                    hp: _beHp, maxHp: _beHp,
+                    damage: 4 + _beLvl * 2,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true,
+                });
+            }
+
+            // ── Slime de cueva: cuevas húmedas (profundidad 8-35, variante de color) ──
+            const _slimeId = `slime_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 2 && _depth >= 8 && _depth <= 35 && _ch3F > 0.62 && _ch3F < 0.78
+                && !window.entities.some(e => e.id === _slimeId)
+                && !window.killedEntities.includes(_slimeId)) {
+                const _sLvl   = Math.max(1, lvl);
+                const _sHp    = 20 + _sLvl * 6;
+                const _sColor = _depth < 18 ? 0 : (_depth < 28 ? 1 : 2); // 0=verde 1=azul 2=morado
+                window.entities.push({
+                    id: _slimeId, type: 'slime', name: 'Slime',
+                    level: _sLvl, x: _cCX, y: _cFloorY - 16,
+                    width: 20, height: 16,
+                    vx: 0, vy: 0,
+                    hp: _sHp, maxHp: _sHp,
+                    damage: 3 + _sLvl,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true, slimeColor: _sColor,
+                    slimeJumpTimer: 60 + Math.floor(_ch3F * 80),
+                });
+            }
+
+            // ── Gusano de Cueva: cuevas medianas, todo rango de profundidad ──
+            const _wormId = `worm_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 2 && _depth >= 4 && _ch3F > 0.14 && _ch3F < 0.28
+                && !window.entities.some(e => e.id === _wormId)
+                && !window.killedEntities.includes(_wormId)) {
+                const _wLvl = Math.max(1, lvl);
+                const _wHp  = 30 + _wLvl * 10;
+                window.entities.push({
+                    id: _wormId, type: 'worm', name: 'Gusano',
+                    level: _wLvl, x: _cCX - 16, y: _cFloorY - 12,
+                    width: 32, height: 12,
+                    vx: _ch3F > 0.21 ? 0.4 : -0.4, vy: 0,
+                    hp: _wHp, maxHp: _wHp,
+                    damage: 5 + _wLvl * 2,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true,
+                    _wormSegs: [{x:_cCX-16,y:_cFloorY-12},{x:_cCX-26,y:_cFloorY-12},{x:_cCX-36,y:_cFloorY-12}],
+                });
+            }
+
+            // ── Gólem de Cristal: cuevas profundas, tanque lento ──
+            const _golemId = `golem_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 4 && _depth >= 18 && _ch3F > 0.79 && _ch3F < 0.93
+                && !window.entities.some(e => e.id === _golemId)
+                && !window.killedEntities.includes(_golemId)) {
+                const _gLvl = Math.max(2, lvl + 1 + Math.floor(_depth / 15));
+                const _gHp  = 90 + _gLvl * 32;
+                window.entities.push({
+                    id: _golemId, type: 'golem', name: 'Gólem de Cristal',
+                    level: _gLvl, x: _cCX - 14, y: _cFloorY - 44,
+                    width: 28, height: 44,
+                    vx: 0, vy: 0,
+                    hp: _gHp, maxHp: _gHp,
+                    damage: 16 + _gLvl * 4,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true,
+                });
+            }
+
+            // ── Madre Araña (JEFE ÉPICO): cuevas enormes, muy profunda ──
+            const _bmId = `brood_mother_${_gc2}_${_caveFloorRow}`;
+            if (_caveH >= 8 && _depth >= 25 && distShore > 3500 && _ch3F > 0.91 && _ch3F < 0.982
+                && !window.entities.some(e => e.id === _bmId)
+                && !window.killedEntities.includes(_bmId)) {
+                const _bmLvl = Math.max(5, lvl + 4 + Math.floor(_depth / 6));
+                const _bmHp  = 500 + _bmLvl * 65;
+                window.entities.push({
+                    id: _bmId, type: 'brood_mother', name: '☠ Madre Araña',
+                    level: _bmLvl, isBoss: true,
+                    x: _cCX - 36, y: _cFloorY - 52,
+                    width: 72, height: 52,
+                    vx: 0, vy: 0,
+                    hp: _bmHp, maxHp: _bmHp,
+                    damage: 30 + _bmLvl * 5,
+                    isHit: false, attackCooldown: 0,
+                    stuckFrames: 0, ignorePlayer: 0, lastX: _cCX,
+                    inCave: true,
+                    bossPhase: 1, bossEnrage: false,
+                    bossNextSummon: 180,
+                    bmWebCooldown: 240,
+                    bmInvulFrames: 0,
+                });
+            }
+        }
     }
 };
 
@@ -1090,6 +1296,219 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         if (ent.attackCooldown > 0) ent.attackCooldown--;
         if ((ent.ignorePlayer||0) > 0) ent.ignorePlayer--;
         return;
+    }
+
+    else if (ent.type === 'beetle') {
+        // Escarabajo: patrulla lento, carga cuando ve al jugador
+        const _bdist = Math.hypot(targetCX - (ent.x+ent.width/2), targetCY - (ent.y+ent.height/2));
+        if ((ent.ignorePlayer||0) > 0) { ent.ignorePlayer--; }
+        else if (_bdist < 220 && _entCanSeeTarget(ent, targetCX, targetCY, isNight)) {
+            // Carga hacia el jugador
+            ent.vx += (targetCX > ent.x ? 1 : -1) * 0.15;
+            if (Math.abs(ent.vx) > 2.2) ent.vx = Math.sign(ent.vx) * 2.2;
+            if (_bdist < 20 && (ent.attackCooldown||0) <= 0) {
+                window.damagePlayer(ent.damage, 'escarabajo');
+                ent.attackCooldown = 55;
+            }
+        } else {
+            // Patrulla
+            if (Math.abs(ent.vx) < 0.3) ent.vx = (Math.random() > 0.5 ? 0.4 : -0.4);
+            ent.vx *= 0.98;
+        }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+    }
+
+    else if (ent.type === 'slime') {
+        // Slime: salta hacia el jugador en intervalos
+        const _sdist = Math.hypot(targetCX - (ent.x+ent.width/2), targetCY - (ent.y+ent.height/2));
+        ent.slimeJumpTimer = (ent.slimeJumpTimer||60) - 1;
+        if ((ent.ignorePlayer||0) > 0) { ent.ignorePlayer--; }
+        else if (_sdist < 300 && isGrounded && ent.slimeJumpTimer <= 0) {
+            // Salto
+            const _dir = targetCX > ent.x ? 1 : -1;
+            ent.vx = _dir * (1.5 + Math.min(2, _sdist / 100));
+            ent.vy = -5;
+            ent.slimeJumpTimer = 70 + Math.floor(Math.random() * 50);
+        }
+        if (!isGrounded) { ent.vx *= 0.97; } else { ent.vx *= 0.88; }
+        // Daño en contacto
+        if (_sdist < 18 && (ent.attackCooldown||0) <= 0) {
+            window.damagePlayer(ent.damage, 'slime');
+            ent.attackCooldown = 50;
+        }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+    }
+
+    else if (ent.type === 'worm') {
+        // ── Gusano: arrastra lentamente, carga cuando el jugador está cerca ──
+        const _wDist = Math.hypot(targetCX-(ent.x+ent.width/2), targetCY-(ent.y+ent.height/2));
+        if (!ent._wormSegs) ent._wormSegs = [{x:ent.x,y:ent.y},{x:ent.x-10,y:ent.y},{x:ent.x-20,y:ent.y}];
+        // Actualizar segmentos cada 3 frames (trail suave)
+        if ((window.game.frameCount & 3) === 0) {
+            ent._wormSegs[2] = {x:ent._wormSegs[1].x, y:ent._wormSegs[1].y};
+            ent._wormSegs[1] = {x:ent._wormSegs[0].x, y:ent._wormSegs[0].y};
+            ent._wormSegs[0] = {x:ent.x, y:ent.y};
+        }
+        if ((ent.ignorePlayer||0) > 0) { ent.ignorePlayer--; }
+        else if (_wDist < 220) {
+            const _dir = targetCX > ent.x ? 1 : -1;
+            ent.vx += _dir * 0.14;
+            if (Math.abs(ent.vx) > 2.0) ent.vx = Math.sign(ent.vx) * 2.0;
+        } else {
+            if (Math.abs(ent.vx) < 0.25) ent.vx = Math.random() > 0.5 ? 0.3 : -0.3;
+            ent.vx *= 0.985;
+        }
+        if (_wDist < 20 && (ent.attackCooldown||0) <= 0) {
+            window.damagePlayer(ent.damage, 'gusano');
+            ent.attackCooldown = 60;
+        }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+    }
+
+    else if (ent.type === 'golem') {
+        // ── Gólem: lento y poderoso, golpe de tierra, salta ocasionalmente ──
+        const _gDist = Math.hypot(targetCX-(ent.x+ent.width/2), targetCY-(ent.y+ent.height/2));
+        if ((ent.ignorePlayer||0) > 0) { ent.ignorePlayer--; }
+        else if (_gDist < 380 && _entCanSeeTarget(ent, targetCX, targetCY, isNight)) {
+            const _dir = targetCX > ent.x ? 1 : -1;
+            ent.vx += _dir * 0.07;
+            if (Math.abs(ent.vx) > 1.2) ent.vx = Math.sign(ent.vx) * 1.2;
+            // Golpe poderoso en contacto
+            if (_gDist < 32 && (ent.attackCooldown||0) <= 0) {
+                window.damagePlayer(ent.damage, 'Gólem de Cristal');
+                window.game.screenShake = Math.max(window.game.screenShake||0, 7);
+                ent.attackCooldown = 88;
+            }
+            // Salto ocasional si el jugador está más alto
+            if (isGrounded && ent.vy === 0 && targetCY < ent.y - 20 && Math.random() < 0.012) {
+                ent.vy = -6.5;
+            }
+        } else {
+            ent.vx *= 0.85;
+        }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+    }
+
+    else if (ent.type === 'brood_mother') {
+        // ── Madre Araña (JEFE ÉPICO) — 3 fases ──────────────────────────────
+        if (ent.bmInvulFrames > 0) {
+            ent.bmInvulFrames--;
+            ent.vx *= 0.88;
+            if (ent.attackCooldown > 0) ent.attackCooldown--;
+            return;
+        }
+        const _bmDist = Math.hypot(targetCX-(ent.x+ent.width/2), targetCY-(ent.y+ent.height/2));
+        const _bmHpPct = ent.hp / ent.maxHp;
+        // Transición fase 2 (50% HP)
+        if (!ent.bossEnrage && _bmHpPct < 0.5) {
+            ent.bossEnrage = true; ent.bossPhase = 2; ent.enragedFrames = 99999;
+            window.game.screenShake = 14;
+            if (window.spawnDamageText) window.spawnDamageText(ent.x+ent.width/2, ent.y-42, '¡FRENÉTICA!', '#ff0066');
+        }
+        // Transición fase 3 (25% HP)
+        if (ent.bossPhase < 3 && _bmHpPct < 0.25) {
+            ent.bossPhase = 3;
+            ent.bmInvulFrames = 100;
+            ent.bossNextSummon = 0;
+            window.game.screenShake = 20;
+            if (window.spawnDamageText) window.spawnDamageText(ent.x+ent.width/2, ent.y-55, '¡ÚLTIMA FASE!', '#ff3300');
+        }
+
+        const _bmSpd = ent.bossPhase >= 2 ? 3.0 : 1.9;
+        if (_bmDist < 750 && _entCanSeeTarget(ent, targetCX, targetCY, isNight)) {
+            ent.vx += (targetCX > ent.x ? 1 : -1) * (ent.bossPhase >= 2 ? 0.24 : 0.16);
+            if (Math.abs(ent.vx) > _bmSpd) ent.vx = Math.sign(ent.vx) * _bmSpd;
+            // Salto
+            if (isGrounded && ent.vy === 0 && Math.random() < (ent.bossPhase === 3 ? 0.05 : 0.025)) ent.vy = -8;
+            // Melé
+            if (_bmDist < 50 && (ent.attackCooldown||0) <= 0) {
+                window.damagePlayer(ent.damage, 'Madre Araña');
+                window.game.screenShake = 10;
+                ent.attackCooldown = ent.bossPhase >= 2 ? 28 : 48;
+            }
+            // Proyectil de tela (fase 2+)
+            if (ent.bossPhase >= 2 && _bmDist > 80) {
+                ent.bmWebCooldown = (ent.bmWebCooldown||240) - 1;
+                if (ent.bmWebCooldown <= 0) {
+                    ent.bmWebCooldown = ent.bossPhase === 3 ? 60 : 110;
+                    const _ang = Math.atan2(targetCY-(ent.y+ent.height*0.4), targetCX-(ent.x+ent.width/2));
+                    const _spd2 = ent.bossPhase === 3 ? 5.5 : 4.0;
+                    if (window.projectiles) window.projectiles.push({
+                        id:'bm_web_'+Math.random().toString(36).substr(2,6),
+                        x:ent.x+ent.width/2, y:ent.y+ent.height*0.4,
+                        vx:Math.cos(_ang)*_spd2, vy:Math.sin(_ang)*_spd2,
+                        fromEnemy:true, damage:Math.floor(ent.damage*0.55),
+                        source:'Madre Araña', color:'#cc00ff', radius:6,
+                        life:90, isWebShot:true,
+                    });
+                }
+            }
+            // Convocar minions
+            ent.bossNextSummon = (ent.bossNextSummon||180) - 1;
+            const _maxM = ent.bossPhase === 3 ? 12 : (ent.bossPhase === 2 ? 7 : 4);
+            const _curM = window.entities.filter(e=>e.inCave&&(e.type==='spider'||e.type==='beetle'||e.type==='worm')&&!e.isBoss).length;
+            if (ent.bossNextSummon <= 0 && _curM < _maxM) {
+                ent.bossNextSummon = ent.bossPhase === 3 ? 70 : 140;
+                const _off = (Math.random()>0.5?1:-1)*(50+Math.random()*90);
+                const _msid='bm_m_'+Math.random().toString(36).substr(2,6);
+                const _mT = Math.random()<0.35 ? 'beetle' : (Math.random()<0.3 ? 'worm' : 'spider');
+                const _mW = _mT==='beetle'?18:(_mT==='worm'?32:22), _mH = _mT==='worm'?12:14;
+                window.entities.push({id:_msid, type:_mT, name:_mT==='beetle'?'Escarabajo Oscuro':(_mT==='worm'?'Gusano Oscuro':'Araña Oscura'),
+                    level:Math.max(1,ent.level-2), x:ent.x+_off, y:ent.y,
+                    width:_mW, height:_mH, vx:0, vy:0,
+                    hp:20+ent.level*4, maxHp:20+ent.level*4,
+                    damage:6+ent.level, isHit:false, attackCooldown:0,
+                    stuckFrames:0, ignorePlayer:50, lastX:ent.x+_off, inCave:true,
+                });
+            }
+        } else { ent.vx *= 0.88; }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+        if ((ent.ignorePlayer||0) > 0) ent.ignorePlayer--;
+    }
+
+    // Boss spider — lógica extendida con fases
+    else if (ent.type === 'spider' && ent.isBoss) {
+        const _bossDist = Math.hypot(targetCX - (ent.x+ent.width/2), targetCY - (ent.y+ent.height/2));
+        // Fase 2 al bajar del 50% HP
+        if (!ent.bossEnrage && ent.hp < ent.maxHp * 0.5) {
+            ent.bossEnrage = true; ent.bossPhase = 2;
+            ent.enragedFrames = 9999;
+            if (window.spawnDamageText) window.spawnDamageText(ent.x+ent.width/2, ent.y-30, '¡ENRARECIDA!', '#ff4400');
+        }
+        const _bossSpeed = ent.bossEnrage ? 2.8 : 1.8;
+        // Siempre agro si hay LOS
+        if (_bossDist < 600 && _entCanSeeTarget(ent, targetCX, targetCY, isNight)) {
+            ent.vx += (targetCX > ent.x ? 1 : -1) * (ent.bossEnrage ? 0.22 : 0.15);
+            if (Math.abs(ent.vx) > _bossSpeed) ent.vx = Math.sign(ent.vx) * _bossSpeed;
+            // Salto periódico
+            if (isGrounded && (ent.bossPhase === 2 || _bossDist < 120) && ent.vy === 0) {
+                if (Math.abs(targetCY - ent.y) > 40) ent.vy = -7;
+            }
+            // Ataque melé
+            if (_bossDist < 35 && (ent.attackCooldown||0) <= 0) {
+                window.damagePlayer(ent.damage, 'Araña Reina');
+                ent.attackCooldown = ent.bossEnrage ? 35 : 55;
+                window.game.screenShake = 8;
+            }
+            // Convocar arañas normales en fase 2
+            if (ent.bossEnrage) {
+                ent.bossNextSummon = (ent.bossNextSummon||300) - 1;
+                if (ent.bossNextSummon <= 0 && window.entities.filter(e=>e.type==='spider'&&!e.isBoss&&e.inCave).length < 6) {
+                    ent.bossNextSummon = 200;
+                    const _sx = ent.x + (Math.random() > 0.5 ? 60 : -60);
+                    const _sid = 'boss_summon_' + Math.random().toString(36).substr(2,6);
+                    window.entities.push({ id:_sid, type:'spider', name:'Araña de Cueva',
+                        level:Math.max(1,ent.level-2), x:_sx, y:ent.y-14,
+                        width:22, height:14, vx:0, vy:0,
+                        hp:30+ent.level*5, maxHp:30+ent.level*5,
+                        damage:6+ent.level, isHit:false, attackCooldown:0,
+                        stuckFrames:0, ignorePlayer:60, lastX:_sx, inCave:true });
+                }
+            }
+        } else { ent.vx *= 0.85; }
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+        if ((ent.ignorePlayer||0) > 0) ent.ignorePlayer--;
+        // No return — usa física normal del terreno
     }
 
         else if (ent.type === 'chicken') {

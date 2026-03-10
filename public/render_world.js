@@ -490,6 +490,61 @@ window.draw = function() {
             }
         }
 
+        // ── Cristales de cueva: estalactitas y estalagmitas decorativas ──────
+        if (window.getUGCellV && window.getTerrainCol && !_playerOnSurf) {
+            const C = window.ctx;
+            const _cFrame = window.game.frameCount;
+            for (let _cc = startCol; _cc <= endCol; _cc++) {
+                const _ccd = window.getTerrainCol(_cc);
+                if (!_ccd || _ccd.type === 'hole') continue;
+                const _ctopY = _ccd.topY;
+                const _cx2 = _cc * bs;
+                const _maxCRow = Math.min(window.UG_MAX_DEPTH || 90, Math.ceil((_iCamY + H/z + bs*3 - _ctopY) / bs) + 1);
+                for (let _cr = 1; _cr < _maxCRow - 1; _cr++) {
+                    const _cCellY = _ctopY + _cr * bs;
+                    if (_cCellY < _iCamY - bs*2 || _cCellY > _iCamY + H/z + bs*2) continue;
+                    // Fog check
+                    if (_fogEnabled && !_playerOnSurf && !window._caveExplored?.has(`${_cc}_${_cr}`)) continue;
+                    // Deterministic hash for this cell
+                    const _hash = ((_cc * 374761393) ^ (_cr * 1103515245) ^ ((window.worldSeed||12345) * 2654435761)) >>> 0;
+                    const _hf   = _hash / 0xFFFFFFFF;
+                    const _matC = window.getUGCellV(_cc, _cr);
+                    if (_matC === 'air') continue;
+                    // Estalactita: celda sólida encima de una air
+                    const _matBelow = window.getUGCellV(_cc, _cr + 1);
+                    if (_matBelow === 'air' && _hf < 0.055) {
+                        const _cLen = 5 + _hf * 30;
+                        const _cX   = _cx2 + bs * (0.2 + _hf * 0.6);
+                        const _cRow = _cr;
+                        // Profundidad → color
+                        const _cCol = _cRow > 20 ? `rgba(180,80,255,0.85)` : (_cRow > 12 ? `rgba(60,160,255,0.80)` : `rgba(200,235,255,0.65)`);
+                        const _pulse = 0.7 + Math.sin(_cFrame * 0.06 + _cc * 0.7 + _cr * 1.1) * 0.3;
+                        C.globalAlpha = _pulse;
+                        C.fillStyle = _cCol;
+                        C.beginPath(); C.moveTo(_cX-3, _cCellY+bs-1); C.lineTo(_cX+3, _cCellY+bs-1); C.lineTo(_cX, _cCellY+bs-1+_cLen); C.closePath(); C.fill();
+                        // Reflejo brillante
+                        C.globalAlpha = _pulse * 0.55;
+                        C.fillStyle = 'rgba(255,255,255,0.8)';
+                        C.fillRect(_cX-0.5, _cCellY+bs, 1, _cLen * 0.4);
+                        C.globalAlpha = 1;
+                    }
+                    // Estalagmita: celda sólida debajo de una air
+                    const _matAbove = window.getUGCellV(_cc, _cr - 1);
+                    if (_matAbove === 'air' && _hf > 0.96) {
+                        const _sLen = 4 + (_hf-0.96)*25*20;
+                        const _sX   = _cx2 + bs * (0.15 + ((_hf*1.7)%1) * 0.7);
+                        const _sRow = _cr;
+                        const _sCol = _sRow > 20 ? `rgba(160,60,240,0.75)` : (_sRow > 12 ? `rgba(40,140,230,0.70)` : `rgba(180,220,255,0.55)`);
+                        const _spulse = 0.65 + Math.sin(_cFrame * 0.07 + _cc * 1.1 + _cr * 0.8) * 0.35;
+                        C.globalAlpha = _spulse;
+                        C.fillStyle = _sCol;
+                        C.beginPath(); C.moveTo(_sX-2.5, _cCellY+1); C.lineTo(_sX+2.5, _cCellY+1); C.lineTo(_sX, _cCellY+1-_sLen); C.closePath(); C.fill();
+                        C.globalAlpha = 1;
+                    }
+                }
+            }
+        }
+
         // ── Telas de araña de cueva ─────────────────────────────────────────
         if (window.caveCobwebs?.length > 0) {
             const C = window.ctx;
@@ -922,49 +977,509 @@ window.draw = function() {
         } else if (ent.type === 'bat') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
             const _fc = window.game.frameCount;
-            // Alas: ángulo alterna según estado
             const _sleeping = ent.batState === 'roost';
-            const _wingFlap = _sleeping ? 0 : Math.sin(_fc * 0.45) * 0.7;
-            const _cx = x + w/2, _cy = y + h/2;
-            // Sombra oval
-            C.globalAlpha = 0.15;
-            C.fillStyle = '#000';
-            C.beginPath(); C.ellipse(_cx, y + h + 1, w*0.4, 2, 0, 0, Math.PI*2); C.fill();
-            C.globalAlpha = H ? 0.9 : 1;
-            // Cuerpo
-            C.fillStyle = H ? '#ff4444' : '#1a0a2a';
-            C.beginPath(); C.ellipse(_cx, _cy, w*0.28, h*0.42, 0, 0, Math.PI*2); C.fill();
-            // Ala izquierda
-            C.fillStyle = H ? '#ff6666' : '#2a1040';
-            C.beginPath();
-            C.moveTo(_cx - 1, _cy);
-            C.quadraticCurveTo(_cx - w*0.55, _cy + Math.sin(_wingFlap)*h*0.5, _cx - w*0.9, _cy - Math.cos(_wingFlap)*h*0.4);
-            C.quadraticCurveTo(_cx - w*0.5, _cy - h*0.3, _cx - 1, _cy - 2);
+            const _swooping = ent.batState === 'swoop';
+            // Wing flap — faster when swooping
+            const _flapSpd = _swooping ? 0.75 : 0.32;
+            const _flapAmp = _sleeping ? 0 : (_swooping ? 0.95 : 0.6);
+            const _wf = Math.sin(_fc * _flapSpd) * _flapAmp;
+            const _cx = x + w/2, _cy = y + h*0.5;
+            const _lvlScale = Math.min(1.6, 1.0 + (ent.level||1)*0.08); // bigger at higher levels
+
+            C.save(); C.translate(_cx, _cy); C.scale(_lvlScale, _lvlScale); C.translate(-_cx, -_cy);
+
+            // Wing color — darker purple for cave bats, red if hit
+            const _wCol  = H ? 'rgba(255,80,80,0.88)' : (ent.inCave ? 'rgba(30,10,55,0.92)' : 'rgba(40,15,65,0.88)');
+            const _wVein = H ? 'rgba(255,160,120,0.5)' : 'rgba(80,40,120,0.45)';
+
+            // Left wing — 3 finger bones + membrane
+            C.save(); C.translate(_cx, _cy + h*0.05);
+            const _lw1x = -w*0.3 - _wf*w*0.35, _lw1y = -h*0.15 + _wf*h*0.2;
+            const _lw2x = -w*0.8 - _wf*w*0.1,  _lw2y =  h*0.1  + _wf*h*0.15;
+            const _lw3x = -w*0.55,               _lw3y = -h*0.35 - _wf*h*0.1;
+            C.fillStyle = _wCol;
+            C.beginPath(); C.moveTo(0,0);
+            C.lineTo(_lw3x, _lw3y);
+            C.lineTo(_lw1x, _lw1y);
+            C.lineTo(_lw2x, _lw2y);
+            C.quadraticCurveTo(-w*0.2, h*0.18, 0, h*0.05);
             C.closePath(); C.fill();
-            // Ala derecha (espejo)
-            C.beginPath();
-            C.moveTo(_cx + 1, _cy);
-            C.quadraticCurveTo(_cx + w*0.55, _cy + Math.sin(_wingFlap)*h*0.5, _cx + w*0.9, _cy - Math.cos(_wingFlap)*h*0.4);
-            C.quadraticCurveTo(_cx + w*0.5, _cy - h*0.3, _cx + 1, _cy - 2);
+            // Venas del ala izquierda
+            C.strokeStyle = _wVein; C.lineWidth = 0.7;
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_lw1x, _lw1y); C.stroke();
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_lw2x, _lw2y); C.stroke();
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_lw3x, _lw3y); C.stroke();
+            C.restore();
+
+            // Right wing (mirror)
+            C.save(); C.translate(_cx, _cy + h*0.05);
+            const _rw1x = w*0.3 + _wf*w*0.35, _rw1y = -h*0.15 + _wf*h*0.2;
+            const _rw2x = w*0.8 + _wf*w*0.1,  _rw2y =  h*0.1  + _wf*h*0.15;
+            const _rw3x = w*0.55,               _rw3y = -h*0.35 - _wf*h*0.1;
+            C.fillStyle = _wCol;
+            C.beginPath(); C.moveTo(0,0);
+            C.lineTo(_rw3x, _rw3y);
+            C.lineTo(_rw1x, _rw1y);
+            C.lineTo(_rw2x, _rw2y);
+            C.quadraticCurveTo(w*0.2, h*0.18, 0, h*0.05);
             C.closePath(); C.fill();
-            // Orejas
-            C.fillStyle = H ? '#ff8888' : '#3a1860';
-            C.beginPath(); C.moveTo(_cx-4,_cy-h*0.35); C.lineTo(_cx-7,_cy-h*0.7); C.lineTo(_cx-1,_cy-h*0.38); C.fill();
-            C.beginPath(); C.moveTo(_cx+4,_cy-h*0.35); C.lineTo(_cx+7,_cy-h*0.7); C.lineTo(_cx+1,_cy-h*0.38); C.fill();
-            // Ojos rojos
-            C.fillStyle = _sleeping ? '#331122' : '#ff2200';
-            C.beginPath(); C.arc(_cx-3, _cy-2, 1.5, 0, Math.PI*2); C.fill();
-            C.beginPath(); C.arc(_cx+3, _cy-2, 1.5, 0, Math.PI*2); C.fill();
-            C.globalAlpha = 1;
+            C.strokeStyle = _wVein; C.lineWidth = 0.7;
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_rw1x, _rw1y); C.stroke();
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_rw2x, _rw2y); C.stroke();
+            C.beginPath(); C.moveTo(0,0); C.lineTo(_rw3x, _rw3y); C.stroke();
+            C.restore();
+
+            // Body with fur gradient
+            const _bG = C.createRadialGradient(_cx-1, _cy-2, 0, _cx, _cy, w*0.3);
+            _bG.addColorStop(0, H ? '#ff7777' : (ent.inCave ? '#2a0a3a' : '#1e0830'));
+            _bG.addColorStop(1, H ? '#cc1111' : '#0a0214');
+            C.fillStyle = _bG;
+            C.beginPath(); C.ellipse(_cx, _cy, w*0.26, h*0.45, 0, 0, Math.PI*2); C.fill();
+            // Fur texture strokes
+            if (!H) {
+                C.strokeStyle = 'rgba(70,30,90,0.6)'; C.lineWidth = 0.8;
+                for (let _fi=-2; _fi<=2; _fi++) {
+                    C.beginPath(); C.moveTo(_cx+_fi*2.5, _cy-h*0.4); C.lineTo(_cx+_fi*2, _cy+h*0.1); C.stroke();
+                }
+            }
+            // Ears
+            const _earCol = H ? '#ff9999' : (ent.inCave ? '#3a1265' : '#2a0e55');
+            C.fillStyle = _earCol;
+            C.beginPath(); C.moveTo(_cx-3,_cy-h*0.35); C.lineTo(_cx-7,_cy-h*0.78); C.lineTo(_cx,_cy-h*0.4); C.closePath(); C.fill();
+            C.beginPath(); C.moveTo(_cx+3,_cy-h*0.35); C.lineTo(_cx+7,_cy-h*0.78); C.lineTo(_cx,_cy-h*0.4); C.closePath(); C.fill();
+            // Inner ear
+            C.fillStyle = H ? '#ffaaaa' : 'rgba(180,80,180,0.5)';
+            C.beginPath(); C.moveTo(_cx-3.2,_cy-h*0.38); C.lineTo(_cx-5.8,_cy-h*0.7); C.lineTo(_cx-0.5,_cy-h*0.42); C.closePath(); C.fill();
+            C.beginPath(); C.moveTo(_cx+3.2,_cy-h*0.38); C.lineTo(_cx+5.8,_cy-h*0.7); C.lineTo(_cx+0.5,_cy-h*0.42); C.closePath(); C.fill();
+            // Muzzle
+            C.fillStyle = H ? '#ff8888' : '#1a0828';
+            C.beginPath(); C.ellipse(_cx, _cy+h*0.08, w*0.14, h*0.18, 0, 0, Math.PI*2); C.fill();
+            // Teeth (only when swooping)
+            if (_swooping || H) {
+                C.fillStyle = '#f0f0f0';
+                C.beginPath(); C.moveTo(_cx-3,_cy+h*0.18); C.lineTo(_cx-1,_cy+h*0.28); C.lineTo(_cx+1,_cy+h*0.18); C.fill();
+                C.beginPath(); C.moveTo(_cx+1,_cy+h*0.18); C.lineTo(_cx+3,_cy+h*0.26); C.lineTo(_cx+5,_cy+h*0.18); C.fill();
+            }
+            // Eyes — glowing when awake
+            const _eyeGlow = _sleeping ? '#220a33' : (H ? '#ff4400' : (ent.inCave ? '#ff0044' : '#dd0000'));
+            C.fillStyle = _eyeGlow;
+            C.beginPath(); C.arc(_cx-3.5, _cy-h*0.06, _sleeping ? 1.2 : 2, 0, Math.PI*2); C.fill();
+            C.beginPath(); C.arc(_cx+3.5, _cy-h*0.06, _sleeping ? 1.2 : 2, 0, Math.PI*2); C.fill();
+            if (!_sleeping) {
+                // Pupil + specular
+                C.fillStyle = '#000';
+                C.beginPath(); C.arc(_cx-3.5,_cy-h*0.06, 1, 0, Math.PI*2); C.fill();
+                C.beginPath(); C.arc(_cx+3.5,_cy-h*0.06, 1, 0, Math.PI*2); C.fill();
+                C.fillStyle = 'rgba(255,255,255,0.8)';
+                C.beginPath(); C.arc(_cx-3,_cy-h*0.1, 0.6, 0, Math.PI*2); C.fill();
+                C.beginPath(); C.arc(_cx+4,_cy-h*0.1, 0.6, 0, Math.PI*2); C.fill();
+            }
+            C.restore();
         } else if (ent.type === 'spider') {
-            const x=ent.x, y=ent.y, w=ent.width, h=ent.height; const faceX = FR ? x+w : x;
-            C.fillStyle = H ? '#ff4444' : '#111'; C.beginPath(); C.ellipse(x + w/2, y + h/2 + 2, w/2, h/3, 0, 0, Math.PI*2); C.fill();
-            const eyeX = FR ? x + w - 5 : x + 5; C.fillStyle = '#ff0000'; C.beginPath(); C.arc(eyeX, y + h/2, 2, 0, Math.PI*2); C.fill(); C.beginPath(); C.arc(eyeX - (FR?3:-3), y + h/2 - 2, 1.5, 0, Math.PI*2); C.fill();
-            C.strokeStyle = H ? '#ff4444' : '#000'; C.lineWidth = 2; C.beginPath();
-            let legMove = (Math.abs(ent.vx) > 0.1) ? Math.sin(T * 0.5) * 3 : 0;
-            for(let i=0; i<4; i++) { let lx = x + w/2 - 2 + (i*2); let ly = y + h/2 + 2; let footX = x - 5 - (i*3) + (i%2==0 ? legMove : -legMove); let footY = y + h; C.moveTo(lx, ly); C.quadraticCurveTo(lx - 5, ly - 5, footX, footY); }
-            for(let i=0; i<4; i++) { let lx = x + w/2 + 2 - (i*2); let ly = y + h/2 + 2; let footX = x + w + 5 + (i*3) + (i%2==0 ? legMove : -legMove); let footY = y + h; C.moveTo(lx, ly); C.quadraticCurveTo(lx + 5, ly - 5, footX, footY); }
-            C.stroke();
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const isBoss = !!ent.isBoss; const enraged = !!ent.bossEnrage;
+            const legAnim = Math.abs(ent.vx)>0.1 ? Math.sin(T*0.45)*0.35 : 0;
+            // Colores por tipo
+            const bodyCol  = H ? '#ff4422' : (isBoss ? (enraged ? '#cc1100' : '#4a1a6a') : (ent.inCave ? '#1a1a2a' : '#1a1818'));
+            const bodyCol2 = H ? '#ff7755' : (isBoss ? (enraged ? '#ff3300' : '#7a2a9a') : '#2a2a3a');
+            const eyeCol   = isBoss ? (enraged ? '#ff8800' : '#cc00ff') : '#ff1100';
+            const cx2 = x + w/2, cy2 = y + h*0.45;
+
+            // Sombra
+            C.globalAlpha = 0.18; C.fillStyle = '#000';
+            C.beginPath(); C.ellipse(cx2, y+h+1, w*0.48, 2.5, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
+
+            // ── Patas (8, 4 por lado) ──
+            C.lineWidth = isBoss ? 2.5 : 1.5;
+            const legCount = 4;
+            for (let side = -1; side <= 1; side += 2) {
+                for (let i = 0; i < legCount; i++) {
+                    const legPhase = legAnim * (i % 2 === 0 ? 1 : -1) * side;
+                    const baseX = cx2 + side * w * 0.2;
+                    const baseY = cy2 + (i - 1.5) * h * 0.18;
+                    const midX  = cx2 + side * (w * 0.7 + i * 2);
+                    const midY  = cy2 - h * 0.3 + legPhase * 8;
+                    const tipX  = cx2 + side * (w * 1.1 + i * 3);
+                    const tipY  = y + h + legPhase * 4;
+                    const grad  = C.createLinearGradient(baseX, baseY, tipX, tipY);
+                    grad.addColorStop(0, bodyCol2); grad.addColorStop(1, H?'#ff6644':'#111');
+                    C.strokeStyle = grad;
+                    C.beginPath(); C.moveTo(baseX, baseY); C.quadraticCurveTo(midX, midY, tipX, tipY); C.stroke();
+                }
+            }
+
+            // ── Abdomen (cuerpo trasero) ──
+            const abdGrad = C.createRadialGradient(cx2-2, cy2+2, 1, cx2, cy2+2, w*0.48);
+            abdGrad.addColorStop(0, bodyCol2); abdGrad.addColorStop(1, bodyCol);
+            C.fillStyle = abdGrad;
+            C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
+            // Patrón de abdomen (raya o puntos)
+            if (!H) {
+                if (isBoss) {
+                    // Calavera en abdomen jefe
+                    C.fillStyle = enraged ? 'rgba(255,80,0,0.6)' : 'rgba(200,100,255,0.5)';
+                    C.beginPath(); C.ellipse(cx2, cy2+h*0.12, w*0.22, h*0.18, 0, 0, Math.PI*2); C.fill();
+                    C.fillStyle = 'rgba(0,0,0,0.7)';
+                    C.beginPath(); C.arc(cx2-4, cy2+h*0.08, 2.5, 0, Math.PI*2); C.fill();
+                    C.beginPath(); C.arc(cx2+4, cy2+h*0.08, 2.5, 0, Math.PI*2); C.fill();
+                } else {
+                    C.fillStyle = 'rgba(255,100,0,0.4)';
+                    C.beginPath(); C.ellipse(cx2, cy2+h*0.14, w*0.15, h*0.12, 0, 0, Math.PI*2); C.fill();
+                }
+            }
+
+            // ── Cefalotórax (cuerpo delantero) ──
+            const cefGrad = C.createRadialGradient(cx2, cy2-h*0.1, 0, cx2, cy2-h*0.1, w*0.32);
+            cefGrad.addColorStop(0, bodyCol2); cefGrad.addColorStop(1, bodyCol);
+            C.fillStyle = cefGrad;
+            C.beginPath(); C.ellipse(cx2, cy2 - h*0.12, w*0.30, h*0.30, 0, 0, Math.PI*2); C.fill();
+
+            // ── Ojos ──
+            const eyeRow = cy2 - h*0.18;
+            const eyeCount = isBoss ? 4 : 2;
+            for (let e2=0; e2<eyeCount; e2++) {
+                const ex = cx2 + (e2 - (eyeCount-1)*0.5) * (isBoss ? 5 : 4);
+                C.fillStyle = eyeCol;
+                C.beginPath(); C.arc(ex, eyeRow, isBoss ? 3 : 2, 0, Math.PI*2); C.fill();
+                C.fillStyle = 'rgba(255,255,255,0.7)';
+                C.beginPath(); C.arc(ex+0.5, eyeRow-0.5, 0.8, 0, Math.PI*2); C.fill();
+            }
+
+            // ── Jefe: aura y barra de vida prominente ──
+            if (isBoss) {
+                const auraAlpha = 0.06 + Math.sin(T*0.08) * 0.03;
+                C.globalAlpha = auraAlpha;
+                const auraGrad = C.createRadialGradient(cx2, cy2, 0, cx2, cy2, w*1.2);
+                auraGrad.addColorStop(0, enraged ? 'rgba(255,80,0,1)' : 'rgba(180,0,255,1)');
+                auraGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                C.fillStyle = auraGrad;
+                C.beginPath(); C.arc(cx2, cy2, w*1.2, 0, Math.PI*2); C.fill();
+                C.globalAlpha = 1;
+                // Barra HP encima del jefe
+                const _bw = Math.max(60, w*1.4); const _bx2 = cx2 - _bw/2;
+                const _hpFrac = Math.max(0, ent.hp/ent.maxHp);
+                C.fillStyle = 'rgba(0,0,0,0.75)'; C.fillRect(_bx2-1, y-22, _bw+2, 9);
+                const _hpCol = _hpFrac > 0.5 ? '#cc22cc' : (enraged ? '#ff4400' : '#aa00ff');
+                C.fillStyle = _hpCol; C.fillRect(_bx2, y-21, _bw*_hpFrac, 7);
+                C.strokeStyle = enraged ? '#ff8800' : '#dd00ff'; C.lineWidth=1.5;
+                C.strokeRect(_bx2-0.5, y-21.5, _bw+1, 8);
+                // Nombre encima
+                C.font = 'bold 12px "VT323"'; C.fillStyle = enraged ? '#ff8800' : '#dd88ff';
+                C.textAlign = 'center'; C.fillText(ent.name + ' Nv.' + ent.level, cx2, y-25); C.textAlign='left';
+            }
+        } else if (ent.type === 'beetle') {
+            // ── Escarabajo de cueva ──
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const cx2=x+w/2, cy2=y+h*0.5;
+            const moving = Math.abs(ent.vx)>0.1;
+            const legA   = moving ? Math.sin(T*0.55)*0.4 : 0;
+
+            C.globalAlpha=0.15; C.fillStyle='#000'; C.beginPath(); C.ellipse(cx2, y+h+1, w*0.44, 2, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
+            // Patas
+            C.strokeStyle = H ? '#ff5533' : '#2a1a08'; C.lineWidth = 1.5;
+            for (let i=0;i<3;i++) {
+                const baseX = cx2 + (i-1)*w*0.22; const baseY = cy2+2;
+                C.beginPath(); C.moveTo(baseX, baseY); C.lineTo(baseX - w*0.4 + legA*(i%2?6:-6), y+h+2); C.stroke();
+                C.beginPath(); C.moveTo(baseX, baseY); C.lineTo(baseX + w*0.4 + legA*(i%2?-6:6), y+h+2); C.stroke();
+            }
+            // Caparazón
+            const shG = C.createRadialGradient(cx2-2, cy2-2, 0, cx2, cy2, w*0.55);
+            shG.addColorStop(0, H?'#ff7755':'#4a3520'); shG.addColorStop(0.5, H?'#cc4422':'#2d2010'); shG.addColorStop(1, H?'#882200':'#1a1008');
+            C.fillStyle=shG; C.beginPath(); C.ellipse(cx2, cy2, w*0.50, h*0.46, 0, 0, Math.PI*2); C.fill();
+            // Línea central del caparazón
+            if (!H) { C.strokeStyle='rgba(0,0,0,0.5)'; C.lineWidth=1.5; C.beginPath(); C.moveTo(cx2, y+2); C.lineTo(cx2, y+h-2); C.stroke(); }
+            // Cuernos
+            C.fillStyle = H ? '#ff5533' : '#3a2510';
+            C.beginPath(); C.moveTo(cx2-4,y+2); C.lineTo(cx2-7,y-5); C.lineTo(cx2-2,y+4); C.fill();
+            C.beginPath(); C.moveTo(cx2+4,y+2); C.lineTo(cx2+7,y-5); C.lineTo(cx2+2,y+4); C.fill();
+            // Ojos
+            C.fillStyle = H ? '#ffdd00' : '#ff8800';
+            C.beginPath(); C.arc(cx2-4, cy2-2, 2, 0, Math.PI*2); C.fill();
+            C.beginPath(); C.arc(cx2+4, cy2-2, 2, 0, Math.PI*2); C.fill();
+
+        } else if (ent.type === 'slime') {
+            // ── Slime de cueva ──
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const cx2=x+w/2, cy2=y+h*0.5;
+            const isAir = !isGrounded || ent.vy < -0.5;
+            // Squash/stretch al saltar
+            const scaleX = isAir ? 0.75 : (1.0 + Math.abs(Math.sin(T*0.2))*0.05);
+            const scaleY = isAir ? 1.3  : (0.85 - Math.abs(Math.sin(T*0.2))*0.05);
+            const slimePalette = [
+                ['#22aa44','#44ff88','rgba(40,180,80,'],    // verde
+                ['#2244cc','#4488ff','rgba(40,80,220,'],    // azul
+                ['#8822cc','#cc44ff','rgba(140,40,220,'],   // morado
+            ];
+            const _spal = slimePalette[(ent.slimeColor||0) % 3];
+
+            C.save(); C.translate(cx2, y+h); C.scale(scaleX, scaleY); C.translate(-cx2, -(y+h));
+            C.globalAlpha=0.12; C.fillStyle='#000'; C.beginPath(); C.ellipse(cx2, y+h+2, w*0.42, 2.5/scaleY, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
+            // Cuerpo con gradiente
+            const slG = C.createRadialGradient(cx2-3, cy2-5, 0, cx2, cy2, w*0.52);
+            slG.addColorStop(0, H?'#ffaaaa':(_spal[1])); slG.addColorStop(0.6, H?'#ff4444':(_spal[0])); slG.addColorStop(1, H?'#cc0000':'rgba(0,0,0,0.6)');
+            C.fillStyle=slG; C.beginPath(); C.ellipse(cx2, cy2-2, w*0.46, h*0.44, 0, 0, Math.PI*2); C.fill();
+            // Brillo especular
+            C.globalAlpha=0.45; C.fillStyle='rgba(255,255,255,0.8)';
+            C.beginPath(); C.ellipse(cx2-4, cy2-7, w*0.12, h*0.10, -0.5, 0, Math.PI*2); C.fill();
+            C.globalAlpha=1;
+            // Ojos
+            C.fillStyle='rgba(0,0,0,0.8)';
+            C.beginPath(); C.arc(cx2-5, cy2-4, 2.5, 0, Math.PI*2); C.fill();
+            C.beginPath(); C.arc(cx2+5, cy2-4, 2.5, 0, Math.PI*2); C.fill();
+            C.fillStyle='#fff'; C.beginPath(); C.arc(cx2-4.2,cy2-4.8, 1, 0, Math.PI*2); C.fill();
+            C.beginPath(); C.arc(cx2+5.8,cy2-4.8, 1, 0, Math.PI*2); C.fill();
+            // Halo de luz tenue
+            C.globalAlpha = 0.06;
+            const _slhG = C.createRadialGradient(cx2, cy2, 0, cx2, cy2, 28);
+            _slhG.addColorStop(0, _spal[2]+'0.5)'); _slhG.addColorStop(1, _spal[2]+'0)');
+            C.fillStyle=_slhG; C.beginPath(); C.arc(cx2, cy2, 28, 0, Math.PI*2); C.fill();
+            C.globalAlpha=1; C.restore();
+        } else if (ent.type === 'worm') {
+            // ── Gusano de Cueva (segmentado) ──
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const FR = ent.vx >= 0;
+            const segs = ent._wormSegs || [{x,y},{x:x-10,y},{x:x-20,y}];
+            const segR = [6.5, 5.6, 4.8, 4.0];
+            const bodyMain = H ? '#ff8866' : '#c8684a';
+            const bodyDark = H ? '#cc3311' : '#7a3018';
+            // Sombra
+            C.globalAlpha=0.18; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(x+w*0.5, y+h+2, w*0.38, 2, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
+            // Dibujar segmentos de atrás hacia adelante
+            for (let _si = segs.length - 1; _si >= 0; _si--) {
+                const _sx = segs[_si].x + w*0.5, _sy = segs[_si].y + h*0.5;
+                const _sr = segR[Math.min(_si, segR.length-1)];
+                const _sG = C.createRadialGradient(_sx-1, _sy-1, 0, _sx, _sy, _sr);
+                _sG.addColorStop(0, H?'#ffaaaa':(_si===0?bodyDark:'#e07d55')); _sG.addColorStop(1, H?'#cc2200':bodyDark);
+                C.fillStyle = _sG; C.beginPath(); C.arc(_sx, _sy, _sr, 0, Math.PI*2); C.fill();
+                // Anillo de segmento
+                C.strokeStyle='rgba(0,0,0,0.35)'; C.lineWidth=1;
+                C.beginPath(); C.arc(_sx, _sy, _sr*0.65, 0, Math.PI*2); C.stroke();
+            }
+            // Cabeza
+            const hx = x + (FR ? w*0.8 : w*0.2), hy = y + h*0.5;
+            // Ojos
+            const eyeOff = FR ? 2 : -2;
+            C.fillStyle = H ? '#ffee00' : '#ff2200';
+            C.beginPath(); C.arc(hx+eyeOff, hy-2, 2.8, 0, Math.PI*2); C.fill();
+            C.fillStyle='#000'; C.beginPath(); C.arc(hx+eyeOff+0.5, hy-2, 1.3, 0, Math.PI*2); C.fill();
+            C.fillStyle='rgba(255,255,255,0.8)'; C.beginPath(); C.arc(hx+eyeOff+1, hy-2.8, 0.7, 0, Math.PI*2); C.fill();
+            // Boca
+            C.strokeStyle='#442200'; C.lineWidth=1.5;
+            const mOff = FR ? 5 : -5;
+            C.beginPath(); C.arc(hx+mOff, hy+1.5, 3.5, FR?-0.7:Math.PI+0.7, FR?0.7:Math.PI-0.7); C.stroke();
+            // HP bar si dañado
+            if (ent.hp < ent.maxHp) {
+                const _hf=ent.hp/ent.maxHp; C.fillStyle='rgba(0,0,0,0.6)'; C.fillRect(x,y-10,w,4);
+                C.fillStyle=_hf>0.5?'#66cc44':'#ee4422'; C.fillRect(x,y-10,w*_hf,4);
+            }
+
+        } else if (ent.type === 'golem') {
+            // ── Gólem de Cristal ──
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const cx2=x+w/2, cy2=y+h*0.5;
+            const FR = ent.vx >= 0;
+            const moving = Math.abs(ent.vx) > 0.1;
+            const walkBob = moving ? Math.sin(T*0.18)*2.5 : 0;
+            const stoneCol = H ? '#ff7755' : '#3e3e52';
+            const stoneDk  = H ? '#cc2200' : '#28282e';
+            const xtalCol  = H ? 'rgba(255,160,140,0.9)' : 'rgba(80,200,255,0.9)';
+
+            // Sombra
+            C.globalAlpha=0.22; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(cx2, y+h+2, w*0.44, 2.5, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
+
+            // Piernas
+            const legSwing = moving ? Math.sin(T*0.22)*4 : 0;
+            C.fillStyle = stoneDk;
+            C.fillRect(x+2,   y+h*0.72+walkBob+legSwing,  w*0.36, h*0.28-Math.abs(legSwing));
+            C.fillRect(x+w*0.55, y+h*0.72+walkBob-legSwing, w*0.36, h*0.28-Math.abs(legSwing));
+
+            // Torso con gradiente
+            const bodyG = C.createLinearGradient(x, y+h*0.18+walkBob, x+w, y+h*0.72+walkBob);
+            bodyG.addColorStop(0, H?'#ff9977':'#4e4e66'); bodyG.addColorStop(1, H?'#cc3300':'#272730');
+            C.fillStyle=bodyG; C.beginPath(); C.roundRect(x+2, y+h*0.18+walkBob, w-4, h*0.55, 5); C.fill();
+            // Grietas en el cuerpo
+            if (!H) {
+                C.strokeStyle='rgba(0,0,0,0.55)'; C.lineWidth=1.5;
+                C.beginPath(); C.moveTo(cx2-4,y+h*0.24+walkBob); C.lineTo(cx2-2,y+h*0.48+walkBob); C.lineTo(cx2+4,y+h*0.58+walkBob); C.stroke();
+                C.beginPath(); C.moveTo(cx2+6,y+h*0.30+walkBob); C.lineTo(cx2+4,y+h*0.44+walkBob); C.stroke();
+            }
+
+            // Cristales incrustados en el cuerpo
+            const crystals = [
+                {px:cx2-6, py:y+h*0.28+walkBob, ang:-0.38, len:10},
+                {px:cx2+6, py:y+h*0.35+walkBob, ang:0.32,  len:8},
+                {px:cx2-2, py:y+h*0.52+walkBob, ang:-0.55, len:7},
+                {px:cx2+8, py:y+h*0.23+walkBob, ang:0.50,  len:9},
+            ];
+            crystals.forEach(({px,py,ang,len}) => {
+                const _g = 0.82 + Math.sin(T*0.09+px*0.05)*0.18;
+                C.save(); C.translate(px,py); C.rotate(ang);
+                C.fillStyle = xtalCol; C.globalAlpha = _g;
+                C.beginPath(); C.moveTo(-2.5,0); C.lineTo(0,-len); C.lineTo(2.5,0); C.closePath(); C.fill();
+                C.globalAlpha = _g * 0.3;
+                C.fillStyle = H?'rgba(255,120,100,1)':'rgba(120,220,255,1)';
+                C.beginPath(); C.ellipse(0, -len*0.5, 5, len*0.55, 0, 0, Math.PI*2); C.fill();
+                C.globalAlpha = 1; C.restore();
+            });
+
+            // Brazos
+            C.fillStyle=stoneDk;
+            if (!FR) { C.save(); C.translate(cx2,cy2+walkBob); C.scale(-1,1); C.translate(-cx2,-(cy2+walkBob)); }
+            const armSwing = moving ? Math.sin(T*0.18)*0.22 : 0;
+            C.save(); C.translate(x-2,y+h*0.26+walkBob); C.rotate(-0.25+armSwing); C.fillRect(0,0,8,h*0.38); C.restore();
+            C.save(); C.translate(x+w-6,y+h*0.26+walkBob); C.rotate(0.25-armSwing); C.fillRect(0,0,8,h*0.38); C.restore();
+            if (!FR) C.restore();
+
+            // Cabeza (bloque de piedra)
+            const headG = C.createLinearGradient(cx2-w*0.3,y+h*0.02+walkBob, cx2+w*0.3,y+h*0.18+walkBob);
+            headG.addColorStop(0,H?'#ff9977':'#505068'); headG.addColorStop(1,H?'#cc3300':'#303040');
+            C.fillStyle=headG; C.beginPath(); C.roundRect(cx2-w*0.3,y+h*0.02+walkBob,w*0.6,h*0.18,4); C.fill();
+
+            // Ojos cristalinos
+            const eyeGlow = 0.78 + Math.sin(T*0.11)*0.22;
+            C.globalAlpha=eyeGlow; C.fillStyle=H?'rgba(255,80,0,1)':'rgba(60,210,255,1)';
+            C.beginPath(); C.arc(cx2-6,y+h*0.10+walkBob,3.8,0,Math.PI*2); C.fill();
+            C.beginPath(); C.arc(cx2+6,y+h*0.10+walkBob,3.8,0,Math.PI*2); C.fill();
+            C.globalAlpha=eyeGlow*0.35; C.fillStyle=H?'rgba(255,40,0,1)':'rgba(40,200,255,1)';
+            C.beginPath(); C.arc(cx2-6,y+h*0.10+walkBob,8,0,Math.PI*2); C.fill();
+            C.beginPath(); C.arc(cx2+6,y+h*0.10+walkBob,8,0,Math.PI*2); C.fill();
+            C.globalAlpha=1;
+
+            // HP bar
+            const _ghf=ent.hp/ent.maxHp; C.fillStyle='rgba(0,0,0,0.75)'; C.fillRect(x-1,y-15,w+2,7);
+            C.fillStyle=_ghf>0.5?'#44aaff':'#ff4444'; C.fillRect(x,y-14,w*_ghf,5);
+            C.strokeStyle=H?'#ff6644':'#88ccff'; C.lineWidth=1.2; C.strokeRect(x-0.5,y-14.5,w+1,6);
+            C.font='bold 11px "VT323"'; C.fillStyle='#aaccff'; C.textAlign='center';
+            C.fillText(ent.name+' Nv.'+ent.level, cx2, y-17); C.textAlign='left';
+
+        } else if (ent.type === 'brood_mother') {
+            // ── MADRE ARAÑA (JEFE ÉPICO) — araña masiva con corona y aura ──
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const cx2=x+w/2, cy2=y+h*0.55;
+            const enraged = (ent.enragedFrames||0) > 0 || ent.bossEnrage;
+            const phase3  = ent.bossPhase === 3;
+            const legAnim = Math.sin(T * (enraged ? 0.38 : 0.22)) * (enraged ? 1.3 : 0.9);
+            const invul   = (ent.bmInvulFrames||0) > 0;
+
+            // Colores por fase
+            const bodyCol  = invul ? '#ffffff' : (phase3 ? '#1a0010' : (enraged ? '#1a0005' : '#0d000a'));
+            const bodyCol2 = invul ? '#cccccc' : (phase3 ? '#660044' : (enraged ? '#880020' : '#440022'));
+            const eyeCol   = invul ? '#ffffff' : (phase3 ? '#ff3300' : (enraged ? '#ff5500' : '#ff0088'));
+
+            // Aura pulsante (fase 2+)
+            if (enraged || phase3) {
+                const _aAlpha = 0.07 + Math.sin(T*0.10)*0.05;
+                C.globalAlpha = _aAlpha * 2.5;
+                const _aGrad = C.createRadialGradient(cx2,cy2,0,cx2,cy2,w*1.6);
+                _aGrad.addColorStop(0, phase3?'rgba(255,40,0,1)':'rgba(220,0,120,1)');
+                _aGrad.addColorStop(1,'rgba(0,0,0,0)');
+                C.fillStyle=_aGrad; C.beginPath(); C.arc(cx2,cy2,w*1.6,0,Math.PI*2); C.fill();
+                C.globalAlpha=1;
+            }
+
+            // Sombra enorme
+            C.globalAlpha=0.28; C.fillStyle='#000';
+            C.beginPath(); C.ellipse(cx2,y+h+2,w*0.54,3.5,0,0,Math.PI*2); C.fill(); C.globalAlpha=1;
+
+            // Telarañas colgantes decorativas (no interactivas)
+            C.strokeStyle=`rgba(200,180,220,0.22)`; C.lineWidth=1;
+            for (let _ws=0;_ws<4;_ws++) {
+                const _wx=x+(_ws+0.5)*w/4, _wl=12+Math.sin(_ws*2.7+T*0.04)*6;
+                C.beginPath(); C.moveTo(_wx,y-4); C.lineTo(_wx,y-4-_wl); C.stroke();
+            }
+
+            // 10 patas (5 por lado)
+            C.lineWidth = 3;
+            for (let side=-1; side<=1; side+=2) {
+                for (let i=0; i<5; i++) {
+                    const lp   = legAnim*(i%2===0?1:-1)*side;
+                    const bX   = cx2+side*w*0.18+(i-2)*side*w*0.04;
+                    const bY   = cy2+(i-2)*h*0.12;
+                    const mX   = cx2+side*(w*0.75+i*3);
+                    const mY   = cy2-h*0.25+lp*10;
+                    const tX   = cx2+side*(w*1.25+i*4);
+                    const tY   = y+h+lp*5;
+                    C.strokeStyle = H?'#ff8866':(invul?'#ffffff':(enraged?'#550011':'#220008'));
+                    C.beginPath(); C.moveTo(bX,bY); C.quadraticCurveTo(mX,mY,tX,tY); C.stroke();
+                    // Articulaciones visibles
+                    C.fillStyle = H?'#ffaa88':(phase3?'#441122':'#330011');
+                    C.beginPath(); C.arc(mX,mY,2.5,0,Math.PI*2); C.fill();
+                }
+            }
+
+            // Abdomen (grande, con patrón de calavera)
+            const abdG = C.createRadialGradient(cx2-4,cy2+5,2,cx2,cy2+5,w*0.52);
+            abdG.addColorStop(0,bodyCol2); abdG.addColorStop(1,bodyCol);
+            C.fillStyle=abdG; C.beginPath(); C.ellipse(cx2,cy2+h*0.14,w*0.50,h*0.46,0,0,Math.PI*2); C.fill();
+            // Patrón en abdomen
+            if (!H && !invul) {
+                // Hourglass / skull pattern
+                C.fillStyle = phase3?'rgba(255,60,0,0.65)':(enraged?'rgba(255,80,20,0.55)':'rgba(180,0,100,0.5)');
+                C.beginPath(); C.ellipse(cx2,cy2+h*0.14,w*0.24,h*0.20,0,0,Math.PI*2); C.fill();
+                C.fillStyle='rgba(0,0,0,0.75)';
+                for (let _oe=0;_oe<3;_oe++) {
+                    C.beginPath(); C.arc(cx2-5+_oe*5,cy2+h*0.1,2,0,Math.PI*2); C.fill();
+                }
+                // Colmillos en abdomen
+                C.fillStyle=phase3?'rgba(255,80,0,0.5)':'rgba(200,0,80,0.4)';
+                C.beginPath(); C.moveTo(cx2-8,cy2+h*0.22); C.lineTo(cx2-4,cy2+h*0.34); C.lineTo(cx2,cy2+h*0.22); C.fill();
+                C.beginPath(); C.moveTo(cx2+2,cy2+h*0.22); C.lineTo(cx2+6,cy2+h*0.34); C.lineTo(cx2+10,cy2+h*0.22); C.fill();
+            }
+
+            // Cefalotórax
+            const cefG = C.createRadialGradient(cx2,cy2-h*0.12,0,cx2,cy2-h*0.12,w*0.36);
+            cefG.addColorStop(0,bodyCol2); cefG.addColorStop(1,bodyCol);
+            C.fillStyle=cefG; C.beginPath(); C.ellipse(cx2,cy2-h*0.12,w*0.32,h*0.32,0,0,Math.PI*2); C.fill();
+
+            // Corona espinosa (3 púas)
+            const crownCol = phase3?'#ff4400':(enraged?'#cc0066':'#880044');
+            C.fillStyle = crownCol;
+            for (let _p=-1;_p<=1;_p++) {
+                const _px=cx2+_p*10, _py=cy2-h*0.38;
+                const _plen = 12+Math.abs(_p)*4;
+                C.beginPath(); C.moveTo(_px-4,_py); C.lineTo(_px,_py-_plen); C.lineTo(_px+4,_py); C.closePath(); C.fill();
+                // Glow en las púas
+                C.globalAlpha=0.4; C.fillStyle=phase3?'#ff8800':'#ff0088';
+                C.beginPath(); C.arc(_px,_py-_plen+2,3.5,0,Math.PI*2); C.fill(); C.globalAlpha=1;
+            }
+
+            // 6 ojos
+            const eyeRow = cy2-h*0.18;
+            for (let _e=0;_e<6;_e++) {
+                const _ex = cx2+(_e-2.5)*5.5;
+                const eyePulse = 0.75+Math.sin(T*0.12+_e*1.2)*0.25;
+                C.globalAlpha=eyePulse; C.fillStyle=eyeCol;
+                C.beginPath(); C.arc(_ex,eyeRow,3.2,0,Math.PI*2); C.fill();
+                C.globalAlpha=eyePulse*0.4; C.fillStyle=eyeCol;
+                C.beginPath(); C.arc(_ex,eyeRow,7,0,Math.PI*2); C.fill();
+                C.globalAlpha=1;
+                C.fillStyle='rgba(255,255,255,0.7)';
+                C.beginPath(); C.arc(_ex+0.8,eyeRow-1.2,1.0,0,Math.PI*2); C.fill();
+            }
+
+            // Colmillos
+            C.fillStyle = H?'#ffaaaa':'#ccccdd';
+            C.beginPath(); C.moveTo(cx2-8,eyeRow+12); C.lineTo(cx2-5,eyeRow+22); C.lineTo(cx2-2,eyeRow+13); C.closePath(); C.fill();
+            C.beginPath(); C.moveTo(cx2+2,eyeRow+12); C.lineTo(cx2+5,eyeRow+22); C.lineTo(cx2+8,eyeRow+13); C.closePath(); C.fill();
+
+            // Barra HP de jefe
+            const _bmW2=Math.max(80,w*1.6); const _bmX=cx2-_bmW2/2;
+            const _bmHF=Math.max(0,ent.hp/ent.maxHp);
+            const _bmHC = invul?'#ffffff':(phase3?'#ff4400':(enraged?'#ff0055':'#cc0088'));
+            C.fillStyle='rgba(0,0,0,0.82)'; C.fillRect(_bmX-2,y-30,_bmW2+4,12);
+            C.fillStyle=_bmHC; C.fillRect(_bmX,y-29,_bmW2*_bmHF,10);
+            // Segmentos en la barra HP
+            C.strokeStyle='rgba(0,0,0,0.4)'; C.lineWidth=1;
+            for(let _seg=1;_seg<4;_seg++){C.beginPath();C.moveTo(_bmX+_bmW2*(_seg/4),y-29);C.lineTo(_bmX+_bmW2*(_seg/4),y-19);C.stroke();}
+            C.strokeStyle=_bmHC; C.lineWidth=1.5; C.strokeRect(_bmX-1,y-29.5,_bmW2+2,11);
+            // Nombre y fase
+            C.font='bold 13px "VT323"'; C.fillStyle=invul?'#ffffff':_bmHC;
+            C.textAlign='center';
+            const _phTxt = phase3?'  [☠ FASE 3]':(enraged?'  [FRENÉTICA]':'');
+            C.fillText(ent.name+' Nv.'+ent.level+_phTxt, cx2, y-33); C.textAlign='left';
+
         } else if (ent.type === 'zombie') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height; const walk = Math.abs(ent.vx)>0.05 ? Math.sin(T*0.2)*0.3 : 0;
             if (!FR) { C.translate(x+w,0); C.scale(-1,1); } const bx = FR ? x : 0;
@@ -1380,7 +1895,22 @@ window.draw = function() {
                 window.lightCtx.fillStyle = tGrad; window.lightCtx.beginPath(); window.lightCtx.arc(tx, ty, tGlow, 0, Math.PI*2); window.lightCtx.fill();
             }
         });
-        // Luz de plantas fluorescentes de cueva
+        // Luz de slimes de cueva
+        if (window.entities?.length > 0 && ambientDarkness > 0.1) {
+            const _slimeCols = [
+                [40,180,80], [40,80,220], [140,40,220],
+            ];
+            for (const _se of window.entities) {
+                if (_se.type !== 'slime' || !_se.inCave) continue;
+                const [slx, sly] = _wts(_se.x + _se.width/2, _se.y + _se.height/2);
+                const _sc = _slimeCols[(_se.slimeColor||0)%3];
+                const _sgr = window.lightCtx.createRadialGradient(slx, sly, 0, slx, sly, 35*_lz);
+                _sgr.addColorStop(0, `rgba(${_sc[0]},${_sc[1]},${_sc[2]},0.45)`);
+                _sgr.addColorStop(1, `rgba(${_sc[0]},${_sc[1]},${_sc[2]},0)`);
+                window.lightCtx.fillStyle = _sgr;
+                window.lightCtx.beginPath(); window.lightCtx.arc(slx, sly, 35*_lz, 0, Math.PI*2); window.lightCtx.fill();
+            }
+        }
         if (window.cavePlants?.length > 0) {
             const _plantPulse = 0.7 + Math.sin(_fc * 0.08) * 0.3;
             const _plantColors = [
@@ -1401,6 +1931,26 @@ window.draw = function() {
                 _pGr.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
                 window.lightCtx.fillStyle = _pGr;
                 window.lightCtx.beginPath(); window.lightCtx.arc(plx, ply, _pGlowR, 0, Math.PI*2); window.lightCtx.fill();
+            }
+        }
+        // Luz de gólem (cristalina azul) y aura de Madre Araña
+        if (window.entities?.length > 0 && ambientDarkness > 0.1) {
+            for (const _le of window.entities) {
+                if (!_le.inCave) continue;
+                if (_le.type === 'golem') {
+                    const [gx,gy] = _wts(_le.x+_le.width/2, _le.y+_le.height*0.25);
+                    const _gf = 0.75 + Math.sin((_fc)*0.09+_le.x*0.01)*0.25;
+                    const gR = 90 * _lz * _gf;
+                    const gGr = window.lightCtx.createRadialGradient(gx,gy,0,gx,gy,gR);
+                    gGr.addColorStop(0,'rgba(80,200,255,0.55)'); gGr.addColorStop(0.4,'rgba(40,140,255,0.20)'); gGr.addColorStop(1,'rgba(0,100,255,0)');
+                    window.lightCtx.fillStyle=gGr; window.lightCtx.beginPath(); window.lightCtx.arc(gx,gy,gR,0,Math.PI*2); window.lightCtx.fill();
+                } else if (_le.type === 'brood_mother' && _le.bossPhase === 3) {
+                    const [bmx,bmy] = _wts(_le.x+_le.width/2, _le.y+_le.height*0.5);
+                    const _bmR = 70 * _lz;
+                    const _bmGr = window.lightCtx.createRadialGradient(bmx,bmy,0,bmx,bmy,_bmR);
+                    _bmGr.addColorStop(0,'rgba(255,30,0,0.25)'); _bmGr.addColorStop(1,'rgba(255,0,0,0)');
+                    window.lightCtx.fillStyle=_bmGr; window.lightCtx.beginPath(); window.lightCtx.arc(bmx,bmy,_bmR,0,Math.PI*2); window.lightCtx.fill();
+                }
             }
         }
 
