@@ -492,9 +492,10 @@ window.draw = function() {
         }
 
         // ── Cristales de cueva: estalactitas y estalagmitas decorativas ──────
-        if (window.getUGCellV && window.getTerrainCol && !_playerOnSurf) {
+        if (window.getUGCellV && window.getTerrainCol && !_onSurface) {
             const C = window.ctx;
             const _cFrame = window.game.frameCount;
+            const _fogEnabledC = !!window._caveExplored;
             for (let _cc = startCol; _cc <= endCol; _cc++) {
                 const _ccd = window.getTerrainCol(_cc);
                 if (!_ccd || _ccd.type === 'hole') continue;
@@ -504,38 +505,30 @@ window.draw = function() {
                 for (let _cr = 1; _cr < _maxCRow - 1; _cr++) {
                     const _cCellY = _ctopY + _cr * bs;
                     if (_cCellY < _iCamY - bs*2 || _cCellY > _iCamY + H/z + bs*2) continue;
-                    // Fog check
-                    if (_fogEnabled && !_playerOnSurf && !window._caveExplored?.has(`${_cc}_${_cr}`)) continue;
-                    // Deterministic hash for this cell
+                    if (_fogEnabledC && !window._caveExplored?.has(`${_cc}_${_cr}`)) continue;
                     const _hash = ((_cc * 374761393) ^ (_cr * 1103515245) ^ ((window.worldSeed||12345) * 2654435761)) >>> 0;
                     const _hf   = _hash / 0xFFFFFFFF;
                     const _matC = window.getUGCellV(_cc, _cr);
                     if (_matC === 'air') continue;
-                    // Estalactita: celda sólida encima de una air
                     const _matBelow = window.getUGCellV(_cc, _cr + 1);
                     if (_matBelow === 'air' && _hf < 0.055) {
                         const _cLen = 5 + _hf * 30;
                         const _cX   = _cx2 + bs * (0.2 + _hf * 0.6);
-                        const _cRow = _cr;
-                        // Profundidad → color
-                        const _cCol = _cRow > 20 ? `rgba(180,80,255,0.85)` : (_cRow > 12 ? `rgba(60,160,255,0.80)` : `rgba(200,235,255,0.65)`);
+                        const _cCol = _cr > 20 ? `rgba(180,80,255,0.85)` : (_cr > 12 ? `rgba(60,160,255,0.80)` : `rgba(200,235,255,0.65)`);
                         const _pulse = 0.7 + Math.sin(_cFrame * 0.06 + _cc * 0.7 + _cr * 1.1) * 0.3;
                         C.globalAlpha = _pulse;
                         C.fillStyle = _cCol;
                         C.beginPath(); C.moveTo(_cX-3, _cCellY+bs-1); C.lineTo(_cX+3, _cCellY+bs-1); C.lineTo(_cX, _cCellY+bs-1+_cLen); C.closePath(); C.fill();
-                        // Reflejo brillante
                         C.globalAlpha = _pulse * 0.55;
                         C.fillStyle = 'rgba(255,255,255,0.8)';
                         C.fillRect(_cX-0.5, _cCellY+bs, 1, _cLen * 0.4);
                         C.globalAlpha = 1;
                     }
-                    // Estalagmita: celda sólida debajo de una air
                     const _matAbove = window.getUGCellV(_cc, _cr - 1);
                     if (_matAbove === 'air' && _hf > 0.96) {
                         const _sLen = 4 + (_hf-0.96)*25*20;
                         const _sX   = _cx2 + bs * (0.15 + ((_hf*1.7)%1) * 0.7);
-                        const _sRow = _cr;
-                        const _sCol = _sRow > 20 ? `rgba(160,60,240,0.75)` : (_sRow > 12 ? `rgba(40,140,230,0.70)` : `rgba(180,220,255,0.55)`);
+                        const _sCol = _cr > 20 ? `rgba(160,60,240,0.75)` : (_cr > 12 ? `rgba(40,140,230,0.70)` : `rgba(180,220,255,0.55)`);
                         const _spulse = 0.65 + Math.sin(_cFrame * 0.07 + _cc * 1.1 + _cr * 0.8) * 0.35;
                         C.globalAlpha = _spulse;
                         C.fillStyle = _sCol;
