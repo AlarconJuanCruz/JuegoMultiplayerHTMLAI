@@ -982,6 +982,8 @@ window.draw = function() {
         if (!(ent.x + ent.width > _visLeft && ent.x < _visRight + 120)) return;
         // Ocultar entidades subterráneas cuando jugador está en superficie
         if (_onSurface && ent.y > _surfCutY) return;
+        // Ocultar entidades de superficie cuando jugador está bajo tierra
+        if (!_onSurface && !ent.inCave && ent.y < _surfCutY - bs * 4) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
         // LOD: entidades a >320px del jugador usan flat colors (sin gradientes)
         const _eLODDist = Math.hypot((ent.x+ent.width/2) - (window.player.x+window.player.width/2),
@@ -1585,7 +1587,8 @@ window.draw = function() {
         }
 
         // Barra de HP y nombre sobre cada entidad
-        {
+        // (worm, golem y brood_mother tienen su propia barra — skip para ellos)
+        if (ent.type !== 'worm' && ent.type !== 'golem' && ent.type !== 'brood_mother') {
             const isHostile = ent.type !== 'chicken'; const timeSinceHit = Date.now() - (ent.lastHitTime || 0); const pct = Math.max(0, ent.hp / ent.maxHp);
             const showBar = isHostile || (ent.hp < ent.maxHp && timeSinceHit < 3000);
             if (showBar) {
@@ -2140,28 +2143,51 @@ window.draw = function() {
         }
     }
 
-    // === LLUVIA (gotas físicas + splashes, Q≠low) ===
+    // === LLUVIA (gotas simplificadas, Q≠low) ===
     if (window.game.isRaining && Q !== 'low') {
-        const C = window.ctx; const fc = window.game.frameCount; const z = window.game.zoom || 1; const camX = window.camera.x; const camY = window.camera.y;
-        const RAIN_COUNT = Q === 'high' ? 350 : 220;
-        if (!window._rainDrops || window._rainDrops.length === 0) { window._rainDrops = []; for (let i = 0; i < RAIN_COUNT; i++) { window._rainDrops.push({ x: Math.random() * (_ppW + 200) - 100, y: Math.random() * _ppH, vy: 14 + Math.random() * 8, vx: -2.5 - Math.random() * 1.5, len: 14 + Math.random() * 14, a: 0.25 + Math.random() * 0.25, splashTimer: 0 }); } }
+        const C = window.ctx;
+        const RAIN_COUNT = Q === 'high' ? 160 : 100; // reducido de 350/220
+        if (!window._rainDrops || window._rainDrops.length !== RAIN_COUNT) {
+            window._rainDrops = [];
+            for (let i = 0; i < RAIN_COUNT; i++) {
+                window._rainDrops.push({ x: Math.random()*(_ppW+200)-100, y: Math.random()*_ppH, vy: 14+Math.random()*8, vx: -2.5-Math.random()*1.5, len: 12+Math.random()*10 });
+            }
+        }
         if (!window._rainSplashes) window._rainSplashes = [];
+        const _camX2 = window.camera.x, _camY2 = window.camera.y, _z2 = window.game.zoom||1;
         for (const d of window._rainDrops) {
             d.x += d.vx; d.y += d.vy;
-            const wx = d.x / z + camX - (_ppW / 2) * (1 / z - 1); const wy = d.y / z + camY - (_ppH / 2) * (1 / z - 1);
-            const gY_w = window.getGroundY ? window.getGroundY(wx) : window.game.groundLevel; const gY_sc = (gY_w - camY) * z + _ppH / 2 * (1 - z);
-            const bs = window.game.blockSize; let hitBlock = false; let blockHitY = 0;
-            for (const b of (window.blocks || [])) { if (b.type === 'ladder' || (b.type === 'door' && b.open)) continue; const bsx = (b.x - camX) * z + _ppW / 2 * (1 - z); const bsy = (b.y - camY) * z + _ppH / 2 * (1 - z); const bsw = bs * z; const bsh = (b.type === 'door' ? bs * 2 : bs) * z; if (d.x >= bsx && d.x <= bsx + bsw && d.y >= bsy && d.y <= bsy + bsh) { hitBlock = true; blockHitY = bsy; break; } }
-            const hitGround = d.y >= gY_sc;
-            if (hitBlock || hitGround) { const splashY = hitBlock ? blockHitY : gY_sc; window._rainSplashes.push({ x: d.x, y: splashY, life: 1.0, r: 2.5 + Math.random() * 2 }); d.x = Math.random() * (_ppW + 200) - 100; d.y = -d.len - Math.random() * 80; d.vy = 14 + Math.random() * 8; d.vx = -2.5 - Math.random() * 1.5; }
-            else if (d.x < -100 || d.x > _ppW + 100) { d.x = d.vx < 0 ? _ppW + 80 : -80; d.y = Math.random() * _ppH * 0.6; }
+            // Solo colisión con el suelo (sin colisión con blocks — no notable visualmente)
+            const _wx2 = (_ppW/2 + (d.x - _ppW/2)/_z2) + _camX2;
+            const gY_w = window.getGroundY ? window.getGroundY(_wx2) : window.game.groundLevel;
+            const gY_sc = (_ppH/2) + (gY_w - _camY2)*_z2;
+            if (d.y >= gY_sc) {
+                if (window._rainSplashes.length < 60) window._rainSplashes.push({ x:d.x, y:gY_sc, life:1.0, r:2+Math.random()*1.5 });
+                d.x = Math.random()*(_ppW+200)-100; d.y = -d.len - Math.random()*80;
+                d.vy = 14+Math.random()*8; d.vx = -2.5-Math.random()*1.5;
+            } else if (d.x < -100 || d.x > _ppW+100) {
+                d.x = d.vx<0 ? _ppW+80 : -80; d.y = Math.random()*_ppH*0.6;
+            }
         }
-        for (let si = window._rainSplashes.length - 1; si >= 0; si--) { window._rainSplashes[si].life -= 0.08; if (window._rainSplashes[si].life <= 0) window._rainSplashes.splice(si, 1); }
+        for (let si = window._rainSplashes.length-1; si >= 0; si--) {
+            window._rainSplashes[si].life -= 0.10;
+            if (window._rainSplashes[si].life <= 0) window._rainSplashes.splice(si,1);
+        }
         C.save(); C.lineCap = 'round';
-        C.lineWidth = 1; C.beginPath(); for (const d of window._rainDrops) { if (d.a < 0.38) { C.moveTo(d.x, d.y); C.lineTo(d.x - d.vx * d.len / d.vy, d.y - d.len); } } C.strokeStyle = 'rgba(180,215,255,0.30)'; C.stroke();
-        C.lineWidth = 1.3; C.beginPath(); for (const d of window._rainDrops) { if (d.a >= 0.38) { C.moveTo(d.x, d.y); C.lineTo(d.x - d.vx * d.len / d.vy, d.y - d.len); } } C.strokeStyle = 'rgba(200,230,255,0.42)'; C.stroke();
-        for (const sp of window._rainSplashes) { const a = sp.life * 0.55; C.beginPath(); C.ellipse(sp.x, sp.y, sp.r * (2 - sp.life), sp.r * 0.4, 0, 0, Math.PI * 2); C.strokeStyle = `rgba(200,230,255,${a})`; C.lineWidth = 0.8; C.stroke(); const nSp = Math.floor(sp.r); for (let n = 0; n < nSp; n++) { const sa = (n / nSp) * Math.PI; const sd = sp.r * (1 - sp.life) * 6; C.beginPath(); C.arc(sp.x + Math.cos(sa) * sd, sp.y - Math.sin(sa) * sd * 0.6, 0.7, 0, Math.PI * 2); C.fillStyle = `rgba(210,235,255,${a * 0.7})`; C.fill(); } }
-        C.restore(); C.fillStyle = 'rgba(40,60,90,0.04)'; C.fillRect(0, 0, _ppW, _ppH);
+        // Dibujar todas las gotas en un solo path
+        C.lineWidth = 1.2; C.strokeStyle = 'rgba(190,220,255,0.35)';
+        C.beginPath();
+        for (const d of window._rainDrops) { C.moveTo(d.x,d.y); C.lineTo(d.x-d.vx*d.len/d.vy, d.y-d.len); }
+        C.stroke();
+        // Splashes: un solo ellipse stroke por splash (sin arcos individuales)
+        C.lineWidth = 0.9;
+        for (const sp of window._rainSplashes) {
+            const a = sp.life * 0.5;
+            C.strokeStyle = `rgba(200,230,255,${a})`;
+            C.beginPath(); C.ellipse(sp.x, sp.y, sp.r*(2-sp.life)*1.8, sp.r*0.35, 0, 0, Math.PI*2); C.stroke();
+        }
+        C.restore();
+        C.fillStyle = 'rgba(40,60,90,0.04)'; C.fillRect(0,0,_ppW,_ppH);
     } else if (window._rainDrops) { window._rainDrops = []; window._rainSplashes = []; }
 
     // Borde de pantalla
