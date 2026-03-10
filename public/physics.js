@@ -14,16 +14,21 @@ window.checkBlockCollisions = function (axis) {
     if (window.player.inBackground) return false;
     const p  = window.player;
     const bs = window.game.blockSize;
-    let hitWallX = false;   // ← devuelve true si colisionó en eje X con pared sólida
+    let hitWallX = false;
 
-    // ── 1. Bloques construidos (bloques colocados por jugadores) ────────────────
+    // Spatial pre-filter: solo iterar bloques que solapan el AABB del jugador ± 1 bloque
+    const _pMinX = p.x - bs, _pMaxX = p.x + p.width  + bs;
+    const _pMinY = p.y - bs, _pMaxY = p.y + p.height + bs * 2;
+
+    // ── 1. Bloques construidos ──────────────────────────────────────────────────
     for (const b of window.blocks) {
+        if (b.x + bs < _pMinX || b.x > _pMaxX || b.y + bs*2 < _pMinY || b.y > _pMaxY) continue;
         if (
             (b.type === 'door' && b.open) ||
             b.type === 'box'      || b.type === 'campfire' ||
             b.type === 'bed'      || b.type === 'grave'    ||
             b.type === 'barricade'|| b.type === 'ladder'   ||
-            b.type === 'placed_torch'  // antorcha plantada: solo visual, sin colisión
+            b.type === 'placed_torch'
         ) continue;
 
         const itemHeight = b.type === 'door' ? bs * 2 : bs;
@@ -88,6 +93,27 @@ window.checkBlockCollisions = function (axis) {
         }
     }
 
+    // ── 1.5. Colisión lateral con terreno de SUPERFICIE (paredes de colina/cliff) ──
+    // El terreno superficial no existe en window.blocks, por lo que las caras verticales
+    // de las colinas no tenían colisión X. Esto hacía que vx nunca se pusiera a 0 y
+    // la animación de caminar se reproducía aunque el jugador estuviese bloqueado.
+    if (axis === 'x' && window.getTerrainCol) {
+        const footY = p.y + p.height;
+        // Columna hacia donde se mueve el jugador
+        const edgeX  = p.vx >= 0 ? p.x + p.width + 0.5 : p.x - 0.5;
+        const adjCol = Math.floor(edgeX / bs);
+        const cdAdj  = window.getTerrainCol(adjCol);
+        if (cdAdj && cdAdj.type !== 'hole') {
+            const cliffTopY = cdAdj.topY;
+            // Es una pared si el terreno adyacente es más de 1 bloque alto respecto a los pies
+            // (lo que el snap no puede resolver solo)
+            if (cliffTopY < footY - bs * 0.85 && p.y < cliffTopY + (footY - p.y)) {
+                if (p.vx > 0) { p.x = adjCol * bs - p.width - 0.1; p.vx = 0; hitWallX = true; }
+                else if (p.vx < 0) { p.x = (adjCol + 1) * bs + 0.1; p.vx = 0; hitWallX = true; }
+            }
+        }
+    }
+
     // ── 2. Colisión con celdas UG (terreno subterráneo generado/minado) ─────────
     //
     // DISEÑO:
@@ -99,15 +125,16 @@ window.checkBlockCollisions = function (axis) {
     //   • Eje X: bloquear si la celda cubre el torso (cellY < pFeetY - 2).
     //     Ignora celdas de suelo para no bloquear el movimiento horizontal.
     //
-    if (!window.getUGCellV || !window.getTerrainCol) return;
+    // NOTA: los `return` tempranos ahora devuelven hitWallX (puede ser true desde sección 1/1.5)
+    if (!window.getUGCellV || !window.getTerrainCol) return hitWallX;
 
     const _midCol = Math.floor((p.x + p.width * 0.5) / bs);
     const _cdMid  = window.getTerrainCol(_midCol);
-    if (!_cdMid || _cdMid.type === 'hole') return;
+    if (!_cdMid || _cdMid.type === 'hole') return hitWallX;
     const _surfY  = _cdMid.topY;
 
     const pFeetY = p.y + p.height;
-    if (pFeetY <= _surfY + bs * 0.25) return;  // en superficie, snap se encarga
+    if (pFeetY <= _surfY + bs * 0.25) return hitWallX;  // en superficie, snap se encarga
 
     const UG_DEPTH = window.UG_MAX_DEPTH || 90;
     const colL = Math.floor(p.x / bs);

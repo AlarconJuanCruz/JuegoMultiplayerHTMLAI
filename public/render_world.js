@@ -29,28 +29,30 @@ window.draw = function() {
     }
     if (window.game.isRaining) { r = Math.max(28, r - 55); g = Math.max(38, g - 55); b = Math.max(55, b - 35); }
 
-    // Gradiente de cielo — se extiende hasta H para que el área bajo el terreno
-    // sea oscura (tierra) y no el color claro del último stop del cielo.
-    let skyGrad = window.ctx.createLinearGradient(0, 0, 0, H);
-    const _skyFrac = Math.min(1, window.game.groundLevel / H); // fracción del cielo en la pantalla
-    if (darkness < 0.3) {
-        skyGrad.addColorStop(0,          `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(_skyFrac*0.5,`rgb(${Math.min(255,r+18)},${Math.min(255,g+12)},${Math.min(255,b+5)})`);
-        skyGrad.addColorStop(_skyFrac,   `rgb(${Math.min(255,r+50)},${Math.min(255,g+38)},${Math.min(255,b+18)})`);
-    } else if (darkness < 0.6) {
-        skyGrad.addColorStop(0,          `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(_skyFrac*0.4,`rgb(${Math.min(255,r+50)},${Math.min(255,g+30)},${Math.min(255,b-15)})`);
-        skyGrad.addColorStop(_skyFrac,   `rgb(${Math.min(255,r+100)},${Math.min(255,g+55)},${Math.min(255,b-10)})`);
-    } else {
-        skyGrad.addColorStop(0,          `rgb(${r},${g},${b})`);
-        skyGrad.addColorStop(_skyFrac*0.5,`rgb(${Math.max(0,r+8)},${Math.max(0,g+8)},${Math.max(0,b+18)})`);
-        skyGrad.addColorStop(_skyFrac,   `rgb(${Math.max(0,r+14)},${Math.max(0,g+12)},${Math.max(0,b+28)})`);
+    // Gradiente de cielo — cacheado, se recrea solo cuando los colores cambian (no cada frame)
+    const _skyKey = `${r>>1}_${g>>1}_${b>>1}_${(darkness*10)|0}`;
+    if (!window._skyGradCache || window._skyGradKey !== _skyKey) {
+        const _sg = window.ctx.createLinearGradient(0, 0, 0, H);
+        const _skyFrac = Math.min(1, window.game.groundLevel / H);
+        if (darkness < 0.3) {
+            _sg.addColorStop(0,           `rgb(${r},${g},${b})`);
+            _sg.addColorStop(_skyFrac*0.5,`rgb(${Math.min(255,r+18)},${Math.min(255,g+12)},${Math.min(255,b+5)})`);
+            _sg.addColorStop(_skyFrac,    `rgb(${Math.min(255,r+50)},${Math.min(255,g+38)},${Math.min(255,b+18)})`);
+        } else if (darkness < 0.6) {
+            _sg.addColorStop(0,           `rgb(${r},${g},${b})`);
+            _sg.addColorStop(_skyFrac*0.4,`rgb(${Math.min(255,r+50)},${Math.min(255,g+30)},${Math.min(255,b-15)})`);
+            _sg.addColorStop(_skyFrac,    `rgb(${Math.min(255,r+100)},${Math.min(255,g+55)},${Math.min(255,b-10)})`);
+        } else {
+            _sg.addColorStop(0,           `rgb(${r},${g},${b})`);
+            _sg.addColorStop(_skyFrac*0.5,`rgb(${Math.max(0,r+8)},${Math.max(0,g+8)},${Math.max(0,b+18)})`);
+            _sg.addColorStop(_skyFrac,    `rgb(${Math.max(0,r+14)},${Math.max(0,g+12)},${Math.max(0,b+28)})`);
+        }
+        _sg.addColorStop(Math.min(1, _skyFrac + 0.01), '#1a1008');
+        _sg.addColorStop(1, '#0d0804');
+        window._skyGradCache = _sg;
+        window._skyGradKey   = _skyKey;
     }
-    // Por debajo de la línea de horizonte: color tierra oscuro (nunca visible en condiciones normales,
-    // pero cubre cualquier hueco/hole en el terreno para que no se vea el cyan del cielo)
-    skyGrad.addColorStop(Math.min(1, _skyFrac + 0.01), '#1a1008');
-    skyGrad.addColorStop(1, '#0d0804');
-    window.ctx.fillStyle = skyGrad; window.ctx.fillRect(0, 0, W, H);
+    window.ctx.fillStyle = window._skyGradCache; window.ctx.fillRect(0, 0, W, H);
 
     // ── POSICIÓN EN PANTALLA DEL SUELO (con zoom) ─────────────────────────────
     // Usada para clipear montañas y parallax. Fórmula correcta con zoom:
@@ -358,7 +360,7 @@ window.draw = function() {
             }
             window.ctx.lineTo((colB + 1) * bs, bottomY); window.ctx.closePath(); window.ctx.clip();
             window.ctx.fillStyle = window._dirtPattern || '#3d2412'; window.ctx.fillRect(colA * bs, window.camera.y - 400, (colB - colA + 2) * bs, bottomY - window.camera.y + 500);
-            { const g = window.ctx.createLinearGradient(0, base - 40, 0, base + 660); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.08, 'rgba(0,0,0,0.06)'); g.addColorStop(0.28, 'rgba(0,0,0,0.20)'); g.addColorStop(0.55, 'rgba(0,0,0,0.38)'); g.addColorStop(1.0, 'rgba(0,0,0,0.58)'); window.ctx.fillStyle = g; window.ctx.fillRect(colA * bs, window.camera.y - 400, (colB - colA + 2) * bs, bottomY - window.camera.y + 500); }
+            { if (!window._terrShadGrad || window._terrShadBase !== base) { window._terrShadBase=base; const g=window.ctx.createLinearGradient(0,base-40,0,base+660); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(0.08,'rgba(0,0,0,0.06)'); g.addColorStop(0.28,'rgba(0,0,0,0.20)'); g.addColorStop(0.55,'rgba(0,0,0,0.38)'); g.addColorStop(1.0,'rgba(0,0,0,0.58)'); window._terrShadGrad=g; } window.ctx.fillStyle=window._terrShadGrad; window.ctx.fillRect(colA*bs, window.camera.y-400, (colB-colA+2)*bs, bottomY-window.camera.y+500); }
             for (let c = colA; c <= colB; c++) { const da = colDesert(c * bs + bs / 2); if (da <= 0) continue; window.ctx.globalAlpha = da; window.ctx.fillStyle = window._sandPattern || '#d4a853'; window.ctx.fillRect(c * bs, window.camera.y - 400, bs + 1, bottomY - window.camera.y + 500); }
             window.ctx.globalAlpha = 1; window.ctx.restore();
         }
@@ -371,14 +373,8 @@ window.draw = function() {
         }
         if (segStart !== null) drawSolidSegment(segStart, endCol + 1);
 
-        // ── CELDAS UNDERGROUND ───────────────────────────────────────────────────
-        // Superficie: 3 filas de transición + UN rect negro global (cero underground render)
-        // Underground: cache offscreen viewport-sized.
-        //   offY snapeado a 8 bloques → rebuild cada ~240px vertical (no cada bloque)
-        //   buffer horizontal ±8 cols → rebuild cada ~240px horizontal
-        //   Cache H = viewport + 10 bloques arriba/abajo de padding
-        //   Pre-build: se hace UNA sola vez cuando jugador llega a la entrada de la cueva
-        if (window.getUGCellV && window.getTerrainCol) {
+        // Underground terrain: solo se renderiza cuando el jugador está bajo tierra
+        if (window.getUGCellV && window.getTerrainCol && !_onSurface) {
             const C       = window.ctx;
             const bottomYu= _iCamY + H / z + bs * 4;
             const _fogEnabled = !!window._caveExplored;
@@ -386,19 +382,15 @@ window.draw = function() {
             const UG_COL = { dirt:'#5c3d22', stone:'#5a5a6a', coal:'#2a2a30', sulfur:'#7a6a10', diamond:'#1a6068', bedrock:'#1a1a1a' };
             const BG_DARK = '#141210', BG_VAR = '#181512';
 
-            // ── Build helper ──────────────────────────────────────────────────────
-            // CACHE_BUF_H: columnas extra a cada lado
-            // CACHE_BUF_V: bloques extra arriba y abajo (en unidades de bloque)
             const CACHE_BUF_H = 8;
-            const CACHE_BUF_V = 10; // 10 bloques = 300px de margen vertical
-            const SNAP_V      = 8;  // snap offY a chunks de 8 bloques = rebuild cada 240px
+            const CACHE_BUF_V = 10;
+            const SNAP_V      = 8;
 
             function _buildTerrainCache(bStartCol, bEndCol, bOffY) {
                 const _offX = bStartCol * bs;
                 const _vpW  = (bEndCol - bStartCol + 2) * bs + 4;
                 const _vpH  = Math.ceil(H / z) + bs * (CACHE_BUF_V * 2 + 4);
                 const _bBot = bOffY + _vpH;
-
                 if (!window._terrainCache
                     || window._terrainCache.width  < _vpW
                     || window._terrainCache.height < _vpH) {
@@ -409,23 +401,18 @@ window.draw = function() {
                 }
                 const CC = window._terrainCacheCtx;
                 CC.clearRect(0, 0, _vpW, _vpH);
-
                 for (let col = bStartCol; col <= bEndCol + 1; col++) {
                     const cd = window.getTerrainCol(col);
                     if (!cd || cd.type === 'hole') continue;
-                    const topY   = cd.topY;
-                    const cx     = col * bs - _offX;
-                    const dW     = bs + 0.5;
+                    const topY = cd.topY, cx = col * bs - _offX, dW = bs + 0.5;
                     const rStart = Math.max(0, Math.floor((bOffY - topY) / bs) - 1);
                     const rEnd   = Math.min(window.UG_MAX_DEPTH || 50, Math.ceil((_bBot - topY) / bs) + 1);
-
                     for (let row = rStart; row < rEnd; row++) {
                         const cellY = topY + row * bs;
                         if (cellY >= _bBot) break;
                         if (cellY + bs < bOffY) continue;
                         const cy = Math.floor(cellY - bOffY);
                         const cH = Math.min(bs, _bBot - cellY) + 1;
-
                         if (_fogEnabled && row > 0 && !window._caveExplored?.has(`${col}_${row}`)) {
                             CC.fillStyle = '#0a0a0c'; CC.fillRect(cx, cy, dW, cH); continue;
                         }
@@ -467,147 +454,88 @@ window.draw = function() {
                 window._tCacheMine     = window._mineStamp || 0;
             }
 
-            if (_onSurface) {
-                // ── SUPERFICIE: 3 filas de transición + UN rect negro que tapa todo ──
-                // No renderizamos nada del underground — cero work, cero freeze.
-                for (let col = startCol; col <= endCol; col++) {
-                    const cd = window.getTerrainCol(col);
-                    if (!cd || cd.type === 'hole') continue;
-                    const topY = cd.topY, x = col * bs, dW = bs + 0.5;
-                    for (let row = 0; row < 3; row++) {
-                        const cY = topY + row * bs;
-                        if (cY >= bottomYu) break;
-                        const cH = Math.min(bs, bottomYu - cY) + 1;
-                        const mat = window.getUGCellV(col, row);
-                        if (!mat || mat === 'air') { C.fillStyle = BG_DARK; C.fillRect(x, Math.floor(cY), dW, cH); continue; }
-                        C.fillStyle = UG_COL[mat] || '#5a5a6a'; C.fillRect(x, Math.floor(cY), dW, cH);
-                        if (mat === 'dirt') { const v=((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF; if(v>0.6){C.fillStyle='rgba(0,0,0,0.12)';C.fillRect(x,Math.floor(cY),dW,cH);} }
+            const _snapOffY = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
+            // Stamp throttleado: actualiza cada 30 frames para no rebuildar el cache
+            // en cada step de exploración (cada 6 frames). El fog se nota en <0.5s.
+            if (_lcFrame % 30 === 0 && _fogEnabled) window._tCacheExploreSt = window._caveExplored.size;
+            const _expCount = window._tCacheExploreSt || 0;
+            const _mStamp   = window._mineStamp || 0;
+            const _outH = startCol < (window._tCacheBufStart||0) + 3
+                       || endCol   > (window._tCacheBufEnd||0)   - 3;
+            const _needRebuild = !window._terrainCache || _outH
+                || window._tCacheOffY    !== _snapOffY
+                || window._tCacheExplore !== _expCount
+                || window._tCacheMine    !== _mStamp;
+
+            if (_needRebuild) {
+                _buildTerrainCache(startCol - CACHE_BUF_H, endCol + CACHE_BUF_H, _snapOffY);
+            }
+
+            C.drawImage(window._terrainCache, window._tCacheOffX, window._tCacheOffY);
+
+            // Grietas de minado
+            if (window._cellDamage && Object.keys(window._cellDamage).length > 0) {
+                for (const _crKey of Object.keys(window._cellDamage)) {
+                    const [_crC, _crR] = _crKey.split('_').map(Number);
+                    const _crCD = window.getTerrainCol(_crC); if (!_crCD) continue;
+                    const _crX = _crC*bs, _crCY = _crCD.topY + _crR*bs;
+                    const frac = window.getCellDmgFrac ? window.getCellDmgFrac(_crC,_crR) : 0;
+                    if (frac <= 0) continue;
+                    const cSeed = (_crC*7+_crR*13)&0xFF;
+                    C.fillStyle = `rgba(0,0,0,${0.18+frac*0.70})`;
+                    for (let cr2=0; cr2<2+Math.floor(frac*4); cr2++) {
+                        const cx2=_crX+((cSeed*(cr2+1)*37)%(bs-6))+2;
+                        const cy2=Math.floor(_crCY)+((cSeed*(cr2+1)*53)%(bs-6))+2;
+                        const cw2=1+Math.floor(frac*3), ch2=Math.floor(frac*10)+2+(cr2&1)*4;
+                        C.fillRect(cx2,cy2,cw2,ch2);
+                        if (frac>0.4) C.fillRect(cx2+(cr2&1?2:-2),cy2+Math.floor(ch2*0.4),ch2,cw2);
                     }
+                    if (frac>0.75){C.fillStyle=`rgba(255,180,60,${(frac-0.75)*0.28})`;C.fillRect(_crX,Math.floor(_crCY),bs+0.5,bs+1);}
                 }
-                // UN rect negro tapa TODO lo que hay debajo de la transición
-                const _blackY = Math.floor(_surfCutY);
-                if (_blackY < bottomYu) {
-                    C.fillStyle = '#000';
-                    C.fillRect(startCol * bs, _blackY, (endCol - startCol + 2) * bs, Math.ceil(bottomYu - _blackY) + 4);
-                }
+            }
 
-                // ── Pre-build: construir el cache UNA sola vez cuando el jugador
-                // está parado EN la entrada (a ≤1 bloque del topY).
-                // Usamos un flag de frame para no hacerlo más de una vez por visita.
-                const _pFeet   = window.player.y + window.player.height;
-                const _gap     = _surfY - _pFeet; // negativo = ya está debajo
-                if (_gap < bs * 1.5 && _gap > -bs * 4) {
-                    // Jugador está entrando — pre-build si no hay cache válido para esta zona
-                    const _pbOffY  = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
-                    const _pbStart = startCol - CACHE_BUF_H;
-                    const _pbEnd   = endCol   + CACHE_BUF_H;
-                    const _pbExpl  = _fogEnabled ? window._caveExplored.size : 0;
-                    const _pbAlreadyOk = window._terrainCache
-                        && window._tCacheBufStart === _pbStart
-                        && window._tCacheBufEnd   === _pbEnd
-                        && window._tCacheOffY     === _pbOffY
-                        && window._tCacheExplore  === _pbExpl
-                        && window._tCacheMine     === (window._mineStamp||0);
-                    if (!_pbAlreadyOk) {
-                        _buildTerrainCache(_pbStart, _pbEnd, _pbOffY);
-                    }
-                }
-
-            } else {
-                // ── UNDERGROUND: blit cache, rebuild solo cuando sale del buffer ──
-
-                // offY snapeado a chunks de SNAP_V bloques. Resta CACHE_BUF_V para
-                // que el viewport quede centrado dentro del canvas cacheado.
-                const _snapOffY  = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
-                const _expCount  = _fogEnabled ? window._caveExplored.size : 0;
-                const _mStamp    = window._mineStamp || 0;
-
-                // Rebuild solo si: no hay cache, el viewport se sale del buffer,
-                // cambió el snap de Y, cambió fog, o se minó algo
-                const _outH = startCol < (window._tCacheBufStart||0) + 3
-                           || endCol   > (window._tCacheBufEnd||0)   - 3;
-                const _needRebuild = !window._terrainCache
-                    || _outH
-                    || window._tCacheOffY     !== _snapOffY
-                    || window._tCacheExplore  !== _expCount
-                    || window._tCacheMine     !== _mStamp;
-
-                if (_needRebuild) {
-                    _buildTerrainCache(
-                        startCol - CACHE_BUF_H,
-                        endCol   + CACHE_BUF_H,
-                        _snapOffY
-                    );
-                }
-
-                // ── Blit: UN drawImage tamaño viewport ───────────────────────────
-                C.drawImage(window._terrainCache, window._tCacheOffX, window._tCacheOffY);
-
-                // ── Overlay: grietas de minado (no cacheadas) ────────────────────
-                if (window._cellDamage && Object.keys(window._cellDamage).length > 0) {
-                    for (const _crKey of Object.keys(window._cellDamage)) {
-                        const [_crC, _crR] = _crKey.split('_').map(Number);
-                        const _crCD = window.getTerrainCol(_crC); if (!_crCD) continue;
-                        const _crX = _crC*bs, _crCY = _crCD.topY + _crR*bs;
-                        const frac = window.getCellDmgFrac ? window.getCellDmgFrac(_crC,_crR) : 0;
-                        if (frac <= 0) continue;
-                        const cSeed = (_crC*7+_crR*13)&0xFF;
-                        C.fillStyle = `rgba(0,0,0,${0.18+frac*0.70})`;
-                        for (let cr2=0; cr2<2+Math.floor(frac*4); cr2++) {
-                            const cx2=_crX+((cSeed*(cr2+1)*37)%(bs-6))+2;
-                            const cy2=Math.floor(_crCY)+((cSeed*(cr2+1)*53)%(bs-6))+2;
-                            const cw2=1+Math.floor(frac*3), ch2=Math.floor(frac*10)+2+(cr2&1)*4;
-                            C.fillRect(cx2,cy2,cw2,ch2);
-                            if (frac>0.4) C.fillRect(cx2+(cr2&1?2:-2),cy2+Math.floor(ch2*0.4),ch2,cw2);
-                        }
-                        if (frac>0.75){C.fillStyle=`rgba(255,180,60,${(frac-0.75)*0.28})`;C.fillRect(_crX,Math.floor(_crCY),bs+0.5,bs+1);}
-                    }
-                }
-
-                // ── Diamond pulse (overlay, cada 2 frames) ───────────────────────
-                if (window.game.frameCount % 2 === 0) {
-                    for (let col=startCol; col<=endCol; col++) {
-                        const cd=window.getTerrainCol(col); if (!cd||cd.type==='hole') continue;
-                        for (let row=41; row<(window.UG_MAX_DEPTH||50); row++) {
-                            const cY=cd.topY+row*bs;
-                            if (cY>=bottomYu||cY<_iCamY-bs) continue;
-                            if (_fogEnabled&&!window._caveExplored?.has(`${col}_${row}`)) continue;
-                            if (window.getUGCellV(col,row)!=='diamond') continue;
-                            const pulse=0.08+Math.abs(Math.sin(window.game.frameCount*0.03+col*0.4+row*0.6))*0.10;
-                            C.fillStyle=`rgba(120,255,255,${pulse})`;
-                            C.fillRect(col*bs,Math.floor(cY),bs+0.5,bs+1);
-                        }
+            // Diamond pulse
+            if (window.game.frameCount % 2 === 0) {
+                for (let col=startCol; col<=endCol; col++) {
+                    const cd=window.getTerrainCol(col); if (!cd||cd.type==='hole') continue;
+                    for (let row=41; row<(window.UG_MAX_DEPTH||50); row++) {
+                        const cY=cd.topY+row*bs;
+                        if (cY>=bottomYu||cY<_iCamY-bs) continue;
+                        if (_fogEnabled&&!window._caveExplored?.has(`${col}_${row}`)) continue;
+                        if (window.getUGCellV(col,row)!=='diamond') continue;
+                        const pulse=0.08+Math.abs(Math.sin(window.game.frameCount*0.03+col*0.4+row*0.6))*0.10;
+                        C.fillStyle=`rgba(120,255,255,${pulse})`;
+                        C.fillRect(col*bs,Math.floor(cY),bs+0.5,bs+1);
                     }
                 }
             }
         }
 
-        // ── Cristales de cueva: render desde array pre-generado (O(visible)) ──
+        // ── Cristales de cueva ──────────────────────────────────────────────────
+        // LUT de 16 valores: cero Math.sin por cristal por frame.
         if (window.caveCrystals?.length > 0 && !_onSurface) {
-            const C = window.ctx;
-            const _cFrame = window.game.frameCount;
-            const _fogEnabledC = !!window._caveExplored;
-            const _palS = ['rgba(200,235,255,0.75)','rgba(60,160,255,0.80)','rgba(180,80,255,0.85)'];
-            const _palM = ['rgba(180,220,255,0.60)','rgba(40,140,230,0.70)','rgba(160,60,240,0.75)'];
+            if (!window._cryLUT) { window._cryLUT = new Float32Array(16); for (let i=0;i<16;i++) window._cryLUT[i]=Math.sin(i/16*Math.PI*2); }
+            const C=window.ctx, _cFrame=window.game.frameCount, _fogEnabledC=!!window._caveExplored, _lut=window._cryLUT;
+            const _palS=['rgba(200,235,255,0.75)','rgba(60,160,255,0.80)','rgba(180,80,255,0.85)'];
+            const _palM=['rgba(180,220,255,0.60)','rgba(40,140,230,0.70)','rgba(160,60,240,0.75)'];
+            const _cf2 = _cFrame >> 1; // actualiza a 30fps visualmente — suficiente para cristales
             for (const _cry of window.caveCrystals) {
                 if (_cry.x < _visLeft - bs || _cry.x > _visRight + bs) continue;
                 if (_fogEnabledC && !window._caveExplored?.has(`${_cry.col}_${_cry.row}`)) continue;
-                const _pi = _cry.variant || 0;
+                const _pi = (_cry.variant||0)%3;
+                const _phase = (_cf2 + _cry.col*3 + _cry.row*5) & 15;
                 if (_cry.type === 'stalactite') {
-                    const _pulse = 0.65 + Math.sin(_cFrame * 0.06 + _cry.col * 0.7 + _cry.row * 1.1) * 0.35;
-                    C.globalAlpha = _pulse;
-                    C.fillStyle = _palS[_pi];
+                    const _p = 0.65 + _lut[_phase]*0.35;
+                    C.globalAlpha=_p; C.fillStyle=_palS[_pi];
                     C.beginPath(); C.moveTo(_cry.x-3,_cry.y); C.lineTo(_cry.x+3,_cry.y); C.lineTo(_cry.x,_cry.y+_cry.len); C.closePath(); C.fill();
-                    C.globalAlpha = _pulse * 0.4;
-                    C.fillStyle = 'rgba(255,255,255,0.9)';
-                    C.fillRect(_cry.x-0.5, _cry.y, 1, _cry.len*0.4);
+                    C.globalAlpha=_p*0.4; C.fillStyle='rgba(255,255,255,0.9)';
+                    C.fillRect(_cry.x-0.5,_cry.y,1,_cry.len*0.4);
                 } else {
-                    const _pulse = 0.60 + Math.sin(_cFrame * 0.07 + _cry.col * 1.1 + _cry.row * 0.8) * 0.40;
-                    C.globalAlpha = _pulse;
-                    C.fillStyle = _palM[_pi];
+                    const _p = 0.60 + _lut[_phase]*0.40;
+                    C.globalAlpha=_p; C.fillStyle=_palM[_pi];
                     C.beginPath(); C.moveTo(_cry.x-2.5,_cry.y); C.lineTo(_cry.x+2.5,_cry.y); C.lineTo(_cry.x,_cry.y-_cry.len); C.closePath(); C.fill();
                 }
-                C.globalAlpha = 1;
+                C.globalAlpha=1;
             }
         }
 
@@ -731,79 +659,72 @@ window.draw = function() {
 
         // ── Plantas fluorescentes de cueva ──────────────────────────────────────
         if (window.cavePlants?.length > 0) {
-            const C   = window.ctx;
-            // Paleta: [color principal, color brillo, color glow]
-            const _shroomPalette = [
-                ['#1a4aff','#88aaff','rgba(40,80,255,'],   // azul
-                ['#22cc44','#88ffaa','rgba(40,220,80,'],    // verde
-                ['#aa22ee','#dd88ff','rgba(170,40,240,'],   // violeta
-            ];
-            for (const _cp of window.cavePlants) {
-                // Culling lateral
-                if (_cp.x + bs < startCol * bs || _cp.x > (endCol + 1) * bs) continue;
-                // Ocultar cuando jugador está en superficie
-                if (_onSurface && _cp.y > _surfCutY) continue;
-                // Fog de cueva: no mostrar si no explorada
-                if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
-                C.save();
-                // Brillo fijo por planta (sin animación — determinado solo por seed)
-                const _brightness = 0.65 + _cp.seed * 0.35;
-                if (_cp.type === 'shroom') {
-                    const _pal = _shroomPalette[_cp.variant % 3];
-                    const _h = 8 + _cp.seed * 10;
-                    // Pie
-                    C.fillStyle = '#c8c0a8';
-                    C.fillRect(_cp.x - 2, _cp.y + bs - _h, 4, _h);
-                    // Sombrero
-                    C.fillStyle = _pal[0];
-                    C.beginPath();
-                    C.ellipse(_cp.x, _cp.y + bs - _h - 1, 7 + _cp.seed * 4, 5, 0, 0, Math.PI * 2);
-                    C.fill();
-                    // Brillo estático (no se mueve)
-                    C.globalAlpha = 0.55 * _brightness;
-                    C.fillStyle = _pal[1];
-                    C.beginPath();
-                    C.ellipse(_cp.x - 2, _cp.y + bs - _h - 2, 3, 2, 0, 0, Math.PI * 2);
-                    C.fill();
-                    // Halo de luz estático
-                    C.globalAlpha = 0.13 * _brightness;
-                    const _gr = C.createRadialGradient(_cp.x, _cp.y + bs - _h, 0, _cp.x, _cp.y + bs - _h, 28);
-                    _gr.addColorStop(0, _pal[2] + '0.7)');
-                    _gr.addColorStop(1, _pal[2] + '0)');
-                    C.fillStyle = _gr;
-                    C.beginPath(); C.arc(_cp.x, _cp.y + bs - _h, 28, 0, Math.PI * 2); C.fill();
-                } else if (_cp.type === 'moss') {
-                    // Musgo colgante del techo — hebras estáticas (sin movimiento de onda)
-                    const _len = 8 + _cp.seed * 14;
-                    C.globalAlpha = 0.6 * _brightness;
-                    C.strokeStyle = '#22cc55';
-                    C.lineWidth = 1.5;
-                    const _strands = 3 + Math.floor(_cp.seed * 3);
-                    for (let _s = 0; _s < _strands; _s++) {
-                        const _sx = _cp.x + (_s / Math.max(1,_strands-1)) * 10 - 5;
-                        const _sLen = _len * (0.6 + ((_cp.seed + _s*0.3)%1) * 0.4);
-                        // Curva estática por strand (sin _fc)
-                        const _sCurve = Math.sin(_s * 2.1 + _cp.seed * 5.7) * 2.5;
-                        C.beginPath();
-                        C.moveTo(_sx, _cp.y);
-                        C.quadraticCurveTo(_sx + _sCurve, _cp.y + _sLen * 0.5, _sx + _sCurve * 0.5, _cp.y + _sLen);
-                        C.stroke();
-                        // Punta brillante
-                        C.fillStyle = '#88ffbb';
-                        C.globalAlpha = _brightness * 0.55;
-                        C.beginPath(); C.arc(_sx + _sCurve*0.5, _cp.y + _sLen, 1.5, 0, Math.PI * 2); C.fill();
-                    }
-                    // Halo tenue estático
-                    C.globalAlpha = 0.08 * _brightness;
-                    const _mgr = C.createRadialGradient(_cp.x, _cp.y + _len*0.5, 0, _cp.x, _cp.y + _len*0.5, 22);
-                    _mgr.addColorStop(0, 'rgba(40,200,80,0.5)');
-                    _mgr.addColorStop(1, 'rgba(40,200,80,0)');
-                    C.fillStyle = _mgr;
-                    C.beginPath(); C.arc(_cp.x, _cp.y + _len*0.5, 22, 0, Math.PI * 2); C.fill();
+            const C = window.ctx;
+            // ── Pre-render plantas a canvas offscreen ──────────────────────────
+            // Se rebuilda solo cuando la cámara se mueve >2 bloques o cada 120 frames.
+            // Elimina ~50 createRadialGradient + 100 save/restore por frame.
+            const _plantCamKey = `${(startCol>>2)}_${(_iCamY/bs>>2)}_${window._tCacheExploreSt||0}`;
+            if (!window._plantCanvas || window._plantCamKey !== _plantCamKey) {
+                window._plantCamKey = _plantCamKey;
+                const _pcW = (endCol - startCol + 4) * bs;
+                const _pcH = Math.ceil(H / (window.game.zoom||1)) + bs * 8;
+                const _pcOffX = (startCol - 2) * bs;
+                const _pcOffY = Math.floor(_iCamY) - bs * 4;
+                if (!window._plantCanvas || window._plantCanvas.width < _pcW || window._plantCanvas.height < _pcH) {
+                    window._plantCanvas = document.createElement('canvas');
+                    window._plantCanvas.width = _pcW; window._plantCanvas.height = _pcH;
+                    window._plantCtx = window._plantCanvas.getContext('2d');
                 }
-                C.globalAlpha = 1;
-                C.restore();
+                const PC = window._plantCtx;
+                PC.clearRect(0, 0, _pcW, _pcH);
+                const _shroomPalette = [
+                    ['#1a4aff','#88aaff','rgba(40,80,255,'],
+                    ['#22cc44','#88ffaa','rgba(40,220,80,'],
+                    ['#aa22ee','#dd88ff','rgba(170,40,240,'],
+                ];
+                for (const _cp of window.cavePlants) {
+                    if (_cp.x + bs < _pcOffX || _cp.x > _pcOffX + _pcW) continue;
+                    if (_onSurface && _cp.y > _surfCutY) continue;
+                    if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
+                    const cx = _cp.x - _pcOffX, cy = _cp.y - _pcOffY;
+                    if (cy + bs < 0 || cy > _pcH) continue;
+                    const _brightness = 0.65 + _cp.seed * 0.35;
+                    if (_cp.type === 'shroom') {
+                        const _pal = _shroomPalette[_cp.variant % 3];
+                        const _h = 8 + _cp.seed * 10;
+                        PC.fillStyle = '#c8c0a8'; PC.fillRect(cx - 2, cy + bs - _h, 4, _h);
+                        PC.fillStyle = _pal[0]; PC.beginPath(); PC.ellipse(cx, cy + bs - _h - 1, 7 + _cp.seed*4, 5, 0, 0, Math.PI*2); PC.fill();
+                        PC.globalAlpha = 0.55 * _brightness; PC.fillStyle = _pal[1];
+                        PC.beginPath(); PC.ellipse(cx-2, cy+bs-_h-2, 3, 2, 0, 0, Math.PI*2); PC.fill();
+                        // Halo: solo 1 gradient por planta, en el canvas offscreen
+                        PC.globalAlpha = 0.13 * _brightness;
+                        const _gr = PC.createRadialGradient(cx, cy+bs-_h, 0, cx, cy+bs-_h, 28);
+                        _gr.addColorStop(0, _pal[2]+'0.7)'); _gr.addColorStop(1, _pal[2]+'0)');
+                        PC.fillStyle = _gr; PC.beginPath(); PC.arc(cx, cy+bs-_h, 28, 0, Math.PI*2); PC.fill();
+                        PC.globalAlpha = 1;
+                    } else if (_cp.type === 'moss') {
+                        const _len = 8 + _cp.seed * 14;
+                        PC.globalAlpha = 0.6 * _brightness; PC.strokeStyle = '#22cc55'; PC.lineWidth = 1.5;
+                        const _strands = 3 + Math.floor(_cp.seed * 3);
+                        for (let _s = 0; _s < _strands; _s++) {
+                            const _sx = cx + (_s / Math.max(1,_strands-1)) * 10 - 5;
+                            const _sLen = _len * (0.6 + ((_cp.seed+_s*0.3)%1)*0.4);
+                            const _sCurve = Math.sin(_s*2.1+_cp.seed*5.7)*2.5;
+                            PC.beginPath(); PC.moveTo(_sx, cy); PC.quadraticCurveTo(_sx+_sCurve, cy+_sLen*0.5, _sx+_sCurve*0.5, cy+_sLen); PC.stroke();
+                            PC.fillStyle = '#88ffbb'; PC.globalAlpha = _brightness*0.55;
+                            PC.beginPath(); PC.arc(_sx+_sCurve*0.5, cy+_sLen, 1.5, 0, Math.PI*2); PC.fill();
+                        }
+                        PC.globalAlpha = 0.08 * _brightness;
+                        const _mgr = PC.createRadialGradient(cx, cy+_len*0.5, 0, cx, cy+_len*0.5, 22);
+                        _mgr.addColorStop(0,'rgba(40,200,80,0.5)'); _mgr.addColorStop(1,'rgba(40,200,80,0)');
+                        PC.fillStyle=_mgr; PC.beginPath(); PC.arc(cx, cy+_len*0.5, 22, 0, Math.PI*2); PC.fill();
+                        PC.globalAlpha = 1;
+                    }
+                }
+                window._plantOffX = _pcOffX; window._plantOffY = _pcOffY;
             }
+            // Blit: 1 sola drawImage en vez de 50+ loops con gradientes
+            C.drawImage(window._plantCanvas, window._plantOffX, window._plantOffY);
         }
 
         // Superficie (grass/sand top) por columna
@@ -1187,16 +1108,9 @@ window.draw = function() {
                 }
             }
 
-            // ── Abdomen (cuerpo trasero) ──
-            if (_eLOD) {
-                C.fillStyle = bodyCol2;
-                C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
-            } else {
-                const abdGrad = C.createRadialGradient(cx2-2, cy2+2, 1, cx2, cy2+2, w*0.48);
-                abdGrad.addColorStop(0, bodyCol2); abdGrad.addColorStop(1, bodyCol);
-                C.fillStyle = abdGrad;
-                C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
-            }
+            // ── Abdomen ──
+            C.fillStyle = bodyCol2;
+            C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
             // Patrón de abdomen (raya o puntos)
             if (!H) {
                 if (isBoss) {
@@ -1212,9 +1126,8 @@ window.draw = function() {
                 }
             }
 
-            // ── Cefalotórax (cuerpo delantero) ──
-            if (_eLOD) { C.fillStyle=bodyCol2; }
-            else { const cefGrad = C.createRadialGradient(cx2, cy2-h*0.1, 0, cx2, cy2-h*0.1, w*0.32); cefGrad.addColorStop(0, bodyCol2); cefGrad.addColorStop(1, bodyCol); C.fillStyle = cefGrad; }
+            // ── Cefalotórax ──
+            C.fillStyle = bodyCol2;
             C.beginPath(); C.ellipse(cx2, cy2 - h*0.12, w*0.30, h*0.30, 0, 0, Math.PI*2); C.fill();
 
             // ── Ojos ──
@@ -1232,10 +1145,7 @@ window.draw = function() {
             if (isBoss) {
                 const auraAlpha = 0.06 + Math.sin(T*0.08) * 0.03;
                 C.globalAlpha = auraAlpha;
-                const auraGrad = C.createRadialGradient(cx2, cy2, 0, cx2, cy2, w*1.2);
-                auraGrad.addColorStop(0, enraged ? 'rgba(255,80,0,1)' : 'rgba(180,0,255,1)');
-                auraGrad.addColorStop(1, 'rgba(0,0,0,0)');
-                C.fillStyle = auraGrad;
+                C.fillStyle = enraged ? 'rgba(255,80,0,1)' : 'rgba(180,0,255,1)';
                 C.beginPath(); C.arc(cx2, cy2, w*1.2, 0, Math.PI*2); C.fill();
                 C.globalAlpha = 1;
                 // Barra HP encima del jefe
@@ -1284,7 +1194,7 @@ window.draw = function() {
             // ── Slime de cueva ──
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
             const cx2=x+w/2, cy2=y+h*0.5;
-            const isAir = !isGrounded || ent.vy < -0.5;
+            const isAir = !ent.isGrounded || ent.vy < -0.5;
             // Squash/stretch al saltar
             const scaleX = isAir ? 0.75 : (1.0 + Math.abs(Math.sin(T*0.2))*0.05);
             const scaleY = isAir ? 1.3  : (0.85 - Math.abs(Math.sin(T*0.2))*0.05);
@@ -1297,10 +1207,8 @@ window.draw = function() {
 
             C.save(); C.translate(cx2, y+h); C.scale(scaleX, scaleY); C.translate(-cx2, -(y+h));
             C.globalAlpha=0.12; C.fillStyle='#000'; C.beginPath(); C.ellipse(cx2, y+h+2, w*0.42, 2.5/scaleY, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
-            // Cuerpo con gradiente
-            const slG = C.createRadialGradient(cx2-3, cy2-5, 0, cx2, cy2, w*0.52);
-            slG.addColorStop(0, H?'#ffaaaa':(_spal[1])); slG.addColorStop(0.6, H?'#ff4444':(_spal[0])); slG.addColorStop(1, H?'#cc0000':'rgba(0,0,0,0.6)');
-            C.fillStyle=slG; C.beginPath(); C.ellipse(cx2, cy2-2, w*0.46, h*0.44, 0, 0, Math.PI*2); C.fill();
+            // Cuerpo flat
+            C.fillStyle = H?'#ff5555':(_spal[0]); C.beginPath(); C.ellipse(cx2, cy2-2, w*0.46, h*0.44, 0, 0, Math.PI*2); C.fill();
             // Brillo especular
             C.globalAlpha=0.45; C.fillStyle='rgba(255,255,255,0.8)';
             C.beginPath(); C.ellipse(cx2-4, cy2-7, w*0.12, h*0.10, -0.5, 0, Math.PI*2); C.fill();
@@ -1311,12 +1219,7 @@ window.draw = function() {
             C.beginPath(); C.arc(cx2+5, cy2-4, 2.5, 0, Math.PI*2); C.fill();
             C.fillStyle='#fff'; C.beginPath(); C.arc(cx2-4.2,cy2-4.8, 1, 0, Math.PI*2); C.fill();
             C.beginPath(); C.arc(cx2+5.8,cy2-4.8, 1, 0, Math.PI*2); C.fill();
-            // Halo de luz tenue
-            C.globalAlpha = 0.06;
-            const _slhG = C.createRadialGradient(cx2, cy2, 0, cx2, cy2, 28);
-            _slhG.addColorStop(0, _spal[2]+'0.5)'); _slhG.addColorStop(1, _spal[2]+'0)');
-            C.fillStyle=_slhG; C.beginPath(); C.arc(cx2, cy2, 28, 0, Math.PI*2); C.fill();
-            C.globalAlpha=1; C.restore();
+            C.restore();
         } else if (ent.type === 'worm') {
             // ── Gusano de Cueva (segmentado) ──
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
@@ -1332,10 +1235,8 @@ window.draw = function() {
             for (let _si = segs.length - 1; _si >= 0; _si--) {
                 const _sx = segs[_si].x + w*0.5, _sy = segs[_si].y + h*0.5;
                 const _sr = segR[Math.min(_si, segR.length-1)];
-                const _sG = C.createRadialGradient(_sx-1, _sy-1, 0, _sx, _sy, _sr);
-                _sG.addColorStop(0, H?'#ffaaaa':(_si===0?bodyDark:'#e07d55')); _sG.addColorStop(1, H?'#cc2200':bodyDark);
-                C.fillStyle = _sG; C.beginPath(); C.arc(_sx, _sy, _sr, 0, Math.PI*2); C.fill();
-                // Anillo de segmento
+                C.fillStyle = H?'#dd5533':(_si===0?bodyDark:'#d07040');
+                C.beginPath(); C.arc(_sx, _sy, _sr, 0, Math.PI*2); C.fill();
                 C.strokeStyle='rgba(0,0,0,0.35)'; C.lineWidth=1;
                 C.beginPath(); C.arc(_sx, _sy, _sr*0.65, 0, Math.PI*2); C.stroke();
             }
@@ -1415,10 +1316,8 @@ window.draw = function() {
             C.save(); C.translate(x+w-6,y+h*0.26+walkBob); C.rotate(0.25-armSwing); C.fillRect(0,0,8,h*0.38); C.restore();
             if (!FR) C.restore();
 
-            // Cabeza (bloque de piedra)
-            const headG = C.createLinearGradient(cx2-w*0.3,y+h*0.02+walkBob, cx2+w*0.3,y+h*0.18+walkBob);
-            headG.addColorStop(0,H?'#ff9977':'#505068'); headG.addColorStop(1,H?'#cc3300':'#303040');
-            C.fillStyle=headG; C.beginPath(); C.roundRect(cx2-w*0.3,y+h*0.02+walkBob,w*0.6,h*0.18,4); C.fill();
+            // Cabeza
+            C.fillStyle=H?'#cc4422':'#484860'; C.beginPath(); C.roundRect(cx2-w*0.3,y+h*0.02+walkBob,w*0.6,h*0.18,4); C.fill();
 
             // Ojos cristalinos
             const eyeGlow = 0.78 + Math.sin(T*0.11)*0.22;
@@ -1455,10 +1354,8 @@ window.draw = function() {
             if (enraged || phase3) {
                 const _aAlpha = 0.07 + Math.sin(T*0.10)*0.05;
                 C.globalAlpha = _aAlpha * 2.5;
-                const _aGrad = C.createRadialGradient(cx2,cy2,0,cx2,cy2,w*1.6);
-                _aGrad.addColorStop(0, phase3?'rgba(255,40,0,1)':'rgba(220,0,120,1)');
-                _aGrad.addColorStop(1,'rgba(0,0,0,0)');
-                C.fillStyle=_aGrad; C.beginPath(); C.arc(cx2,cy2,w*1.6,0,Math.PI*2); C.fill();
+                C.fillStyle = phase3?'rgba(255,40,0,0.8)':'rgba(220,0,120,0.8)';
+                C.beginPath(); C.arc(cx2,cy2,w*1.6,0,Math.PI*2); C.fill();
                 C.globalAlpha=1;
             }
 
@@ -1492,10 +1389,8 @@ window.draw = function() {
                 }
             }
 
-            // Abdomen (grande, con patrón de calavera)
-            const abdG = C.createRadialGradient(cx2-4,cy2+5,2,cx2,cy2+5,w*0.52);
-            abdG.addColorStop(0,bodyCol2); abdG.addColorStop(1,bodyCol);
-            C.fillStyle=abdG; C.beginPath(); C.ellipse(cx2,cy2+h*0.14,w*0.50,h*0.46,0,0,Math.PI*2); C.fill();
+            // Abdomen
+            C.fillStyle=bodyCol2; C.beginPath(); C.ellipse(cx2,cy2+h*0.14,w*0.50,h*0.46,0,0,Math.PI*2); C.fill();
             // Patrón en abdomen
             if (!H && !invul) {
                 // Hourglass / skull pattern
@@ -1512,9 +1407,7 @@ window.draw = function() {
             }
 
             // Cefalotórax
-            const cefG = C.createRadialGradient(cx2,cy2-h*0.12,0,cx2,cy2-h*0.12,w*0.36);
-            cefG.addColorStop(0,bodyCol2); cefG.addColorStop(1,bodyCol);
-            C.fillStyle=cefG; C.beginPath(); C.ellipse(cx2,cy2-h*0.12,w*0.32,h*0.32,0,0,Math.PI*2); C.fill();
+            C.fillStyle=bodyCol2; C.beginPath(); C.ellipse(cx2,cy2-h*0.12,w*0.32,h*0.32,0,0,Math.PI*2); C.fill();
 
             // Corona espinosa (3 púas)
             const crownCol = phase3?'#ff4400':(enraged?'#cc0066':'#880044');
@@ -1568,13 +1461,13 @@ window.draw = function() {
             if (!FR) { C.translate(x+w,0); C.scale(-1,1); } const bx = FR ? x : 0;
             C.globalAlpha=0.2; C.fillStyle='#000'; C.beginPath(); C.ellipse(bx+w/2,y+h+1,w*0.5,3,0,0,Math.PI*2); C.fill(); C.globalAlpha=1;
             for (let leg=0;leg<2;leg++) { const lx=bx+(leg===0?5:13); const la = leg===0 ? walk : -walk; C.fillStyle=H?'#ff5544':(ER?'#145a14':'#1a5a1a'); C.save(); C.translate(lx+2,y+h-18); C.rotate(la); C.fillRect(-3,0,7,10); C.translate(0,9); C.rotate(-la*0.4); C.fillRect(-2,0,6,9); C.fillStyle=H?'#ff3322':'#0d0d0d'; C.fillRect(-3,8,9,4); C.restore(); }
-            const torsoG=C.createLinearGradient(bx,y+h*0.43,bx+w,y+h*0.43); torsoG.addColorStop(0, H?'#ff5544':(ER?'#1a6a1a':'#2a8a2a')); torsoG.addColorStop(1, H?'#cc2211':(ER?'#0f440f':'#1a5a1a')); C.fillStyle=torsoG; C.fillRect(bx+2,y+h*0.42,w-4,h*0.36);
+            const torsoG=H?'#ee4433':(ER?'#1a6a1a':'#2a8a2a'); C.fillStyle=torsoG; C.fillRect(bx+2,y+h*0.42,w-4,h*0.36);
             if (!H) { C.strokeStyle='rgba(0,0,0,0.5)'; C.lineWidth=1; C.beginPath(); C.moveTo(bx+7,y+h*0.46); C.lineTo(bx+9,y+h*0.57); C.stroke(); C.beginPath(); C.moveTo(bx+15,y+h*0.49); C.lineTo(bx+12,y+h*0.6); C.stroke(); }
             const armSw = Math.sin(T*0.15)*0.12;
             C.fillStyle=H?'#ff6655':(ER?'#2a9a2a':'#3a9a3a'); C.save(); C.translate(bx+4,y+h*0.44); C.rotate(-0.35+armSw); C.fillRect(-3,0,6,13); C.translate(0,12); C.rotate(0.1); C.fillRect(-2.5,0,5,10); C.fillStyle=H?'#ff8866':(ER?'#1a8a1a':'#4aaa4a'); for(let d=0;d<3;d++){C.fillRect(-2+d*2.5,9,2,5);} C.restore();
             C.fillStyle=H?'#ff4433':(ER?'#1a8a1a':'#2a8a2a'); C.save(); C.translate(bx+w-4,y+h*0.42); C.rotate(-0.6+armSw); C.fillRect(-3,0,6,13); C.translate(0,12); C.rotate(0.1); C.fillRect(-2.5,0,5,10); C.fillStyle=H?'#ff7755':(ER?'#1aaa1a':'#3aaa3a'); for(let d=0;d<3;d++){C.fillRect(-2+d*2.5,9,2,5);} C.restore();
             C.fillStyle=H?'#ff5544':'#5ab05a'; C.fillRect(bx+w*0.3,y+h*0.26,w*0.4,h*0.08);
-            const hg=C.createLinearGradient(bx+2,y+h*0.06,bx+w-2,y+h*0.27); hg.addColorStop(0,H?'#ff8877':(ER?'#60c060':'#70d070')); hg.addColorStop(1,H?'#cc3322':(ER?'#3a8a3a':'#4a9a4a')); C.fillStyle=hg; C.fillRect(bx+2,y+h*0.06,w-4,h*0.22);
+            C.fillStyle=H?'#cc3322':(ER?'#3a8a3a':'#4a9a4a'); C.fillRect(bx+2,y+h*0.06,w-4,h*0.22);
             C.fillStyle=H?'#cc2211':(ER?'#1a4a1a':'#1a5a1a'); C.fillRect(bx+2,y+h*0.05,w-4,4); C.fillRect(bx+4,y+h*0.03,4,4); C.fillRect(bx+13,y+h*0.02,5,5);
             C.fillStyle='#000'; C.fillRect(bx+4,y+h*0.11,6,5); C.fillRect(bx+13,y+h*0.11,6,5); C.fillStyle=ER?'#ff4400':'#cc0000'; C.fillRect(bx+5,y+h*0.12,4,3); C.fillRect(bx+14,y+h*0.12,4,3); C.fillStyle='rgba(255,180,0,0.6)'; C.fillRect(bx+5,y+h*0.12,2,1.5); C.fillRect(bx+14,y+h*0.12,2,1.5);
             C.fillStyle='#000'; C.fillRect(bx+w*0.4,y+h*0.19,2,3); C.fillRect(bx+5,y+h*0.23,w-10,3); C.fillStyle='#ddd'; for(let t=0;t<3;t++){C.fillRect(bx+7+t*5,y+h*0.23,3,2);}
@@ -1585,7 +1478,7 @@ window.draw = function() {
             C.globalAlpha=0.18; C.fillStyle='#000'; C.beginPath(); C.ellipse(bx+w/2,y+h+1,w*0.4,2.5,0,0,Math.PI*2); C.fill(); C.globalAlpha=1;
             for (let leg=0;leg<2;leg++) { const lx=bx+(leg===0?4:12); const la = leg===0 ? walk : -walk; C.fillStyle=H?'#ff4444':'#1e0f38'; C.save(); C.translate(lx+2,y+h-17); C.rotate(la); C.fillRect(-2,0,5,9); C.translate(0,8); C.rotate(-la*0.4); C.fillRect(-2,0,5,8); C.fillStyle=H?'#ff3333':'#0d0820'; C.fillRect(-3,7,7,3); C.restore(); }
             const capeWave = Math.sin(T*0.12)*3; C.fillStyle=H?'#aa2222':(ER?'#2a004a':'#3b0f6e'); C.beginPath(); C.moveTo(bx+w*0.15,y+h*0.37); C.lineTo(bx-4,y+h*0.75+capeWave); C.lineTo(bx+w*0.45,y+h*0.76+capeWave*0.5); C.closePath(); C.fill();
-            const tg=C.createLinearGradient(bx,y+h*0.34,bx+w,y+h*0.34); tg.addColorStop(0,H?'#ff5544':(ER?'#5a0088':'#7c2fb8')); tg.addColorStop(1,H?'#cc2211':(ER?'#380060':'#51198a')); C.fillStyle=tg; C.fillRect(bx+1,y+h*0.34,w-2,h*0.36);
+            C.fillStyle=H?'#dd4433':(ER?'#5a0088':'#7c2fb8'); C.fillRect(bx+1,y+h*0.34,w-2,h*0.36);
             if(!H){ C.fillStyle='#c8920f'; C.fillRect(bx+w*0.3,y+h*0.36,w*0.4,2); C.beginPath(); C.arc(bx+w/2,y+h*0.44,3,0,Math.PI*2); C.fill(); }
             C.fillStyle=H?'#ff5555':'#5a2888'; C.fillRect(bx-1,y+h*0.35,4,15); C.fillStyle=H?'#cc3322':'#5a2810'; C.fillRect(bx-3,y+h*0.37,5,14); C.strokeStyle='#c8a050'; C.lineWidth=1; for(let fi=0;fi<4;fi++){ C.beginPath(); C.moveTo(bx-2,y+h*0.39+fi*2.5); C.lineTo(bx+2,y+h*0.39+fi*2.5); C.stroke(); }
             const bowAngle = ent.attackCooldown<120 ? Math.atan2((window.player.y+24)-(y+h*0.44), fR ? (window.player.x+12)-(bx+w) : (bx)-(window.player.x+12)) : 0;
@@ -1593,7 +1486,7 @@ window.draw = function() {
             const pull = ent.attackCooldown<120 ? Math.min(8,(120-ent.attackCooldown)/120*8) : 0; C.strokeStyle='rgba(220,210,190,0.9)'; C.lineWidth=1; C.beginPath(); C.moveTo(15+Math.cos(-1.1)*11, Math.sin(-1.1)*11); C.lineTo(15-pull, 0); C.lineTo(15+Math.cos(1.1)*11, Math.sin(1.1)*11); C.stroke();
             if (ent.attackCooldown<90) { C.fillStyle='#c8a050'; C.fillRect(15-pull,-1,16+pull,2); C.fillStyle='#607888'; C.fillRect(30,-2.5,5,5); C.fillStyle='#cc4444'; C.beginPath(); C.moveTo(14-pull,-1); C.lineTo(14-pull-4,-4); C.lineTo(14-pull,0); C.fill(); C.beginPath(); C.moveTo(14-pull,1); C.lineTo(14-pull-4,4); C.lineTo(14-pull,0); C.fill(); } C.restore();
             C.fillStyle=H?'#ff7755':'#c09070'; C.fillRect(bx+w*0.28,y+h*0.27,w*0.44,h*0.09); C.fillStyle=H?'#aa1122':(ER?'#300050':'#4c1590'); C.beginPath(); C.moveTo(bx+1,y+h*0.27); C.lineTo(bx+w/2,y+h*0.04); C.lineTo(bx+w-1,y+h*0.27); C.closePath(); C.fill();
-            const faceG=C.createLinearGradient(bx+3,y+h*0.15,bx+w-3,y+h*0.27); faceG.addColorStop(0,H?'#ff9977':'#d4a880'); faceG.addColorStop(1,H?'#cc4433':'#b07850'); C.fillStyle=faceG; C.fillRect(bx+3,y+h*0.15,w-6,h*0.14); C.fillStyle='rgba(0,0,0,0.25)'; C.fillRect(bx+3,y+h*0.15,w-6,3);
+            C.fillStyle=H?'#cc8866':'#c09070'; C.fillRect(bx+3,y+h*0.15,w-6,h*0.14); C.fillStyle='rgba(0,0,0,0.25)'; C.fillRect(bx+3,y+h*0.15,w-6,3);
             C.fillStyle=ER?'#ff3300':'#1a0a05'; C.fillRect(bx+5,y+h*0.175,4,2.5); C.fillRect(bx+11,y+h*0.175,4,2.5); C.fillStyle=ER?'#ff8800':'#4a2a10'; C.fillRect(bx+6,y+h*0.178,2,1.5); C.fillRect(bx+12,y+h*0.178,2,1.5);
             C.fillStyle='rgba(0,0,0,0.3)'; C.fillRect(bx+w*0.42,y+h*0.215,2,2); C.fillRect(bx+6,y+h*0.24,w-12,1.5);
         } else if (ent.type === 'wolf') {
@@ -1899,12 +1792,31 @@ window.draw = function() {
     if (Q === 'high') {
         const _hz = window.game.zoom || 1; const _hW = window._canvasLogicW || 1280; const _hH = window._canvasLogicH || 720;
         const groundScreenY = (window.game.baseGroundLevel - window.camera.y - _hH/2) * _hz + _hH/2;
-        const fogGrad = window.ctx.createLinearGradient(0, groundScreenY - 80, 0, groundScreenY + 60); const fogAlpha = 0.06 + darkness * 0.04;
-        fogGrad.addColorStop(0, `rgba(180,210,240,0)`); fogGrad.addColorStop(0.4, `rgba(160,195,225,${fogAlpha})`); fogGrad.addColorStop(0.7, `rgba(140,175,210,${fogAlpha * 0.6})`); fogGrad.addColorStop(1, `rgba(100,140,180,0)`);
-        window.ctx.fillStyle = fogGrad; window.ctx.fillRect(0, groundScreenY - 80, _hW, 140);
+        const fogAlpha = 0.06 + darkness * 0.04;
+        const _fogKey = `${groundScreenY|0}_${(fogAlpha*100)|0}`;
+        if (!window._fogGradCache || window._fogGradKey !== _fogKey) {
+            window._fogGradKey = _fogKey;
+            const fg = window.ctx.createLinearGradient(0,groundScreenY-80,0,groundScreenY+60);
+            fg.addColorStop(0,`rgba(180,210,240,0)`); fg.addColorStop(0.4,`rgba(160,195,225,${fogAlpha})`); fg.addColorStop(0.7,`rgba(140,175,210,${fogAlpha*0.6})`); fg.addColorStop(1,`rgba(100,140,180,0)`);
+            window._fogGradCache = fg;
+        }
+        window.ctx.fillStyle = window._fogGradCache; window.ctx.fillRect(0, groundScreenY - 80, _hW, 140);
         window.ctx.save(); window.ctx.globalCompositeOperation = 'screen';
-        // campfire bloom now handled by staticLightCanvas — skip per-frame gradient here
-        if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) { const tsx = (window.player.x + window.player.width/2 - window.camera.x - _hW/2) * _hz + _hW/2; const tsy = (window.player.y + window.player.height/2 - window.camera.y - _hH/2) * _hz + _hH/2; const tf = 0.9 + Math.sin(window.game.frameCount * 0.23) * 0.1; const tBG = window.ctx.createRadialGradient(tsx, tsy, 0, tsx, tsy, 80 * _hz * tf); tBG.addColorStop(0, 'rgba(255,180,50,0.16)'); tBG.addColorStop(1, 'rgba(255,130,0,0)'); window.ctx.fillStyle = tBG; window.ctx.beginPath(); window.ctx.arc(tsx, tsy, 80 * _hz * tf, 0, Math.PI*2); window.ctx.fill(); }
+        if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) {
+            const tsx=(window.player.x+window.player.width/2-window.camera.x-_hW/2)*_hz+_hW/2;
+            const tsy=(window.player.y+window.player.height/2-window.camera.y-_hH/2)*_hz+_hH/2;
+            const tf=0.9+Math.sin(window.game.frameCount*0.23)*0.1;
+            const _tr = 80*_hz*tf;
+            // Cache torch glow — solo recrear cuando posición cambia >2px
+            const _tKey=`${tsx|0}_${tsy|0}`;
+            if (!window._torchBGCache || window._torchBGKey !== _tKey) {
+                window._torchBGKey=_tKey;
+                const tBG=window.ctx.createRadialGradient(tsx,tsy,0,tsx,tsy,_tr);
+                tBG.addColorStop(0,'rgba(255,180,50,0.16)'); tBG.addColorStop(1,'rgba(255,130,0,0)');
+                window._torchBGCache=tBG;
+            }
+            window.ctx.fillStyle=window._torchBGCache; window.ctx.beginPath(); window.ctx.arc(tsx,tsy,_tr,0,Math.PI*2); window.ctx.fill();
+        }
         window.ctx.restore();
         { let currentUptimeHQ = window.game.serverStartTime ? (Date.now() - window.game.serverStartTime) : (window.game.frameCount * (1000/60)); let totalFramesHQ = Math.floor(currentUptimeHQ / (1000/60)) + 28800; let hourFloatHQ = (totalFramesHQ / 3600) % 24;
           const isDawnDusk = (hourFloatHQ > 5 && hourFloatHQ < 7.5) || (hourFloatHQ > 17.5 && hourFloatHQ < 20);
@@ -1929,31 +1841,24 @@ window.draw = function() {
     }
 
     // === LUZ DINÁMICA (lightCanvas, destination-out) ===
-    // Throttle: se recalcula cada 2 frames. En frames impares se reutiliza el resultado anterior.
-    // El jugador en movimiento rápido no nota 1 frame de desfase en la luz.
+    // Throttle: cada 4 frames. En frames intermedios se reutiliza resultado anterior.
     const _lcFrame = window.game.frameCount || 0;
-    const _skipLight = (_lcFrame & 1) === 1 && window._lightCanvasDirty === false;
+    const _skipLight = (_lcFrame % 4 !== 0) && window._lightCanvasDirty === false;
     if (window.lightCtx && !_skipLight) {
         window._lightCanvasDirty = false;
-        window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         const _lz = window.game.zoom || 1; const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
         function _wts(wx, wy) { return [(wx - _iCamX - _lW/2)*_lz + _lW/2, (wy - _iCamY - _lH/2)*_lz + _lH/2]; }
 
         // ── Oscuridad ambiental ────────────────────────────────────────────────
-        // Bajo tierra: más oscuro cuanto más profundo, pero con un mínimo visible.
-        // En superficie: oscuridad de día/noche normal.
         let targetDarkness = darkness * 0.65;
-        let _depthPxForLight = 0;
         if (window.getGroundY && window.getTerrainCol && window.player) {
             const _bs    = window.game.blockSize;
             const _pCol  = Math.floor((window.player.x + window.player.width/2) / _bs);
             const _pCD   = window.getTerrainCol(_pCol);
             const _pTopY = (_pCD && _pCD.type !== 'hole') ? _pCD.topY : (window.game.baseGroundLevel || 510);
             const _depthPx = (window.player.y + window.player.height) - _pTopY;
-            _depthPxForLight = _depthPx;
             if (_depthPx > _bs * 1.5) {
                 const depthFactor = Math.min(1, (_depthPx - _bs * 1.5) / (_bs * 8));
-                // Underground: empieza en 0.48 (más claro que antes: 0.55) para que se vea más
                 targetDarkness = Math.max(targetDarkness, 0.48 + depthFactor * 0.34);
             }
         }
@@ -1961,123 +1866,141 @@ window.draw = function() {
         window._ugDarknessSmooth += (targetDarkness - window._ugDarknessSmooth) * 0.06;
         const ambientDarkness = window._ugDarknessSmooth;
 
-        window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`;
-        window.lightCtx.fillRect(0, 0, _lW, _lH);
-        window.lightCtx.globalCompositeOperation = 'destination-out';
+        // Si la oscuridad es casi nula (pleno día en superficie), skip todo el lightCanvas
+        if (ambientDarkness < 0.05) {
+            // no-op, canvas ya tiene la imagen anterior que es casi transparente
+        } else {
+            window.lightCtx.clearRect(0, 0, _lW, _lH);
+            window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`;
+            window.lightCtx.fillRect(0, 0, _lW, _lH);
+            window.lightCtx.globalCompositeOperation = 'destination-out';
 
-        // Flicker determinístico (sin Math.random → no varía frame a frame)
-        const _fc = window.game.frameCount || 0;
-        const _tf = 0.9 + Math.sin(_fc * 0.21) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04;
+            const _fc = window.game.frameCount || 0;
+            const _tf = 0.9 + Math.sin(_fc * 0.21) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04;
 
-        if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) {
-            let pGlowSize = 260 * _tf * _lz;
-            let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
-            let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
-            pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
-            window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
-        }
-        if (window.game.isMultiplayer) {
-            Object.values(window.otherPlayers).forEach(p => {
-                if (p.id !== window.socket?.id && !p.isDead && (p.activeTool === 'torch' || p.activeTool === 'torch_item') && p.torchLit) {
-                    const _tf2 = 0.9 + Math.sin(_fc * 0.19 + (p.x||0)*0.001) * 0.1;
-                    let pGlowSize2 = 260 * _tf2 * _lz;
-                    let [cx, cy] = _wts(p.x + (p.width||20)/2, p.y + (p.height||56)/2);
-                    let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, pGlowSize2);
-                    pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
-                    window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(cx, cy, pGlowSize2, 0, Math.PI*2); window.lightCtx.fill();
-                }
-            });
-        }
-        // ── Luces estáticas en canvas cacheado (campfire, antorchas, slimes, plantas, gólems) ──
-        // Solo se recalcula cuando la cámara se mueve >4px o cada 90 frames
-        const _camMX = Math.abs((window._slCamX||0) - _iCamX);
-        const _camMY = Math.abs((window._slCamY||0) - _iCamY);
-        const _slDirty = !window._staticLightCanvas || _camMX > 4 || _camMY > 4 || (_lcFrame % 90 === 0);
-        if (_slDirty) {
-            window._slCamX = _iCamX; window._slCamY = _iCamY;
-            if (!window._staticLightCanvas) {
-                window._staticLightCanvas = document.createElement('canvas');
-                window._staticLightCanvas.width = _lW; window._staticLightCanvas.height = _lH;
-                window._staticLightCtx = window._staticLightCanvas.getContext('2d');
+            if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) {
+                let pGlowSize = 260 * _tf * _lz;
+                let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
+                let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
+                pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
+                window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
             }
-            const _slc = window._staticLightCtx;
-            _slc.clearRect(0, 0, _lW, _lH);
-            // Campfires + placed torches
-            for (const b of window.blocks) {
-                if (b.type === 'campfire' && b.isBurning) {
-                    const [bx,by]=_wts(b.x+15,b.y+15); const glow=260*_lz;
-                    const cg=_slc.createRadialGradient(bx,by,0,bx,by,glow);
-                    cg.addColorStop(0,'rgba(255,200,100,0.9)');cg.addColorStop(0.4,'rgba(255,160,50,0.6)');cg.addColorStop(1,'rgba(255,130,0,0)');
-                    _slc.fillStyle=cg;_slc.beginPath();_slc.arc(bx,by,glow,0,Math.PI*2);_slc.fill();
-                } else if (b.type === 'placed_torch') {
-                    const [tx,ty]=_wts(b.x+(window.game.blockSize||30)*0.5,b.y+(window.game.blockSize||30)*0.3); const tg2=165*_lz;
-                    const tg=_slc.createRadialGradient(tx,ty,0,tx,ty,tg2);
-                    tg.addColorStop(0,'rgba(255,200,80,0.85)');tg.addColorStop(0.4,'rgba(255,150,20,0.55)');tg.addColorStop(1,'rgba(255,100,0,0)');
-                    _slc.fillStyle=tg;_slc.beginPath();_slc.arc(tx,ty,tg2,0,Math.PI*2);_slc.fill();
-                }
+            if (window.game.isMultiplayer) {
+                Object.values(window.otherPlayers).forEach(p => {
+                    if (p.id !== window.socket?.id && !p.isDead && (p.activeTool === 'torch' || p.activeTool === 'torch_item') && p.torchLit) {
+                        const _tf2 = 0.9 + Math.sin(_fc * 0.19 + (p.x||0)*0.001) * 0.1;
+                        let pGlowSize2 = 260 * _tf2 * _lz;
+                        let [cx, cy] = _wts(p.x + (p.width||20)/2, p.y + (p.height||56)/2);
+                        let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, pGlowSize2);
+                        pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
+                        window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(cx, cy, pGlowSize2, 0, Math.PI*2); window.lightCtx.fill();
+                    }
+                });
             }
-            // Slimes, plants, golems
-            const _sCol=[[40,180,80],[40,80,220],[140,40,220]];
-            const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
-            for (const _e2 of (window.entities||[])) {
-                if (!_e2.inCave) continue;
-                if (_e2.type==='slime') {
-                    const [sx,sy]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
-                    const sc2=_sCol[(_e2.slimeColor||0)%3];
-                    const sg2=_slc.createRadialGradient(sx,sy,0,sx,sy,35*_lz);
-                    sg2.addColorStop(0,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0.45)`);sg2.addColorStop(1,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0)`);
-                    _slc.fillStyle=sg2;_slc.beginPath();_slc.arc(sx,sy,35*_lz,0,Math.PI*2);_slc.fill();
-                } else if (_e2.type==='golem') {
-                    const [gx2,gy2]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.25); const gR2=90*_lz;
-                    const gg2=_slc.createRadialGradient(gx2,gy2,0,gx2,gy2,gR2);
-                    gg2.addColorStop(0,'rgba(80,200,255,0.55)');gg2.addColorStop(0.4,'rgba(40,140,255,0.20)');gg2.addColorStop(1,'rgba(0,100,255,0)');
-                    _slc.fillStyle=gg2;_slc.beginPath();_slc.arc(gx2,gy2,gR2,0,Math.PI*2);_slc.fill();
-                } else if (_e2.type==='brood_mother'&&_e2.bossPhase===3) {
-                    const [bm2x,bm2y]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.5); const br2=70*_lz;
-                    const bg2=_slc.createRadialGradient(bm2x,bm2y,0,bm2x,bm2y,br2);
-                    bg2.addColorStop(0,'rgba(255,30,0,0.25)');bg2.addColorStop(1,'rgba(255,0,0,0)');
-                    _slc.fillStyle=bg2;_slc.beginPath();_slc.arc(bm2x,bm2y,br2,0,Math.PI*2);_slc.fill();
-                }
-            }
-            for (const _cp of (window.cavePlants||[])) {
-                if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
-                const [plx2,ply2]=_wts(_cp.x,_cp.y+(window.game.blockSize||30)-8);
-                const pR2=(_cp.type==='shroom'?45:30)*_lz;
-                const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
-                const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
-                pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`);pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
-                _slc.fillStyle=pg3;_slc.beginPath();_slc.arc(plx2,ply2,pR2,0,Math.PI*2);_slc.fill();
-            }
-        }
-        window.lightCtx.drawImage(window._staticLightCanvas, 0, 0);
 
-        // ── Rayos de luz (solo cuando subterráneo, throttled cada 3 frames) ──
-        if (!_onSurface && window.getUGCellV && window.getTerrainCol && ambientDarkness > 0.1 && (_lcFrame % 3 === 0)) {
-            const _bs2 = window.game.blockSize;
-            const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness);
-            if (_shaftAlpha > 0.02) {
-                const _pCX2 = window.player.x + window.player.width / 2;
-                for (let _sc = Math.floor((_pCX2 - _bs2*8)/_bs2); _sc <= Math.floor((_pCX2 + _bs2*8)/_bs2); _sc++) {
-                    const _scd = window.getTerrainCol(_sc); if (!_scd||_scd.type==='hole') continue;
-                    let _sd=0, _so=true;
-                    for (let _sr=0;_sr<30;_sr++) { if (window.getUGCellV(_sc,_sr)!=='air'){_so=false;break;} _sd=_sr+1; }
-                    if (!_so||_sd<2) continue;
-                    const _shX=_sc*_bs2, _shTY=_scd.topY, _shBY=_scd.topY+_sd*_bs2;
-                    const [_slx,_sly]=_wts(_shX,_shTY); const [_slx2,_sly2]=_wts(_shX+_bs2,_shBY);
-                    const _df=Math.max(0,1-Math.abs(_sc*_bs2+_bs2/2-_pCX2)/(_bs2*6));
-                    if (_df<0.05) continue;
-                    const _sA=_shaftAlpha*_df;
-                    const _sG=window.lightCtx.createLinearGradient(_slx,_sly,_slx,_sly2);
-                    _sG.addColorStop(0,`rgba(220,230,255,${_sA})`);_sG.addColorStop(0.6,`rgba(180,200,255,${_sA*0.4})`);_sG.addColorStop(1,'rgba(150,180,255,0)');
-                    window.lightCtx.fillStyle=_sG; window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
+            // ── Luces estáticas cacheadas ──────────────────────────────────────
+            // Threshold: 1 bloque (bs) en lugar de 4px — no se rebuilda cada frame al caminar
+            const _slThresh = bs;
+            const _camMX = Math.abs((window._slCamX||0) - _iCamX);
+            const _camMY = Math.abs((window._slCamY||0) - _iCamY);
+            const _slDirty = !window._staticLightCanvas || _camMX > _slThresh || _camMY > _slThresh || (_lcFrame % 180 === 0);
+            if (_slDirty) {
+                window._slCamX = _iCamX; window._slCamY = _iCamY;
+                if (!window._staticLightCanvas) {
+                    window._staticLightCanvas = document.createElement('canvas');
+                    window._staticLightCanvas.width = _lW; window._staticLightCanvas.height = _lH;
+                    window._staticLightCtx = window._staticLightCanvas.getContext('2d');
+                }
+                const _slc = window._staticLightCtx;
+                _slc.clearRect(0, 0, _lW, _lH);
+                for (const b of window.blocks) {
+                    if (b.type === 'campfire' && b.isBurning) {
+                        const [bx,by]=_wts(b.x+15,b.y+15); const glow=260*_lz;
+                        const cg=_slc.createRadialGradient(bx,by,0,bx,by,glow);
+                        cg.addColorStop(0,'rgba(255,200,100,0.9)');cg.addColorStop(0.4,'rgba(255,160,50,0.6)');cg.addColorStop(1,'rgba(255,130,0,0)');
+                        _slc.fillStyle=cg;_slc.beginPath();_slc.arc(bx,by,glow,0,Math.PI*2);_slc.fill();
+                    } else if (b.type === 'placed_torch') {
+                        const [tx,ty]=_wts(b.x+(window.game.blockSize||30)*0.5,b.y+(window.game.blockSize||30)*0.3); const tg2=165*_lz;
+                        const tg=_slc.createRadialGradient(tx,ty,0,tx,ty,tg2);
+                        tg.addColorStop(0,'rgba(255,200,80,0.85)');tg.addColorStop(0.4,'rgba(255,150,20,0.55)');tg.addColorStop(1,'rgba(255,100,0,0)');
+                        _slc.fillStyle=tg;_slc.beginPath();_slc.arc(tx,ty,tg2,0,Math.PI*2);_slc.fill();
+                    }
+                }
+                const _sCol=[[40,180,80],[40,80,220],[140,40,220]];
+                const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
+                // Solo entidades cercanas al jugador para el light
+                const _lLim = _lW * 0.7;
+                for (const _e2 of (window.entities||[])) {
+                    if (!_e2.inCave) continue;
+                    const [_ex,_ey]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
+                    if (_ex < -_lLim || _ex > _lW+_lLim || _ey < -_lLim || _ey > _lH+_lLim) continue;
+                    if (_e2.type==='slime') {
+                        const [sx,sy]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
+                        const sc2=_sCol[(_e2.slimeColor||0)%3];
+                        const sg2=_slc.createRadialGradient(sx,sy,0,sx,sy,35*_lz);
+                        sg2.addColorStop(0,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0.45)`);sg2.addColorStop(1,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0)`);
+                        _slc.fillStyle=sg2;_slc.beginPath();_slc.arc(sx,sy,35*_lz,0,Math.PI*2);_slc.fill();
+                    } else if (_e2.type==='golem') {
+                        const [gx2,gy2]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.25); const gR2=90*_lz;
+                        const gg2=_slc.createRadialGradient(gx2,gy2,0,gx2,gy2,gR2);
+                        gg2.addColorStop(0,'rgba(80,200,255,0.55)');gg2.addColorStop(0.4,'rgba(40,140,255,0.20)');gg2.addColorStop(1,'rgba(0,100,255,0)');
+                        _slc.fillStyle=gg2;_slc.beginPath();_slc.arc(gx2,gy2,gR2,0,Math.PI*2);_slc.fill();
+                    } else if (_e2.type==='brood_mother'&&_e2.bossPhase===3) {
+                        const [bm2x,bm2y]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.5); const br2=70*_lz;
+                        const bg2=_slc.createRadialGradient(bm2x,bm2y,0,bm2x,bm2y,br2);
+                        bg2.addColorStop(0,'rgba(255,30,0,0.25)');bg2.addColorStop(1,'rgba(255,0,0,0)');
+                        _slc.fillStyle=bg2;_slc.beginPath();_slc.arc(bm2x,bm2y,br2,0,Math.PI*2);_slc.fill();
+                    }
+                }
+                // Plants: solo las cercanas (evitar iterar cientos de plantas)
+                const _pCX3 = window.player.x + window.player.width/2;
+                const _pCY3 = window.player.y + window.player.height/2;
+                const _plantRad = 800;
+                for (const _cp of (window.cavePlants||[])) {
+                    if (Math.abs(_cp.x - _pCX3) > _plantRad || Math.abs(_cp.y - _pCY3) > _plantRad) continue;
+                    if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
+                    const [plx2,ply2]=_wts(_cp.x,_cp.y+(window.game.blockSize||30)-8);
+                    const pR2=(_cp.type==='shroom'?45:30)*_lz;
+                    const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
+                    const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
+                    pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`);pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
+                    _slc.fillStyle=pg3;_slc.beginPath();_slc.arc(plx2,ply2,pR2,0,Math.PI*2);_slc.fill();
                 }
             }
-        }
+            window.lightCtx.drawImage(window._staticLightCanvas, 0, 0);
 
-        window.lightCtx.globalCompositeOperation = 'source-over';
+            // ── Rayos de luz (solo subterráneo, throttle cada 6 frames) ──
+            if (!_onSurface && ambientDarkness > 0.1 && (_lcFrame % 6 === 0)) {
+                const _bs2 = window.game.blockSize;
+                const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness);
+                if (_shaftAlpha > 0.02 && window.getUGCellV && window.getTerrainCol) {
+                    const _pCX2 = window.player.x + window.player.width / 2;
+                    // Reducido a 5 columnas a cada lado (era 8)
+                    for (let _sc = Math.floor((_pCX2 - _bs2*5)/_bs2); _sc <= Math.floor((_pCX2 + _bs2*5)/_bs2); _sc++) {
+                        const _scd = window.getTerrainCol(_sc); if (!_scd||_scd.type==='hole') continue;
+                        let _sd=0;
+                        // Max 15 filas de aire (era 30)
+                        for (let _sr=0;_sr<15;_sr++) {
+                            if (window.getUGCellV(_sc,_sr)!=='air') break;
+                            _sd=_sr+1;
+                        }
+                        if (_sd<2) continue;
+                        const _shX=_sc*_bs2, _shTY=_scd.topY, _shBY=_scd.topY+_sd*_bs2;
+                        const [_slx,_sly]=_wts(_shX,_shTY); const [_slx2,_sly2]=_wts(_shX+_bs2,_shBY);
+                        const _df=Math.max(0,1-Math.abs(_sc*_bs2+_bs2/2-_pCX2)/(_bs2*5));
+                        if (_df<0.05) continue;
+                        const _sA=_shaftAlpha*_df;
+                        const _sG=window.lightCtx.createLinearGradient(_slx,_sly,_slx,_sly2);
+                        _sG.addColorStop(0,`rgba(220,230,255,${_sA})`);_sG.addColorStop(0.6,`rgba(180,200,255,${_sA*0.4})`);_sG.addColorStop(1,'rgba(150,180,255,0)');
+                        window.lightCtx.fillStyle=_sG; window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
+                    }
+                }
+            }
+
+            window.lightCtx.globalCompositeOperation = 'source-over';
+        }
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW, _lH);
     } else if (window.lightCtx && window.lightCanvas) {
-        // Frame impar: reusar el canvas de luz del frame anterior sin recalcular
         const _lW2 = window._canvasLogicW, _lH2 = window._canvasLogicH;
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW2, _lH2);
     }
@@ -2153,13 +2076,35 @@ window.draw = function() {
     }
 
     // === VIÑETA + PELIGRO BAJO HP ===
+    // Cacheada en canvas offscreen — solo se recrea cuando darkness/dangerLevel cambian >0.02
     const _ppW = window._canvasLogicW || 1280; const _ppH = window._canvasLogicH || 720;
     {
         const hp = (window.player && window.player.hp != null) ? window.player.hp : 100; const maxHp = (window.player && window.player.maxHp) ? window.player.maxHp : 100; const hpRatio = hp / maxHp;
-        const dangerLevel = hpRatio < 0.4 ? Math.pow(1 - hpRatio / 0.4, 1.5) : 0; const dangerPulse = dangerLevel > 0.4 ? 0.7 + 0.3 * Math.sin(window.game.frameCount * 0.08) : 1.0;
+        const dangerLevel = hpRatio < 0.4 ? Math.pow(1 - hpRatio / 0.4, 1.5) : 0;
+        const dangerPulse = dangerLevel > 0.4 ? 0.7 + 0.3 * Math.sin(window.game.frameCount * 0.08) : 1.0;
         const vigBase = darkness * 0.40; const vigOuter = vigBase + dangerLevel * 0.45 * dangerPulse;
-        const vigGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.28, _ppW/2, _ppH/2, _ppH * 0.9); vigGrad.addColorStop(0, 'rgba(0,0,0,0)'); vigGrad.addColorStop(0.55, `rgba(0,0,0,${vigBase * 0.25})`); vigGrad.addColorStop(1, `rgba(0,0,0,${vigOuter})`); window.ctx.fillStyle = vigGrad; window.ctx.fillRect(0, 0, _ppW, _ppH);
-        if (dangerLevel > 0.01) { const redAlpha = dangerLevel * 0.38 * dangerPulse; const redGrad = window.ctx.createRadialGradient(_ppW/2, _ppH/2, _ppH * 0.22, _ppW/2, _ppH/2, _ppH * 0.88); redGrad.addColorStop(0, 'rgba(180,0,0,0)'); redGrad.addColorStop(0.5, `rgba(160,0,0,${redAlpha * 0.4})`); redGrad.addColorStop(1, `rgba(140,0,0,${redAlpha})`); window.ctx.fillStyle = redGrad; window.ctx.fillRect(0, 0, _ppW, _ppH); }
+        // Cache key quantized to avoid rebuild every frame
+        const _vKey = `${(vigOuter*20|0)}_${(dangerLevel*20|0)}_${_ppW}`;
+        if (!window._vigCanvas || window._vigKey !== _vKey) {
+            window._vigKey = _vKey;
+            if (!window._vigCanvas || window._vigCanvas.width !== _ppW) {
+                window._vigCanvas = document.createElement('canvas');
+                window._vigCanvas.width = _ppW; window._vigCanvas.height = _ppH;
+                window._vigCtx = window._vigCanvas.getContext('2d');
+            }
+            const VC = window._vigCtx;
+            VC.clearRect(0, 0, _ppW, _ppH);
+            const vigGrad = VC.createRadialGradient(_ppW/2,_ppH/2,_ppH*0.28,_ppW/2,_ppH/2,_ppH*0.9);
+            vigGrad.addColorStop(0,'rgba(0,0,0,0)'); vigGrad.addColorStop(0.55,`rgba(0,0,0,${vigBase*0.25})`); vigGrad.addColorStop(1,`rgba(0,0,0,${vigOuter})`);
+            VC.fillStyle=vigGrad; VC.fillRect(0,0,_ppW,_ppH);
+            if (dangerLevel > 0.01) {
+                const redAlpha = dangerLevel * 0.38 * dangerPulse;
+                const redGrad = VC.createRadialGradient(_ppW/2,_ppH/2,_ppH*0.22,_ppW/2,_ppH/2,_ppH*0.88);
+                redGrad.addColorStop(0,'rgba(180,0,0,0)'); redGrad.addColorStop(0.5,`rgba(160,0,0,${redAlpha*0.4})`); redGrad.addColorStop(1,`rgba(140,0,0,${redAlpha})`);
+                VC.fillStyle=redGrad; VC.fillRect(0,0,_ppW,_ppH);
+            }
+        }
+        window.ctx.drawImage(window._vigCanvas, 0, 0);
     }
 
     // Aberración cromática (screenShake o pvpHitFlash, Q≠low)

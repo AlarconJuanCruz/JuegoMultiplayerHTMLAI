@@ -550,23 +550,27 @@ window.generateWorldSector = function (startX, endX) {
  * @param {number}  pCY   centro Y del jugador
  */
 window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
-    // ── Mapa espacial de bloques para LOS (O(1) lookup por celda de grilla) ──
-    // Se reconstruye solo cuando el array de bloques cambia de tamaño
-    // o periódicamente cada 60 frames para capturar cambios de estado (door open, etc).
     const bkLen = (window.blocks || []).length;
     const frame = window.game.frameCount || 0;
-    if (!window._entBkMap || window._entBkMapLen !== bkLen || (frame & 63) === 0) {
+    const _needBkRebuild = !window._entBkMap || window._entBkMapLen !== bkLen || (frame & 63) === 0;
+    if (_needBkRebuild) {
         const bs  = window.game.blockSize;
         const map = new Map();
+        // También cachear campfires y torretas para no iterar blocks por entidad
+        const _cf = [], _turr = [];
         for (const b of (window.blocks || [])) {
+            if (b.type === 'campfire' && b.isBurning) { _cf.push(b); continue; }
+            if (b.type === 'turret')  { _turr.push(b); }
             if (b.type === 'ladder' || b.type === 'placed_torch' ||
-                b.type === 'box'   || b.type === 'campfire'      ||
-                b.type === 'bed'   || b.type === 'grave'         ||
+                b.type === 'box'    || b.type === 'campfire'      ||
+                b.type === 'bed'    || b.type === 'grave'         ||
                 (b.type === 'door' && b.open)) continue;
             map.set(Math.floor(b.x / bs) + '_' + Math.floor(b.y / bs), b);
         }
-        window._entBkMap    = map;
-        window._entBkMapLen = bkLen;
+        window._entBkMap      = map;
+        window._entBkMapLen   = bkLen;
+        window._entCampfires  = _cf;
+        window._entTurrets    = _turr;
     }
 
     const _camW  = window._canvasLogicW || 1280;
@@ -666,21 +670,15 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
         }
 
         // ── Torretas: prioridad máxima si el enemigo está en su rango ────────
-        // Las torretas son las primeras en ser atacadas si están dentro de 350px
         if (ent.type !== 'chicken') {
             const TURRET_AGGRO = 350;
             let nearestTurret = null, turretDist = TURRET_AGGRO + 1;
-            for (const bl of window.blocks) {
-                if (bl.type !== 'turret' || (bl.arrows || 0) <= 0) continue;
+            for (const bl of (window._entTurrets || [])) {
+                if ((bl.arrows || 0) <= 0) continue;
                 const d = Math.hypot((bl.x + 15) - (ent.x + ent.width / 2), (bl.y + 15) - (ent.y + ent.height / 2));
                 if (d < turretDist) { turretDist = d; nearestTurret = bl; }
             }
-            if (nearestTurret) {
-                target    = nearestTurret;
-                targetCX  = nearestTurret.x + 15;
-                targetCY  = nearestTurret.y + 15;
-                minDist   = turretDist;
-            }
+            if (nearestTurret) { target = nearestTurret; targetCX = nearestTurret.x + 15; targetCY = nearestTurret.y + 15; minDist = turretDist; }
         }
 
         // ── Daño solar a zombies ──
@@ -692,9 +690,8 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
 
         // ── Repulsión por hoguera ──
         let repelled = false;
-        for (const b of window.blocks) {
-            if (b.type === 'campfire' && b.isBurning &&
-                Math.hypot((ent.x + ent.width / 2) - (b.x + 15), (ent.y + ent.height / 2) - (b.y + 15)) < 150) {
+        for (const b of (window._entCampfires || [])) {
+            if (Math.hypot((ent.x + ent.width / 2) - (b.x + 15), (ent.y + ent.height / 2) - (b.y + 15)) < 150) {
                 ent.vx = ent.x > b.x ? 1.5 : -1.5;
                 repelled = true;
                 break;
@@ -719,18 +716,21 @@ function _entObstacleAhead(ent, dirX) {
     // Punto de muestreo: 1px más allá del borde frontal del mob
     const chkX = ent.x + (dirX > 0 ? ent.width + 1 : -1);
 
-    let topY = fY; // tope más alto encontrado (en Y decreciente = más arriba en pantalla)
+    let topY = fY;
 
-    // ── Bloques construidos ──────────────────────────────────────────────────────
-    for (const b of window.blocks) {
-        if (b.type === 'ladder' || b.type === 'placed_torch' || b.type === 'stair') continue;
-        if ((b.type === 'door' && b.open) || b.type === 'box' ||
-            b.type === 'campfire' || b.type === 'bed' || b.type === 'grave') continue;
-        const bh = b.type === 'door' ? bs * 2 : bs;
-        if (chkX < b.x || chkX > b.x + bs) continue;
-        if (b.y + bh <= hY - 2) continue;  // completamente encima de la cabeza
-        if (b.y >= fY + 2) continue;        // completamente debajo de los pies
-        if (b.y < topY) topY = b.y;
+    // ── Bloques construidos: usar mapa espacial O(1) en vez de iterar todos ──
+    const _obMap = window._entBkMap;
+    if (_obMap) {
+        const chkCol = Math.floor(chkX / bs);
+        const rowTop = Math.floor((hY - 2) / bs) - 1;
+        const rowBot = Math.floor((fY + 2) / bs) + 1;
+        for (let r = rowTop; r <= rowBot; r++) {
+            const b = _obMap.get(chkCol + '_' + r);
+            if (!b) continue;
+            const bh = b.type === 'door' ? bs * 2 : bs;
+            if (b.y + bh <= hY - 2 || b.y >= fY + 2) continue;
+            if (b.y < topY) topY = b.y;
+        }
     }
 
     // ── Celdas UG ────────────────────────────────────────────────────────────────

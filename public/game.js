@@ -1116,18 +1116,21 @@ function update() {
         window.mouseWorldX = (window.screenMouseX - _W/2) / _z + window.camera.x + _W/2;
         window.mouseWorldY = (window.screenMouseY - _H/2) / _z + window.camera.y + _H/2;
 
-        // Entidad bajo el cursor
-        window.hoveredEntity = null; let _bestDist = Infinity;
-        for (const _he of window.entities) {
-            if (_he.x < window.mouseWorldX && _he.x+_he.width > window.mouseWorldX && _he.y < window.mouseWorldY && _he.y+_he.height > window.mouseWorldY) {
-                const _hd = Math.hypot(window.mouseWorldX-(_he.x+_he.width/2), window.mouseWorldY-(_he.y+_he.height/2));
-                if (_hd < _bestDist) { _bestDist = _hd; window.hoveredEntity = _he; }
+        // Entidad bajo el cursor — cada 3 frames (no necesita ser exacta cada frame)
+        if (window.game.frameCount % 3 === 0) {
+            window.hoveredEntity = null;
+            const _mwx = window.mouseWorldX, _mwy = window.mouseWorldY;
+            for (const _he of window.entities) {
+                if (_he.x < _mwx && _he.x+_he.width > _mwx && _he.y < _mwy && _he.y+_he.height > _mwy) {
+                    window.hoveredEntity = _he; break; // primero que coincide es suficiente
+                }
             }
         }
 
         window.game.frameCount++;
-        // Exploración automática (fog of war) — cada 6 frames para rendimiento
-        if (window.game.frameCount % 6 === 0 && window.updateExploration) window.updateExploration();
+        // Exploración: cada 20 frames en superficie, cada 12 bajo tierra
+        const _expInterval = (window.player.y > (window.game.baseGroundLevel||510)) ? 12 : 20;
+        if (window.game.frameCount % _expInterval === 0 && window.updateExploration) window.updateExploration();
         // Actualizar mapa si está abierto
         if (window._mapOpen && window._mapDirty && window.renderMap) window.renderMap();
         if (window.game.screenShake > 0) window.game.screenShake--;
@@ -1472,8 +1475,8 @@ function update() {
         // Sync multijugador — emisión con dirty-check para reducir tráfico
         if (window.game.isMultiplayer) {
             if (window.socket) {
-                // Estado que cambia rápido (posición/velocidad): cada 2 frames
-                const _frame2 = window.game.frameCount % 2 === 0;
+                // Estado que cambia rápido (posición/velocidad): cada 3 frames (20/s — imperceptible en LAN)
+                const _frame2 = window.game.frameCount % 3 === 0;
                 // Estado que cambia lento (herramienta, animación especial): solo cuando varía
                 const _toolChg  = window.player.activeTool  !== window.player._lastTool;
                 const _deadChg  = window.player.isDead       !== window.player._lastDead;
@@ -1974,8 +1977,19 @@ function update() {
         window.updateEntities(isDay, isNight, isHoldingTorch, pCX, pCY);
         if (window.fires?.length > 0) window.updateFires();
 
-        // Partículas
-        for (let i = window.particles.length - 1; i >= 0; i--) { const p=window.particles[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=window.game.gravity*0.4;p.life-=p.decay; const _pGY=window.getGroundY?window.getGroundY(p.x):window.game.groundLevel; if(p.y>=_pGY){p.y=_pGY;p.vy=-p.vy*0.5;p.vx*=0.8;} if(p.life<=0.05||isNaN(p.life)) window.particles.splice(i,1); }
+        // Partículas — groundY cacheado por columna para evitar N llamadas a getGroundY
+        if (window.particles.length > 0) {
+            const _pGYMap = new Map();
+            const _pbs = window.game.blockSize || 30;
+            for (let i = window.particles.length - 1; i >= 0; i--) {
+                const p=window.particles[i]; p.x+=p.vx;p.y+=p.vy;p.vy+=window.game.gravity*0.4;p.life-=p.decay;
+                if (p.life<=0.05||isNaN(p.life)) { window.particles.splice(i,1); continue; }
+                const _pCol = Math.floor(p.x/_pbs);
+                let _pGY = _pGYMap.get(_pCol);
+                if (_pGY === undefined) { _pGY = window.getGroundY ? window.getGroundY(p.x) : window.game.groundLevel; _pGYMap.set(_pCol, _pGY); }
+                if(p.y>=_pGY){p.y=_pGY;p.vy=-p.vy*0.5;p.vx*=0.8;}
+            }
+        }
         if (!window.dustParticles) window.dustParticles = [];
         for (let i = window.dustParticles.length - 1; i >= 0; i--) { const d=window.dustParticles[i]; d.x+=d.vx;d.y+=d.vy;d.vx*=0.92;d.vy*=0.88;d.life-=d.decay;d.r+=d.growRate; if(d.life<=0) window.dustParticles.splice(i,1); }
         for (let i = window.damageTexts.length - 1; i >= 0; i--) { const dt=window.damageTexts[i]; dt.y-=0.2;dt.life-=0.008; if(dt.life<=0.05||isNaN(dt.life)) window.damageTexts.splice(i,1); }
@@ -2021,12 +2035,11 @@ window.gameLoop = function(timestamp) {
     if (window._lastLoopTime === undefined) { window._gameAccum = 0; window._lastLoopTime = timestamp; window._upsFrames = 0; window._upsLastTime = timestamp; window._ups = 60; }
     let elapsed = timestamp - window._lastLoopTime;
     window._lastLoopTime = timestamp;
-    if (elapsed > FIXED_DT * 3) elapsed = FIXED_DT * 3;
+    if (elapsed > FIXED_DT * 2) elapsed = FIXED_DT * 2;  // max 2 updates per frame (era 3)
     window._gameAccum += elapsed;
 
     while (window._gameAccum >= FIXED_DT) {
         if (window.game?.isRunning && !document.hidden) {
-            // Guardar posiciones previas ANTES de update para interpolación de render
             if (window.player) {
                 window.player._prevX = window.player.x;
                 window.player._prevY = window.player.y;
@@ -2035,7 +2048,20 @@ window.gameLoop = function(timestamp) {
                 window._prevCamX = window.camera.x;
                 window._prevCamY = window.camera.y;
             }
-            window.entities?.forEach(e => { e._prevX = e.x; e._prevY = e.y; });
+            // Solo guardar prev para entidades visibles (dentro del viewport ±2 bloques)
+            if (window.entities?.length > 0) {
+                const _camW = window._canvasLogicW || 1280;
+                const _bs   = window.game.blockSize || 30;
+                const _cx   = window.camera ? window.camera.x : 0;
+                const _cullL = _cx - _camW * 0.3 - _bs*2;
+                const _cullR = _cx + _camW * 1.3 + _bs*2;
+                for (let _ei = 0; _ei < window.entities.length; _ei++) {
+                    const _e = window.entities[_ei];
+                    if (_e.x + _e.width >= _cullL && _e.x <= _cullR) {
+                        _e._prevX = _e.x; _e._prevY = _e.y;
+                    }
+                }
+            }
             update();
             window._upsFrames++;
         }

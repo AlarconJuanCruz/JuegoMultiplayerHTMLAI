@@ -25,8 +25,8 @@ window.exploreArea = function(worldX, worldY, bonusRadius) {
     var topY = (cd && cd.type !== 'hole') ? cd.topY : (window.game.baseGroundLevel || 510);
     var row  = Math.floor((worldY - topY) / bs);
     var underground = worldY > topY + bs;
-    var radH = underground ? 8 : 20;
-    var radV = underground ? 6 : 3;
+    var radH = underground ? 5 : 14;
+    var radV = underground ? 4 : 2;
     if (bonusRadius) radH += Math.floor(bonusRadius / bs);
     var added = false;
     for (var dc = -radH; dc <= radH; dc++) {
