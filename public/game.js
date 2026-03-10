@@ -2105,7 +2105,7 @@ window.gameLoop = function(timestamp) {
     // Sin esto, en monitores de 120/144 Hz update() se llamaba 2-2.4x por segundo
     // causando física acelerada y animaciones "lentas" (en relación al tiempo real).
     const FIXED_DT = 1000 / 60;  // 16.666 ms por step lógico
-    if (!window._gameAccum) { window._gameAccum = 0; window._lastLoopTime = timestamp; }
+    if (window._lastLoopTime === undefined) { window._gameAccum = 0; window._lastLoopTime = timestamp; }
     let elapsed = timestamp - window._lastLoopTime;
     window._lastLoopTime = timestamp;
     // Cap: si la pestaña estuvo en background, no ejecutar más de 3 steps para evitar
