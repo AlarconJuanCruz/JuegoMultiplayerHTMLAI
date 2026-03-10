@@ -317,6 +317,58 @@ window.generateWorldSector = function (startX, endX) {
         // Limitar cavePlants total para no crecer sin fin
         if (window.cavePlants.length > 600) window.cavePlants.splice(0, window.cavePlants.length - 600);
 
+        // ── Cristales: estalactitas y estalagmitas pre-generadas ───────────────
+        if (!window.caveCrystals) window.caveCrystals = [];
+        const _cryKeySet = new Set(window.caveCrystals.map(c => c.key));
+        for (let _gc = _startCol; _gc <= _endCol; _gc++) {
+            const _gcd2 = window.getTerrainCol(_gc);
+            if (!_gcd2 || _gcd2.type === 'hole') continue;
+            const _gtopY2 = _gcd2.topY;
+            for (let _gr = 1; _gr < _maxDepth - 1; _gr++) {
+                const _gmat2 = window.getUGCellV(_gc, _gr);
+                if (_gmat2 === 'air') continue;
+                const _gh3 = ((_gc * 374761393) ^ (_gr * 1103515245) ^ ((window.worldSeed||12345) * 2654435761)) >>> 0;
+                const _gh3F = _gh3 / 0xFFFFFFFF;
+                // Estalactita (desde techo hacia abajo): celda sólida con aire debajo
+                if (_gh3F < 0.055) {
+                    const _below = window.getUGCellV(_gc, _gr + 1);
+                    if (_below === 'air') {
+                        const _k = `cs_${_gc}_${_gr}`;
+                        if (!_cryKeySet.has(_k)) {
+                            _cryKeySet.add(_k);
+                            window.caveCrystals.push({
+                                key:_k, col:_gc, row:_gr, type:'stalactite',
+                                x: _gc*_ugBs + _ugBs*(0.2+_gh3F*0.6),
+                                y: _gtopY2 + _gr*_ugBs + _ugBs - 1,
+                                len: 5 + _gh3F*30,
+                                depth: _gr,
+                                variant: (_gc*7+_gr*13)%3,
+                            });
+                        }
+                    }
+                }
+                // Estalagmita (desde suelo hacia arriba): celda sólida con aire encima
+                if (_gh3F > 0.96) {
+                    const _above = window.getUGCellV(_gc, _gr - 1);
+                    if (_above === 'air') {
+                        const _k = `cm_${_gc}_${_gr}`;
+                        if (!_cryKeySet.has(_k)) {
+                            _cryKeySet.add(_k);
+                            window.caveCrystals.push({
+                                key:_k, col:_gc, row:_gr, type:'stalagmite',
+                                x: _gc*_ugBs + _ugBs*(0.15+((_gh3F*1.7)%1)*0.7),
+                                y: _gtopY2 + _gr*_ugBs + 1,
+                                len: 4 + (_gh3F-0.96)*500,
+                                depth: _gr,
+                                variant: (_gc*11+_gr*7)%3,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        if (window.caveCrystals.length > 800) window.caveCrystals.splice(0, window.caveCrystals.length - 800);
+
         // ── Criaturas de cueva adicionales + jefes arañas ──────────────────────
         // Escanear cuevas del sector buscando espacios grandes (≥4 celdas altura)
         // para spawnar criaturas de cueva y jefes únicos.
