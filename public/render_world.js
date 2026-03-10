@@ -72,7 +72,15 @@ window.draw = function() {
     // Sol
     if (hourFloat > 5 && hourFloat < 19) {
         let dayProgress = (hourFloat - 5) / 14; let sunX = W * dayProgress; let sunY = H * 0.8 - Math.sin(dayProgress * Math.PI) * (H * 0.7); const sunPulse = 1 + Math.sin(window.game.frameCount * 0.02) * 0.04;
-        for (let r = 140; r >= 20; r -= 20) { const a = 0.03 * (1 - r/160) * sunPulse; const glowGrad = window.ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, r * 2.5); glowGrad.addColorStop(0, `rgba(255,240,100,${a * 3})`); glowGrad.addColorStop(0.4, `rgba(255,200,50,${a})`); glowGrad.addColorStop(1, 'rgba(255,180,0,0)'); window.ctx.fillStyle = glowGrad; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, r * 2.5, 0, Math.PI*2); window.ctx.fill(); }
+        // Single cached glow — one gradient instead of 7
+        const _sgR = 320 * sunPulse;
+        if (!window._sunGlowGrad || window._sunGlowX !== (sunX|0) || window._sunGlowY !== (sunY|0)) {
+            window._sunGlowX = sunX|0; window._sunGlowY = sunY|0;
+            const sg = window.ctx.createRadialGradient(sunX,sunY,0,sunX,sunY,_sgR);
+            sg.addColorStop(0,'rgba(255,240,100,0.18)'); sg.addColorStop(0.3,'rgba(255,200,50,0.08)'); sg.addColorStop(0.65,'rgba(255,180,20,0.03)'); sg.addColorStop(1,'rgba(255,160,0,0)');
+            window._sunGlowGrad = sg;
+        }
+        window.ctx.fillStyle = window._sunGlowGrad; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, _sgR, 0, Math.PI*2); window.ctx.fill();
         let sunSize = 140;
         if (window.sprites.sprite_sun && window.sprites.sprite_sun.complete && window.sprites.sprite_sun.naturalWidth > 0) { window.ctx.drawImage(window.sprites.sprite_sun, sunX - sunSize/2, sunY - sunSize/2, sunSize, sunSize); }
         else { window.ctx.fillStyle = '#FFE566'; window.ctx.beginPath(); window.ctx.arc(sunX, sunY, 42, 0, Math.PI*2); window.ctx.fill(); }
@@ -81,7 +89,15 @@ window.draw = function() {
     // Luna
     if (hourFloat >= 17 || hourFloat <= 7) {
         let nightProgress = hourFloat >= 17 ? (hourFloat - 17) / 14 : (hourFloat + 7) / 14; let moonX = W * nightProgress; let moonY = H * 0.8 - Math.sin(nightProgress * Math.PI) * (H * 0.7); const moonPulse = 1 + Math.sin(window.game.frameCount * 0.015 + 1.5) * 0.05;
-        for (let r = 100; r >= 15; r -= 15) { const a = 0.025 * (1 - r/110) * moonPulse; const moonGrad = window.ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, r * 2.8); moonGrad.addColorStop(0, `rgba(200,220,255,${a * 4})`); moonGrad.addColorStop(0.4, `rgba(170,200,240,${a})`); moonGrad.addColorStop(1, 'rgba(140,170,220,0)'); window.ctx.fillStyle = moonGrad; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, r * 2.8, 0, Math.PI*2); window.ctx.fill(); }
+        // Single cached glow — one gradient instead of 6
+        const _mgR = 260 * moonPulse;
+        if (!window._moonGlowGrad || window._moonGlowX !== (moonX|0) || window._moonGlowY !== (moonY|0)) {
+            window._moonGlowX = moonX|0; window._moonGlowY = moonY|0;
+            const mg = window.ctx.createRadialGradient(moonX,moonY,0,moonX,moonY,_mgR);
+            mg.addColorStop(0,'rgba(200,220,255,0.14)'); mg.addColorStop(0.35,'rgba(170,200,240,0.06)'); mg.addColorStop(0.7,'rgba(140,170,220,0.02)'); mg.addColorStop(1,'rgba(140,170,220,0)');
+            window._moonGlowGrad = mg;
+        }
+        window.ctx.fillStyle = window._moonGlowGrad; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, _mgR, 0, Math.PI*2); window.ctx.fill();
         let moonSize = 120;
         if (window.sprites.sprite_moon && window.sprites.sprite_moon.complete && window.sprites.sprite_moon.naturalWidth > 0) { window.ctx.drawImage(window.sprites.sprite_moon, moonX - moonSize/2, moonY - moonSize/2, moonSize, moonSize); }
         else { window.ctx.fillStyle = '#E8EEE0'; window.ctx.beginPath(); window.ctx.arc(moonX, moonY, 32, 0, Math.PI*2); window.ctx.fill(); }
@@ -928,6 +944,10 @@ window.draw = function() {
         // Ocultar entidades subterráneas cuando jugador está en superficie
         if (_onSurface && ent.y > _surfCutY) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
+        // LOD: entidades a >320px del jugador usan flat colors (sin gradientes)
+        const _eLODDist = Math.hypot((ent.x+ent.width/2) - (window.player.x+window.player.width/2),
+                                     (ent.y+ent.height/2) - (window.player.y+window.player.height/2));
+        const _eLOD = _eLODDist > 320; // true = usar colores planos
         // Interpolación de posición de entidad
         const _ra3 = window._renderAlpha ?? 1;
         const _eOrigX = ent.x, _eOrigY = ent.y;
@@ -942,10 +962,13 @@ window.draw = function() {
             C.globalAlpha=0.18; C.fillStyle='#000'; C.beginPath(); C.ellipse(bx+w/2, y+h+1, w*0.45, 2.5, 0, 0, Math.PI*2); C.fill(); C.globalAlpha=1;
             const legColor = H ? '#ff6644' : '#e07820'; const lw1 = moving ? Math.sin(T*0.28)*5 : 0; const lw2 = moving ? -Math.sin(T*0.28)*5 : 0; C.strokeStyle=legColor; C.lineWidth=2; C.beginPath(); C.moveTo(bx+7,y+h-4+bob); C.lineTo(bx+7+lw1,y+h+1); C.lineTo(bx+5+lw1,y+h+3); C.stroke(); C.beginPath(); C.moveTo(bx+13,y+h-4+bob); C.lineTo(bx+13+lw2,y+h+1); C.lineTo(bx+15+lw2,y+h+3); C.stroke();
             C.fillStyle = H ? '#ffaaaa' : '#f0d080'; C.beginPath(); C.moveTo(bx+2,y+h*0.55+bob); C.quadraticCurveTo(bx-6,y+h*0.4+bob, bx-3,y+h*0.3+bob); C.quadraticCurveTo(bx+0,y+h*0.45+bob, bx+2,y+h*0.55+bob); C.fill();
-            const bodyG = C.createRadialGradient(bx+w*0.42,y+h*0.58+bob,2, bx+w*0.5,y+h*0.6+bob,w*0.55); bodyG.addColorStop(0, H?'#ffbbbb':'#fffef0'); bodyG.addColorStop(1, H?'#ff5544':'#f0e070'); C.fillStyle=bodyG; C.beginPath(); C.ellipse(bx+w*0.52, y+h*0.62+bob, w*0.52, h*0.37, 0, 0, Math.PI*2); C.fill();
+            if (_eLOD) { C.fillStyle=H?'#f0e070':'#fffef0'; C.beginPath(); C.ellipse(bx+w*0.52, y+h*0.62+bob, w*0.52, h*0.37, 0, 0, Math.PI*2); C.fill(); }
+            else { const bodyG = C.createRadialGradient(bx+w*0.42,y+h*0.58+bob,2, bx+w*0.5,y+h*0.6+bob,w*0.55); bodyG.addColorStop(0, H?'#ffbbbb':'#fffef0'); bodyG.addColorStop(1, H?'#ff5544':'#f0e070'); C.fillStyle=bodyG; C.beginPath(); C.ellipse(bx+w*0.52, y+h*0.62+bob, w*0.52, h*0.37, 0, 0, Math.PI*2); C.fill(); }
             C.fillStyle = H?'#ff7755':'#d8c060'; C.beginPath(); C.moveTo(bx+w*0.8,y+h*0.5+bob); C.quadraticCurveTo(bx+w*1.05,y+h*0.63+bob, bx+w*0.85,y+h*0.78+bob); C.quadraticCurveTo(bx+w*0.68,y+h*0.72+bob, bx+w*0.8,y+h*0.5+bob); C.fill();
             C.fillStyle = H?'#ff6644':'#f5e888'; C.beginPath(); C.ellipse(bx+w*0.42, y+h*0.42+bob, w*0.18, h*0.1, -0.2, 0, Math.PI*2); C.fill();
-            const hy = y+h*0.28+headBob; const hg = C.createRadialGradient(bx+w*0.4,hy,1, bx+w*0.42,hy,w*0.3); hg.addColorStop(0, H?'#ffcccc':'#fffff8'); hg.addColorStop(1, H?'#ff5544':'#f0e878'); C.fillStyle=hg; C.beginPath(); C.ellipse(bx+w*0.44, hy, w*0.32, h*0.22, 0, 0, Math.PI*2); C.fill();
+            const hy = y+h*0.28+headBob;
+            if (_eLOD) { C.fillStyle=H?'#ff5544':'#f0e878'; C.beginPath(); C.ellipse(bx+w*0.44, hy, w*0.32, h*0.22, 0, 0, Math.PI*2); C.fill(); }
+            else { const hg = C.createRadialGradient(bx+w*0.4,hy,1, bx+w*0.42,hy,w*0.3); hg.addColorStop(0, H?'#ffcccc':'#fffff8'); hg.addColorStop(1, H?'#ff5544':'#f0e878'); C.fillStyle=hg; C.beginPath(); C.ellipse(bx+w*0.44, hy, w*0.32, h*0.22, 0, 0, Math.PI*2); C.fill(); }
             C.fillStyle=H?'#ff3333':'#dd2222'; C.beginPath(); C.moveTo(bx+w*0.3,hy-4); C.quadraticCurveTo(bx+w*0.25,hy-11,bx+w*0.35,hy-7); C.quadraticCurveTo(bx+w*0.42,hy-13,bx+w*0.47,hy-7); C.quadraticCurveTo(bx+w*0.52,hy-3,bx+w*0.3,hy-4); C.fill(); C.beginPath(); C.arc(bx+w*0.36,hy+6,2.5,0,Math.PI*2); C.fill();
             C.fillStyle='#e08020'; C.beginPath(); C.moveTo(bx+w*0.72,hy-1); C.lineTo(bx+w*0.98,hy); C.lineTo(bx+w*0.72,hy+3); C.fill(); C.strokeStyle='#c06010'; C.lineWidth=0.8; C.beginPath(); C.moveTo(bx+w*0.72,hy+1); C.lineTo(bx+w*0.92,hy+1); C.stroke();
             C.fillStyle='#111'; C.beginPath(); C.arc(bx+w*0.6,hy-1,2,0,Math.PI*2); C.fill(); C.fillStyle='#fff'; C.beginPath(); C.arc(bx+w*0.61,hy-1.5,0.8,0,Math.PI*2); C.fill();
@@ -1076,18 +1099,27 @@ window.draw = function() {
                     const midY  = cy2 - h * 0.3 + legPhase * 8;
                     const tipX  = cx2 + side * (w * 1.1 + i * 3);
                     const tipY  = y + h + legPhase * 4;
-                    const grad  = C.createLinearGradient(baseX, baseY, tipX, tipY);
-                    grad.addColorStop(0, bodyCol2); grad.addColorStop(1, H?'#ff6644':'#111');
-                    C.strokeStyle = grad;
+                    if (_eLOD) {
+                        C.strokeStyle = H?'#ff6644':bodyCol;
+                    } else {
+                        const grad = C.createLinearGradient(baseX, baseY, tipX, tipY);
+                        grad.addColorStop(0, bodyCol2); grad.addColorStop(1, H?'#ff6644':'#111');
+                        C.strokeStyle = grad;
+                    }
                     C.beginPath(); C.moveTo(baseX, baseY); C.quadraticCurveTo(midX, midY, tipX, tipY); C.stroke();
                 }
             }
 
             // ── Abdomen (cuerpo trasero) ──
-            const abdGrad = C.createRadialGradient(cx2-2, cy2+2, 1, cx2, cy2+2, w*0.48);
-            abdGrad.addColorStop(0, bodyCol2); abdGrad.addColorStop(1, bodyCol);
-            C.fillStyle = abdGrad;
-            C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
+            if (_eLOD) {
+                C.fillStyle = bodyCol2;
+                C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
+            } else {
+                const abdGrad = C.createRadialGradient(cx2-2, cy2+2, 1, cx2, cy2+2, w*0.48);
+                abdGrad.addColorStop(0, bodyCol2); abdGrad.addColorStop(1, bodyCol);
+                C.fillStyle = abdGrad;
+                C.beginPath(); C.ellipse(cx2, cy2 + h*0.12, w*0.45, h*0.42, 0, 0, Math.PI*2); C.fill();
+            }
             // Patrón de abdomen (raya o puntos)
             if (!H) {
                 if (isBoss) {
@@ -1104,9 +1136,8 @@ window.draw = function() {
             }
 
             // ── Cefalotórax (cuerpo delantero) ──
-            const cefGrad = C.createRadialGradient(cx2, cy2-h*0.1, 0, cx2, cy2-h*0.1, w*0.32);
-            cefGrad.addColorStop(0, bodyCol2); cefGrad.addColorStop(1, bodyCol);
-            C.fillStyle = cefGrad;
+            if (_eLOD) { C.fillStyle=bodyCol2; }
+            else { const cefGrad = C.createRadialGradient(cx2, cy2-h*0.1, 0, cx2, cy2-h*0.1, w*0.32); cefGrad.addColorStop(0, bodyCol2); cefGrad.addColorStop(1, bodyCol); C.fillStyle = cefGrad; }
             C.beginPath(); C.ellipse(cx2, cy2 - h*0.12, w*0.30, h*0.30, 0, 0, Math.PI*2); C.fill();
 
             // ── Ojos ──
@@ -1799,7 +1830,12 @@ window.draw = function() {
     }
 
     // === LUZ DINÁMICA (lightCanvas, destination-out) ===
-    if (window.lightCtx) {
+    // Throttle: se recalcula cada 2 frames. En frames impares se reutiliza el resultado anterior.
+    // El jugador en movimiento rápido no nota 1 frame de desfase en la luz.
+    const _lcFrame = window.game.frameCount || 0;
+    const _skipLight = (_lcFrame & 1) === 1 && window._lightCanvasDirty === false;
+    if (window.lightCtx && !_skipLight) {
+        window._lightCanvasDirty = false;
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         const _lz = window.game.zoom || 1; const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
         function _wts(wx, wy) { return [(wx - _iCamX - _lW/2)*_lz + _lW/2, (wy - _iCamY - _lH/2)*_lz + _lH/2]; }
@@ -1853,129 +1889,98 @@ window.draw = function() {
                 }
             });
         }
-        window.blocks.forEach(b => {
-            if (b.type === 'campfire' && b.isBurning) {
-                const _cf = 0.92 + Math.sin(_fc * 0.19 + b.x * 0.001) * 0.08;
-                let glow = 260 * _cf * _lz; let [bx, by] = _wts(b.x+15, b.y+15);
-                let cGrad = window.lightCtx.createRadialGradient(bx, by, 0, bx, by, glow);
-                cGrad.addColorStop(0, 'rgba(255, 200, 100, 0.9)'); cGrad.addColorStop(0.4, 'rgba(255, 160, 50, 0.6)'); cGrad.addColorStop(1, 'rgba(255, 130, 0, 0)');
-                window.lightCtx.fillStyle = cGrad; window.lightCtx.beginPath(); window.lightCtx.arc(bx, by, glow, 0, Math.PI*2); window.lightCtx.fill();
+        // ── Luces estáticas en canvas cacheado (campfire, antorchas, slimes, plantas, gólems) ──
+        // Solo se recalcula cuando la cámara se mueve >4px o cada 90 frames
+        const _camMX = Math.abs((window._slCamX||0) - _iCamX);
+        const _camMY = Math.abs((window._slCamY||0) - _iCamY);
+        const _slDirty = !window._staticLightCanvas || _camMX > 4 || _camMY > 4 || (_lcFrame % 90 === 0);
+        if (_slDirty) {
+            window._slCamX = _iCamX; window._slCamY = _iCamY;
+            if (!window._staticLightCanvas) {
+                window._staticLightCanvas = document.createElement('canvas');
+                window._staticLightCanvas.width = _lW; window._staticLightCanvas.height = _lH;
+                window._staticLightCtx = window._staticLightCanvas.getContext('2d');
             }
-            if (b.type === 'placed_torch') {
-                const _ptf = 0.9 + Math.sin(_fc * 0.25 + b.x * 0.01) * 0.1;
-                let tGlow = 165 * _ptf * _lz;
-                let [tx, ty] = _wts(b.x + window.game.blockSize * 0.5, b.y + window.game.blockSize * 0.3);
-                let tGrad = window.lightCtx.createRadialGradient(tx, ty, 0, tx, ty, tGlow);
-                tGrad.addColorStop(0, 'rgba(255, 200, 80, 0.85)'); tGrad.addColorStop(0.4, 'rgba(255, 150, 20, 0.55)'); tGrad.addColorStop(1, 'rgba(255, 100, 0, 0)');
-                window.lightCtx.fillStyle = tGrad; window.lightCtx.beginPath(); window.lightCtx.arc(tx, ty, tGlow, 0, Math.PI*2); window.lightCtx.fill();
-            }
-        });
-        // Luz de slimes de cueva
-        if (window.entities?.length > 0 && ambientDarkness > 0.1) {
-            const _slimeCols = [
-                [40,180,80], [40,80,220], [140,40,220],
-            ];
-            for (const _se of window.entities) {
-                if (_se.type !== 'slime' || !_se.inCave) continue;
-                const [slx, sly] = _wts(_se.x + _se.width/2, _se.y + _se.height/2);
-                const _sc = _slimeCols[(_se.slimeColor||0)%3];
-                const _sgr = window.lightCtx.createRadialGradient(slx, sly, 0, slx, sly, 35*_lz);
-                _sgr.addColorStop(0, `rgba(${_sc[0]},${_sc[1]},${_sc[2]},0.45)`);
-                _sgr.addColorStop(1, `rgba(${_sc[0]},${_sc[1]},${_sc[2]},0)`);
-                window.lightCtx.fillStyle = _sgr;
-                window.lightCtx.beginPath(); window.lightCtx.arc(slx, sly, 35*_lz, 0, Math.PI*2); window.lightCtx.fill();
-            }
-        }
-        if (window.cavePlants?.length > 0) {
-            const _plantPulse = 0.7 + Math.sin(_fc * 0.08) * 0.3;
-            const _plantColors = [
-                [40, 80, 255],   // azul
-                [40, 220, 80],   // verde
-                [170, 40, 240],  // violeta
-            ];
-            for (const _cp of window.cavePlants) {
-                if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
-                const _pLightX = _cp.x;
-                const _pLightY = _cp.y + (window.game.blockSize||30) - 8;
-                const [plx, ply] = _wts(_pLightX, _pLightY);
-                const _pGlowR = (_cp.type === 'shroom' ? 45 : 30) * _lz * _plantPulse;
-                const _pIdx = _cp.variant || 0;
-                const [pr, pg, pb] = _plantColors[_pIdx % 3];
-                const _pGr = window.lightCtx.createRadialGradient(plx, ply, 0, plx, ply, _pGlowR);
-                _pGr.addColorStop(0, `rgba(${pr},${pg},${pb},0.55)`);
-                _pGr.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
-                window.lightCtx.fillStyle = _pGr;
-                window.lightCtx.beginPath(); window.lightCtx.arc(plx, ply, _pGlowR, 0, Math.PI*2); window.lightCtx.fill();
-            }
-        }
-        // Luz de gólem (cristalina azul) y aura de Madre Araña
-        if (window.entities?.length > 0 && ambientDarkness > 0.1) {
-            for (const _le of window.entities) {
-                if (!_le.inCave) continue;
-                if (_le.type === 'golem') {
-                    const [gx,gy] = _wts(_le.x+_le.width/2, _le.y+_le.height*0.25);
-                    const _gf = 0.75 + Math.sin((_fc)*0.09+_le.x*0.01)*0.25;
-                    const gR = 90 * _lz * _gf;
-                    const gGr = window.lightCtx.createRadialGradient(gx,gy,0,gx,gy,gR);
-                    gGr.addColorStop(0,'rgba(80,200,255,0.55)'); gGr.addColorStop(0.4,'rgba(40,140,255,0.20)'); gGr.addColorStop(1,'rgba(0,100,255,0)');
-                    window.lightCtx.fillStyle=gGr; window.lightCtx.beginPath(); window.lightCtx.arc(gx,gy,gR,0,Math.PI*2); window.lightCtx.fill();
-                } else if (_le.type === 'brood_mother' && _le.bossPhase === 3) {
-                    const [bmx,bmy] = _wts(_le.x+_le.width/2, _le.y+_le.height*0.5);
-                    const _bmR = 70 * _lz;
-                    const _bmGr = window.lightCtx.createRadialGradient(bmx,bmy,0,bmx,bmy,_bmR);
-                    _bmGr.addColorStop(0,'rgba(255,30,0,0.25)'); _bmGr.addColorStop(1,'rgba(255,0,0,0)');
-                    window.lightCtx.fillStyle=_bmGr; window.lightCtx.beginPath(); window.lightCtx.arc(bmx,bmy,_bmR,0,Math.PI*2); window.lightCtx.fill();
+            const _slc = window._staticLightCtx;
+            _slc.clearRect(0, 0, _lW, _lH);
+            // Campfires + placed torches
+            for (const b of window.blocks) {
+                if (b.type === 'campfire' && b.isBurning) {
+                    const [bx,by]=_wts(b.x+15,b.y+15); const glow=260*_lz;
+                    const cg=_slc.createRadialGradient(bx,by,0,bx,by,glow);
+                    cg.addColorStop(0,'rgba(255,200,100,0.9)');cg.addColorStop(0.4,'rgba(255,160,50,0.6)');cg.addColorStop(1,'rgba(255,130,0,0)');
+                    _slc.fillStyle=cg;_slc.beginPath();_slc.arc(bx,by,glow,0,Math.PI*2);_slc.fill();
+                } else if (b.type === 'placed_torch') {
+                    const [tx,ty]=_wts(b.x+(window.game.blockSize||30)*0.5,b.y+(window.game.blockSize||30)*0.3); const tg2=165*_lz;
+                    const tg=_slc.createRadialGradient(tx,ty,0,tx,ty,tg2);
+                    tg.addColorStop(0,'rgba(255,200,80,0.85)');tg.addColorStop(0.4,'rgba(255,150,20,0.55)');tg.addColorStop(1,'rgba(255,100,0,0)');
+                    _slc.fillStyle=tg;_slc.beginPath();_slc.arc(tx,ty,tg2,0,Math.PI*2);_slc.fill();
                 }
             }
+            // Slimes, plants, golems
+            const _sCol=[[40,180,80],[40,80,220],[140,40,220]];
+            const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
+            for (const _e2 of (window.entities||[])) {
+                if (!_e2.inCave) continue;
+                if (_e2.type==='slime') {
+                    const [sx,sy]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
+                    const sc2=_sCol[(_e2.slimeColor||0)%3];
+                    const sg2=_slc.createRadialGradient(sx,sy,0,sx,sy,35*_lz);
+                    sg2.addColorStop(0,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0.45)`);sg2.addColorStop(1,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0)`);
+                    _slc.fillStyle=sg2;_slc.beginPath();_slc.arc(sx,sy,35*_lz,0,Math.PI*2);_slc.fill();
+                } else if (_e2.type==='golem') {
+                    const [gx2,gy2]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.25); const gR2=90*_lz;
+                    const gg2=_slc.createRadialGradient(gx2,gy2,0,gx2,gy2,gR2);
+                    gg2.addColorStop(0,'rgba(80,200,255,0.55)');gg2.addColorStop(0.4,'rgba(40,140,255,0.20)');gg2.addColorStop(1,'rgba(0,100,255,0)');
+                    _slc.fillStyle=gg2;_slc.beginPath();_slc.arc(gx2,gy2,gR2,0,Math.PI*2);_slc.fill();
+                } else if (_e2.type==='brood_mother'&&_e2.bossPhase===3) {
+                    const [bm2x,bm2y]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.5); const br2=70*_lz;
+                    const bg2=_slc.createRadialGradient(bm2x,bm2y,0,bm2x,bm2y,br2);
+                    bg2.addColorStop(0,'rgba(255,30,0,0.25)');bg2.addColorStop(1,'rgba(255,0,0,0)');
+                    _slc.fillStyle=bg2;_slc.beginPath();_slc.arc(bm2x,bm2y,br2,0,Math.PI*2);_slc.fill();
+                }
+            }
+            for (const _cp of (window.cavePlants||[])) {
+                if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
+                const [plx2,ply2]=_wts(_cp.x,_cp.y+(window.game.blockSize||30)-8);
+                const pR2=(_cp.type==='shroom'?45:30)*_lz;
+                const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
+                const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
+                pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`);pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
+                _slc.fillStyle=pg3;_slc.beginPath();_slc.arc(plx2,ply2,pR2,0,Math.PI*2);_slc.fill();
+            }
         }
+        window.lightCtx.drawImage(window._staticLightCanvas, 0, 0);
 
-        // ── Rayos de luz a través de huecos verticales ───────────────────────
-        // Cuando el jugador está bajo tierra, buscar columnas del jugador con
-        // huecos abiertos hacia arriba (row0 minado o hueco de cueva natural
-        // que llega a la superficie). Un rayo vertical bajará por ese hueco.
-        if (!_onSurface && window.getUGCellV && window.getTerrainCol && ambientDarkness > 0.1) {
+        // ── Rayos de luz (solo cuando subterráneo, throttled cada 3 frames) ──
+        if (!_onSurface && window.getUGCellV && window.getTerrainCol && ambientDarkness > 0.1 && (_lcFrame % 3 === 0)) {
             const _bs2 = window.game.blockSize;
-            const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness); // más débil de noche
+            const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness);
             if (_shaftAlpha > 0.02) {
-                const _pCenterX = window.player.x + window.player.width / 2;
-                // Revisar columnas cerca del jugador (±8 columnas)
-                const _shaftStartCol = Math.floor((_pCenterX - _bs2 * 8) / _bs2);
-                const _shaftEndCol   = Math.floor((_pCenterX + _bs2 * 8) / _bs2);
-                for (let _sc = _shaftStartCol; _sc <= _shaftEndCol; _sc++) {
-                    const _scd = window.getTerrainCol(_sc);
-                    if (!_scd || _scd.type === 'hole') continue;
-                    const _stopY = _scd.topY;
-                    // Verificar si el hueco va desde row0 hasta el jugador (columna abierta)
-                    let _shaftDepth = 0;
-                    let _shaftOpen  = true;
-                    for (let _sr = 0; _sr < 30; _sr++) {
-                        const _m = window.getUGCellV(_sc, _sr);
-                        if (_m !== 'air') { _shaftOpen = false; break; }
-                        _shaftDepth = _sr + 1;
-                    }
-                    if (!_shaftOpen || _shaftDepth < 2) continue;
-                    // Hay un hueco abierto — dibujar rayo de luz
-                    const _shaftX = _sc * _bs2;
-                    const _shaftTopY  = _stopY;
-                    const _shaftBotY  = _stopY + _shaftDepth * _bs2;
-                    const [_slx, _sly]  = _wts(_shaftX, _shaftTopY);
-                    const [_slx2, _sly2] = _wts(_shaftX + _bs2, _shaftBotY);
-                    // Distancia horizontal al jugador → atenúa el brillo del rayo
-                    const _distFactor = Math.max(0, 1 - Math.abs(_sc * _bs2 + _bs2/2 - _pCenterX) / (_bs2 * 6));
-                    if (_distFactor < 0.05) continue;
-                    const _sGrad = window.lightCtx.createLinearGradient(_slx, _sly, _slx, _sly2);
-                    const _sA = _shaftAlpha * _distFactor;
-                    _sGrad.addColorStop(0, `rgba(220,230,255,${_sA})`);
-                    _sGrad.addColorStop(0.6, `rgba(180,200,255,${_sA * 0.4})`);
-                    _sGrad.addColorStop(1, `rgba(150,180,255,0)`);
-                    window.lightCtx.fillStyle = _sGrad;
-                    window.lightCtx.fillRect(_slx, _sly, _slx2 - _slx, _sly2 - _sly);
+                const _pCX2 = window.player.x + window.player.width / 2;
+                for (let _sc = Math.floor((_pCX2 - _bs2*8)/_bs2); _sc <= Math.floor((_pCX2 + _bs2*8)/_bs2); _sc++) {
+                    const _scd = window.getTerrainCol(_sc); if (!_scd||_scd.type==='hole') continue;
+                    let _sd=0, _so=true;
+                    for (let _sr=0;_sr<30;_sr++) { if (window.getUGCellV(_sc,_sr)!=='air'){_so=false;break;} _sd=_sr+1; }
+                    if (!_so||_sd<2) continue;
+                    const _shX=_sc*_bs2, _shTY=_scd.topY, _shBY=_scd.topY+_sd*_bs2;
+                    const [_slx,_sly]=_wts(_shX,_shTY); const [_slx2,_sly2]=_wts(_shX+_bs2,_shBY);
+                    const _df=Math.max(0,1-Math.abs(_sc*_bs2+_bs2/2-_pCX2)/(_bs2*6));
+                    if (_df<0.05) continue;
+                    const _sA=_shaftAlpha*_df;
+                    const _sG=window.lightCtx.createLinearGradient(_slx,_sly,_slx,_sly2);
+                    _sG.addColorStop(0,`rgba(220,230,255,${_sA})`);_sG.addColorStop(0.6,`rgba(180,200,255,${_sA*0.4})`);_sG.addColorStop(1,'rgba(150,180,255,0)');
+                    window.lightCtx.fillStyle=_sG; window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
                 }
             }
         }
 
         window.lightCtx.globalCompositeOperation = 'source-over';
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW, _lH);
+    } else if (window.lightCtx && window.lightCanvas) {
+        // Frame impar: reusar el canvas de luz del frame anterior sin recalcular
+        const _lW2 = window._canvasLogicW, _lH2 = window._canvasLogicH;
+        window.ctx.drawImage(window.lightCanvas, 0, 0, _lW2, _lH2);
     }
 
     // === NOMBRES/CHAT EN COORDENADAS MUNDO (con zoom aplicado) ===
