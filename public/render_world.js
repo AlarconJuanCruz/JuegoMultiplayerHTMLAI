@@ -202,6 +202,16 @@ window.draw = function() {
     const endX   = Math.ceil((_visRight + 120) / step) * step;
     const bottomY = _iCamY + H / z + 300;
 
+    // ── Variables de culling de superficie — usadas en todo el draw ──────────
+    // Se calculan una sola vez y se reusan en entidades, items, plantas.
+    const _surfUGCol  = window.getTerrainCol ? Math.floor((window.player.x + window.player.width/2) / bs) : 0;
+    const _surfUGCD   = window.getTerrainCol ? window.getTerrainCol(_surfUGCol) : null;
+    const _surfY      = (_surfUGCD && _surfUGCD.type !== 'hole') ? _surfUGCD.topY : (window.game.baseGroundLevel || 510);
+    // El jugador está en superficie si su base está a < 2.5 bloques del topY
+    const _onSurface  = (window.player.y + window.player.height) <= _surfY + bs * 2.5;
+    // Y límite: por debajo de este Y se oculta todo cuando jugador está en superficie
+    const _surfCutY   = _surfY + bs * 3;
+
     if (!window.hitCanvas) { window.hitCanvas = document.createElement('canvas'); window.hitCtx = window.hitCanvas.getContext('2d', { willReadFrequently: true }); }
 
     // === BLOQUES, ROCAS Y ÁRBOLES (antes del terreno para que el pasto los tape) ===
@@ -365,12 +375,8 @@ window.draw = function() {
 
             // ── Player UG row para fog-of-war ──
             const _fogEnabled    = !!window._caveExplored;
-            const _playerUGCol   = Math.floor((window.player.x + window.player.width/2) / bs);
-            const _playerUGCD    = window.getTerrainCol ? window.getTerrainCol(_playerUGCol) : null;
-            const _playerSurfY   = _playerUGCD ? _playerUGCD.topY : (window.game.baseGroundLevel || 510);
-            // ¿Está el jugador sobre la superficie (no en cueva)?
-            const _playerOnSurf  = (window.player.y + window.player.height) <= _playerSurfY + bs * 2.5;
-            // Máximo de filas visibles desde superficie (3 bloques)
+            // Reusar variables de culling ya calculadas arriba
+            const _playerOnSurf  = _onSurface;
             const _surfBlackRow  = 3;
 
             window._ugFrameCache = {};
@@ -612,8 +618,10 @@ window.draw = function() {
                 ['#aa22ee','#dd88ff','rgba(170,40,240,'],   // violeta
             ];
             for (const _cp of window.cavePlants) {
-                // Culling
+                // Culling lateral
                 if (_cp.x + bs < startCol * bs || _cp.x > (endCol + 1) * bs) continue;
+                // Ocultar cuando jugador está en superficie
+                if (_onSurface && _cp.y > _surfCutY) continue;
                 // Fog de cueva: no mostrar si no explorada
                 if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
                 C.save();
@@ -854,6 +862,8 @@ window.draw = function() {
     // Items en el suelo (flotan con seno)
     window.droppedItems.forEach(item => {
         if (item.x + 20 > _visLeft && item.x < _visRight + 60) {
+            // Ocultar items subterráneos cuando jugador está en superficie
+            if (_onSurface && item.y > _surfCutY) return;
             const _def = window.itemDefs[item.type];
             if (!_def) return;
             const s = _def.size; const floatOffset = Math.sin(item.life * 3 + item.x * 0.1) * 3;
@@ -878,21 +888,15 @@ window.draw = function() {
     });
 
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
-    // Interpolar posición del jugador local para render suave en 120/144Hz
-    if (!window.player.inBackground) {
-        const _ra2 = window._renderAlpha ?? 1;
-        const _origX = window.player.x, _origY = window.player.y;
-        if (window.player._prevX !== undefined) {
-            window.player.x = window.player._prevX + (_origX - window.player._prevX) * _ra2;
-            window.player.y = window.player._prevY + (_origY - window.player._prevY) * _ra2;
-        }
-        window.drawCharacter(window.player, true);
-        window.player.x = _origX; window.player.y = _origY;
-    }
+    // Jugador: NO interpolar posición — el personaje del jugador siempre en posición física
+    // exacta para evitar lag perceptible en input. Solo la cámara se interpola.
+    if (!window.player.inBackground) window.drawCharacter(window.player, true);
 
     // === ENTIDADES (chicken, spider, zombie, archer, wolf) ===
     window.entities.forEach(ent => {
         if (!(ent.x + ent.width > _visLeft && ent.x < _visRight + 120)) return;
+        // Ocultar entidades subterráneas cuando jugador está en superficie
+        if (_onSurface && ent.y > _surfCutY) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
         // Interpolación de posición de entidad
         const _ra3 = window._renderAlpha ?? 1;
@@ -1308,28 +1312,26 @@ window.draw = function() {
     if (window.lightCtx) {
         window.lightCtx.clearRect(0, 0, window._canvasLogicW, window._canvasLogicH);
         const _lz = window.game.zoom || 1; const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
-        function _wts(wx, wy) { return [(wx - window.camera.x - _lW/2)*_lz + _lW/2, (wy - window.camera.y - _lH/2)*_lz + _lH/2]; }
+        function _wts(wx, wy) { return [(wx - _iCamX - _lW/2)*_lz + _lW/2, (wy - _iCamY - _lH/2)*_lz + _lH/2]; }
 
-        // ── Oscuridad ambiental con lerp ─────────────────────────────────────
-        // Usamos profundidad continua (px) pero sólo cuando el jugador está
-        // claramente bajo tierra (> 0.5 bloques del topY real), para que la
-        // transición sea suave y no oscile en el borde superficie/cueva.
+        // ── Oscuridad ambiental ────────────────────────────────────────────────
+        // Bajo tierra: más oscuro cuanto más profundo, pero con un mínimo visible.
+        // En superficie: oscuridad de día/noche normal.
         let targetDarkness = darkness * 0.65;
+        let _depthPxForLight = 0;
         if (window.getGroundY && window.getTerrainCol && window.player) {
             const _bs    = window.game.blockSize;
             const _pCol  = Math.floor((window.player.x + window.player.width/2) / _bs);
             const _pCD   = window.getTerrainCol(_pCol);
             const _pTopY = (_pCD && _pCD.type !== 'hole') ? _pCD.topY : (window.game.baseGroundLevel || 510);
-            // Profundidad en px desde la superficie ORIGINAL (no desde suelo minado)
-            // Esto evita que minar row0 cambie el target instantáneamente
             const _depthPx = (window.player.y + window.player.height) - _pTopY;
-            // Solo actuar cuando >1 bloque bajo superficie original
+            _depthPxForLight = _depthPx;
             if (_depthPx > _bs * 1.5) {
                 const depthFactor = Math.min(1, (_depthPx - _bs * 1.5) / (_bs * 8));
-                targetDarkness = Math.max(targetDarkness, 0.55 + depthFactor * 0.37);
+                // Underground: empieza en 0.48 (más claro que antes: 0.55) para que se vea más
+                targetDarkness = Math.max(targetDarkness, 0.48 + depthFactor * 0.34);
             }
         }
-        // Lerp lento (6% por frame → ~16 frames) para transición muy suave
         if (window._ugDarknessSmooth === undefined) window._ugDarknessSmooth = targetDarkness;
         window._ugDarknessSmooth += (targetDarkness - window._ugDarknessSmooth) * 0.06;
         const ambientDarkness = window._ugDarknessSmooth;
@@ -1401,6 +1403,52 @@ window.draw = function() {
                 window.lightCtx.beginPath(); window.lightCtx.arc(plx, ply, _pGlowR, 0, Math.PI*2); window.lightCtx.fill();
             }
         }
+
+        // ── Rayos de luz a través de huecos verticales ───────────────────────
+        // Cuando el jugador está bajo tierra, buscar columnas del jugador con
+        // huecos abiertos hacia arriba (row0 minado o hueco de cueva natural
+        // que llega a la superficie). Un rayo vertical bajará por ese hueco.
+        if (!_onSurface && window.getUGCellV && window.getTerrainCol && ambientDarkness > 0.1) {
+            const _bs2 = window.game.blockSize;
+            const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness); // más débil de noche
+            if (_shaftAlpha > 0.02) {
+                const _pCenterX = window.player.x + window.player.width / 2;
+                // Revisar columnas cerca del jugador (±8 columnas)
+                const _shaftStartCol = Math.floor((_pCenterX - _bs2 * 8) / _bs2);
+                const _shaftEndCol   = Math.floor((_pCenterX + _bs2 * 8) / _bs2);
+                for (let _sc = _shaftStartCol; _sc <= _shaftEndCol; _sc++) {
+                    const _scd = window.getTerrainCol(_sc);
+                    if (!_scd || _scd.type === 'hole') continue;
+                    const _stopY = _scd.topY;
+                    // Verificar si el hueco va desde row0 hasta el jugador (columna abierta)
+                    let _shaftDepth = 0;
+                    let _shaftOpen  = true;
+                    for (let _sr = 0; _sr < 30; _sr++) {
+                        const _m = window.getUGCellV(_sc, _sr);
+                        if (_m !== 'air') { _shaftOpen = false; break; }
+                        _shaftDepth = _sr + 1;
+                    }
+                    if (!_shaftOpen || _shaftDepth < 2) continue;
+                    // Hay un hueco abierto — dibujar rayo de luz
+                    const _shaftX = _sc * _bs2;
+                    const _shaftTopY  = _stopY;
+                    const _shaftBotY  = _stopY + _shaftDepth * _bs2;
+                    const [_slx, _sly]  = _wts(_shaftX, _shaftTopY);
+                    const [_slx2, _sly2] = _wts(_shaftX + _bs2, _shaftBotY);
+                    // Distancia horizontal al jugador → atenúa el brillo del rayo
+                    const _distFactor = Math.max(0, 1 - Math.abs(_sc * _bs2 + _bs2/2 - _pCenterX) / (_bs2 * 6));
+                    if (_distFactor < 0.05) continue;
+                    const _sGrad = window.lightCtx.createLinearGradient(_slx, _sly, _slx, _sly2);
+                    const _sA = _shaftAlpha * _distFactor;
+                    _sGrad.addColorStop(0, `rgba(220,230,255,${_sA})`);
+                    _sGrad.addColorStop(0.6, `rgba(180,200,255,${_sA * 0.4})`);
+                    _sGrad.addColorStop(1, `rgba(150,180,255,0)`);
+                    window.lightCtx.fillStyle = _sGrad;
+                    window.lightCtx.fillRect(_slx, _sly, _slx2 - _slx, _sly2 - _sly);
+                }
+            }
+        }
+
         window.lightCtx.globalCompositeOperation = 'source-over';
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW, _lH);
     }
