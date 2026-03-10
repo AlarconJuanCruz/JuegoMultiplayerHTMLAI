@@ -371,26 +371,109 @@ window.draw = function() {
         }
         if (segStart !== null) drawSolidSegment(segStart, endCol + 1);
 
-        // ── CELDAS UNDERGROUND: terrain cache canvas ──────────────────────────
-        // Renderiza el terreno al offscreen canvas UNA sola vez por scroll de columna.
-        // Cada frame: solo un ctx.drawImage() en lugar de ~2500 fillRect calls.
-        // Invalida cuando: startCol cambia (scroll > 1 bloque) | se mina una celda | fog avanza
+        // ── CELDAS UNDERGROUND ───────────────────────────────────────────────────
+        // Superficie: 3 filas de transición + UN rect negro global (cero underground render)
+        // Underground: cache offscreen viewport-sized.
+        //   offY snapeado a 8 bloques → rebuild cada ~240px vertical (no cada bloque)
+        //   buffer horizontal ±8 cols → rebuild cada ~240px horizontal
+        //   Cache H = viewport + 10 bloques arriba/abajo de padding
+        //   Pre-build: se hace UNA sola vez cuando jugador llega a la entrada de la cueva
         if (window.getUGCellV && window.getTerrainCol) {
-            const C        = window.ctx;
-            const bottomYu = _iCamY + H / z + bs * 4;
-            const _fogEnabled   = !!window._caveExplored;
-            const _playerOnSurf = _onSurface;
+            const C       = window.ctx;
+            const bottomYu= _iCamY + H / z + bs * 4;
+            const _fogEnabled = !!window._caveExplored;
 
             const UG_COL = { dirt:'#5c3d22', stone:'#5a5a6a', coal:'#2a2a30', sulfur:'#7a6a10', diamond:'#1a6068', bedrock:'#1a1a1a' };
             const BG_DARK = '#141210', BG_VAR = '#181512';
 
-            if (_playerOnSurf) {
-                // ── Superficie: solo 3 filas de transición + UN rect negro por columna ──
+            // ── Build helper ──────────────────────────────────────────────────────
+            // CACHE_BUF_H: columnas extra a cada lado
+            // CACHE_BUF_V: bloques extra arriba y abajo (en unidades de bloque)
+            const CACHE_BUF_H = 8;
+            const CACHE_BUF_V = 10; // 10 bloques = 300px de margen vertical
+            const SNAP_V      = 8;  // snap offY a chunks de 8 bloques = rebuild cada 240px
+
+            function _buildTerrainCache(bStartCol, bEndCol, bOffY) {
+                const _offX = bStartCol * bs;
+                const _vpW  = (bEndCol - bStartCol + 2) * bs + 4;
+                const _vpH  = Math.ceil(H / z) + bs * (CACHE_BUF_V * 2 + 4);
+                const _bBot = bOffY + _vpH;
+
+                if (!window._terrainCache
+                    || window._terrainCache.width  < _vpW
+                    || window._terrainCache.height < _vpH) {
+                    window._terrainCache    = document.createElement('canvas');
+                    window._terrainCache.width  = _vpW;
+                    window._terrainCache.height = _vpH;
+                    window._terrainCacheCtx = window._terrainCache.getContext('2d');
+                }
+                const CC = window._terrainCacheCtx;
+                CC.clearRect(0, 0, _vpW, _vpH);
+
+                for (let col = bStartCol; col <= bEndCol + 1; col++) {
+                    const cd = window.getTerrainCol(col);
+                    if (!cd || cd.type === 'hole') continue;
+                    const topY   = cd.topY;
+                    const cx     = col * bs - _offX;
+                    const dW     = bs + 0.5;
+                    const rStart = Math.max(0, Math.floor((bOffY - topY) / bs) - 1);
+                    const rEnd   = Math.min(window.UG_MAX_DEPTH || 50, Math.ceil((_bBot - topY) / bs) + 1);
+
+                    for (let row = rStart; row < rEnd; row++) {
+                        const cellY = topY + row * bs;
+                        if (cellY >= _bBot) break;
+                        if (cellY + bs < bOffY) continue;
+                        const cy = Math.floor(cellY - bOffY);
+                        const cH = Math.min(bs, _bBot - cellY) + 1;
+
+                        if (_fogEnabled && row > 0 && !window._caveExplored?.has(`${col}_${row}`)) {
+                            CC.fillStyle = '#0a0a0c'; CC.fillRect(cx, cy, dW, cH); continue;
+                        }
+                        const mat = window.getUGCellV(col, row);
+                        if (mat === 'air') {
+                            const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
+                            CC.fillStyle = v > 0.55 ? BG_VAR : BG_DARK; CC.fillRect(cx, cy, dW, cH);
+                            if (row%4===0){ CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cy,dW,1); }
+                            if (v>0.82){ CC.fillStyle='rgba(255,255,255,0.025)'; CC.fillRect(cx+Math.floor(v*bs*0.6),cy+2,2,bs-4); }
+                            continue;
+                        }
+                        CC.fillStyle = UG_COL[mat] || '#5a5a6a'; CC.fillRect(cx, cy, dW, cH);
+                        const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
+                        if (mat==='stone'){
+                            if (row%3===0){CC.fillStyle='rgba(255,255,255,0.04)';CC.fillRect(cx,cy,dW,1);}
+                            if (v>0.7){CC.fillStyle='rgba(0,0,0,0.08)';CC.fillRect(cx,cy,dW,cH);}
+                        } else if (mat==='dirt'){
+                            if (v>0.6){CC.fillStyle='rgba(0,0,0,0.12)';CC.fillRect(cx,cy,dW,cH);}
+                        } else if (mat==='coal'){
+                            CC.fillStyle='rgba(80,80,90,0.4)'; CC.fillRect(cx+Math.floor(v*bs*0.4),cy+3,Math.ceil(bs*0.5),3);
+                            CC.fillStyle='rgba(20,20,25,0.6)'; CC.fillRect(cx,cy,dW,2);
+                        } else if (mat==='sulfur'){
+                            CC.fillStyle='rgba(255,220,0,0.18)'; CC.fillRect(cx+Math.floor(v*bs*0.3),cy+2,Math.ceil(bs*0.4),Math.ceil(bs*0.5));
+                            CC.fillStyle='rgba(200,160,0,0.3)'; CC.fillRect(cx,cy,dW,2);
+                            if (v>0.78){CC.fillStyle='rgba(255,255,100,0.5)';CC.fillRect(cx+4,cy+4,3,3);}
+                        } else if (mat==='diamond'){
+                            CC.fillStyle='rgba(100,240,255,0.22)'; CC.fillRect(cx+Math.floor(v*bs*0.2),cy+1,Math.ceil(bs*0.6),Math.ceil(bs*0.4));
+                            CC.fillStyle='rgba(0,200,230,0.35)'; CC.fillRect(cx,cy,dW,2);
+                            if (v>0.60){CC.fillStyle='rgba(180,255,255,0.7)'; CC.fillRect(cx+2+Math.floor(v*bs*0.5),cy+2,2,2);}
+                            if (v>0.85){CC.fillStyle='rgba(255,255,255,0.8)'; CC.fillRect(cx+Math.floor(bs*0.6),cy+5,2,2);}
+                        }
+                    }
+                }
+                window._tCacheBufStart = bStartCol;
+                window._tCacheBufEnd   = bEndCol;
+                window._tCacheOffX     = _offX;
+                window._tCacheOffY     = bOffY;
+                window._tCacheExplore  = _fogEnabled ? window._caveExplored.size : 0;
+                window._tCacheMine     = window._mineStamp || 0;
+            }
+
+            if (_onSurface) {
+                // ── SUPERFICIE: 3 filas de transición + UN rect negro que tapa todo ──
+                // No renderizamos nada del underground — cero work, cero freeze.
                 for (let col = startCol; col <= endCol; col++) {
                     const cd = window.getTerrainCol(col);
                     if (!cd || cd.type === 'hole') continue;
                     const topY = cd.topY, x = col * bs, dW = bs + 0.5;
-                    // Filas 0-2: tierra superficial visible
                     for (let row = 0; row < 3; row++) {
                         const cY = topY + row * bs;
                         if (cY >= bottomYu) break;
@@ -400,146 +483,99 @@ window.draw = function() {
                         C.fillStyle = UG_COL[mat] || '#5a5a6a'; C.fillRect(x, Math.floor(cY), dW, cH);
                         if (mat === 'dirt') { const v=((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF; if(v>0.6){C.fillStyle='rgba(0,0,0,0.12)';C.fillRect(x,Math.floor(cY),dW,cH);} }
                     }
-                    // UN solo rect negro cubre todo lo que hay debajo
-                    const blackY = Math.floor(topY + 3 * bs);
-                    if (blackY < bottomYu) {
-                        C.fillStyle = '#000000';
-                        C.fillRect(x, blackY, dW, Math.ceil(bottomYu - blackY) + 2);
+                }
+                // UN rect negro tapa TODO lo que hay debajo de la transición
+                const _blackY = Math.floor(_surfCutY);
+                if (_blackY < bottomYu) {
+                    C.fillStyle = '#000';
+                    C.fillRect(startCol * bs, _blackY, (endCol - startCol + 2) * bs, Math.ceil(bottomYu - _blackY) + 4);
+                }
+
+                // ── Pre-build: construir el cache UNA sola vez cuando el jugador
+                // está parado EN la entrada (a ≤1 bloque del topY).
+                // Usamos un flag de frame para no hacerlo más de una vez por visita.
+                const _pFeet   = window.player.y + window.player.height;
+                const _gap     = _surfY - _pFeet; // negativo = ya está debajo
+                if (_gap < bs * 1.5 && _gap > -bs * 4) {
+                    // Jugador está entrando — pre-build si no hay cache válido para esta zona
+                    const _pbOffY  = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
+                    const _pbStart = startCol - CACHE_BUF_H;
+                    const _pbEnd   = endCol   + CACHE_BUF_H;
+                    const _pbExpl  = _fogEnabled ? window._caveExplored.size : 0;
+                    const _pbAlreadyOk = window._terrainCache
+                        && window._tCacheBufStart === _pbStart
+                        && window._tCacheBufEnd   === _pbEnd
+                        && window._tCacheOffY     === _pbOffY
+                        && window._tCacheExplore  === _pbExpl
+                        && window._tCacheMine     === (window._mineStamp||0);
+                    if (!_pbAlreadyOk) {
+                        _buildTerrainCache(_pbStart, _pbEnd, _pbOffY);
                     }
                 }
+
             } else {
-                // ── Underground: terrain cache canvas (viewport-relative) ─────────
-                // offY se snappea al bloque para que el cache no invalide al scrollear 1px.
-                // El canvas tiene el tamaño del viewport (~1280×750), no del mundo.
-                const _offX       = startCol * bs;
-                const _offY       = Math.floor(_iCamY / bs) * bs; // snap a bloque
-                const _vpW        = Math.ceil((endCol - startCol + 4) * bs);
-                const _vpH        = Math.ceil(H / z) + bs * 6;    // solo viewport height
-                const _exploreCount = _fogEnabled ? window._caveExplored.size : 0;
-                const _mineStamp    = window._mineStamp || 0;
-                const _tDirty = !window._terrainCache
-                    || window._tCacheStartCol !== startCol
-                    || window._tCacheEndCol   !== endCol
-                    || window._tCacheOffY     !== _offY
-                    || window._tCacheExplore  !== _exploreCount
-                    || window._tCacheMine     !== _mineStamp;
+                // ── UNDERGROUND: blit cache, rebuild solo cuando sale del buffer ──
 
-                if (_tDirty) {
-                    if (!window._terrainCache
-                        || window._terrainCache.width  < _vpW
-                        || window._terrainCache.height < _vpH) {
-                        window._terrainCache    = document.createElement('canvas');
-                        window._terrainCache.width  = _vpW + bs * 4;
-                        window._terrainCache.height = _vpH + bs * 4;
-                        window._terrainCacheCtx = window._terrainCache.getContext('2d');
-                    }
-                    const CC = window._terrainCacheCtx;
-                    CC.clearRect(0, 0, window._terrainCache.width, window._terrainCache.height);
-                    const _botYu = _offY + _vpH;
+                // offY snapeado a chunks de SNAP_V bloques. Resta CACHE_BUF_V para
+                // que el viewport quede centrado dentro del canvas cacheado.
+                const _snapOffY  = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
+                const _expCount  = _fogEnabled ? window._caveExplored.size : 0;
+                const _mStamp    = window._mineStamp || 0;
 
-                    for (let col = startCol; col <= endCol + 1; col++) {
-                        const cd = window.getTerrainCol(col);
-                        if (!cd || cd.type === 'hole') continue;
-                        const topY  = cd.topY;
-                        const cx    = col * bs - _offX;
-                        const dW    = bs + 0.5;
-                        const rowStart = Math.max(0, Math.floor((_offY - topY) / bs) - 1);
-                        const maxRow   = Math.min(window.UG_MAX_DEPTH || 50,
-                                                  Math.ceil((_botYu - topY) / bs) + 1);
+                // Rebuild solo si: no hay cache, el viewport se sale del buffer,
+                // cambió el snap de Y, cambió fog, o se minó algo
+                const _outH = startCol < (window._tCacheBufStart||0) + 3
+                           || endCol   > (window._tCacheBufEnd||0)   - 3;
+                const _needRebuild = !window._terrainCache
+                    || _outH
+                    || window._tCacheOffY     !== _snapOffY
+                    || window._tCacheExplore  !== _expCount
+                    || window._tCacheMine     !== _mStamp;
 
-                        for (let row = rowStart; row < maxRow; row++) {
-                            const cellY = topY + row * bs;
-                            if (cellY >= _botYu) break;
-                            if (cellY + bs < _offY) continue;
-                            const cy  = Math.floor(cellY - _offY); // viewport-relative Y
-                            const cH  = Math.min(bs, _botYu - cellY) + 1;
-
-                            if (_fogEnabled && row > 0 && !window._caveExplored.has(`${col}_${row}`)) {
-                                CC.fillStyle = '#0a0a0c';
-                                CC.fillRect(cx, cy, dW, cH);
-                                continue;
-                            }
-                            const mat = window.getUGCellV(col, row);
-                            if (mat === 'air') {
-                                const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
-                                CC.fillStyle = v > 0.55 ? BG_VAR : BG_DARK;
-                                CC.fillRect(cx, cy, dW, cH);
-                                if (row%4===0){ CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cy,dW,1); }
-                                if (v>0.82){ CC.fillStyle='rgba(255,255,255,0.025)'; CC.fillRect(cx+Math.floor(v*bs*0.6),cy+2,2,bs-4); }
-                                continue;
-                            }
-                            CC.fillStyle = UG_COL[mat] || '#5a5a6a';
-                            CC.fillRect(cx, cy, dW, cH);
-                            const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
-                            if (mat==='stone'){
-                                if (row%3===0){CC.fillStyle='rgba(255,255,255,0.04)';CC.fillRect(cx,cy,dW,1);}
-                                if (v>0.7){CC.fillStyle='rgba(0,0,0,0.08)';CC.fillRect(cx,cy,dW,cH);}
-                            } else if (mat==='dirt'){
-                                if (v>0.6){CC.fillStyle='rgba(0,0,0,0.12)';CC.fillRect(cx,cy,dW,cH);}
-                            } else if (mat==='coal'){
-                                CC.fillStyle='rgba(80,80,90,0.4)'; CC.fillRect(cx+Math.floor(v*bs*0.4),cy+3,Math.ceil(bs*0.5),3);
-                                CC.fillStyle='rgba(20,20,25,0.6)'; CC.fillRect(cx,cy,dW,2);
-                            } else if (mat==='sulfur'){
-                                CC.fillStyle='rgba(255,220,0,0.18)'; CC.fillRect(cx+Math.floor(v*bs*0.3),cy+2,Math.ceil(bs*0.4),Math.ceil(bs*0.5));
-                                CC.fillStyle='rgba(200,160,0,0.3)';  CC.fillRect(cx,cy,dW,2);
-                                if (v>0.78){CC.fillStyle='rgba(255,255,100,0.5)';CC.fillRect(cx+4,cy+4,3,3);}
-                            } else if (mat==='diamond'){
-                                CC.fillStyle='rgba(100,240,255,0.22)'; CC.fillRect(cx+Math.floor(v*bs*0.2),cy+1,Math.ceil(bs*0.6),Math.ceil(bs*0.4));
-                                CC.fillStyle='rgba(0,200,230,0.35)';   CC.fillRect(cx,cy,dW,2);
-                                if (v>0.60){CC.fillStyle='rgba(180,255,255,0.7)'; CC.fillRect(cx+2+Math.floor(v*bs*0.5),cy+2,2,2);}
-                                if (v>0.85){CC.fillStyle='rgba(255,255,255,0.8)'; CC.fillRect(cx+Math.floor(bs*0.6),cy+5,2,2);}
-                            }
-                        }
-                    }
-                    window._tCacheStartCol = startCol;
-                    window._tCacheEndCol   = endCol;
-                    window._tCacheOffY     = _offY;
-                    window._tCacheExplore  = _exploreCount;
-                    window._tCacheMine     = _mineStamp;
+                if (_needRebuild) {
+                    _buildTerrainCache(
+                        startCol - CACHE_BUF_H,
+                        endCol   + CACHE_BUF_H,
+                        _snapOffY
+                    );
                 }
 
-                // ── Blit viewport-sized canvas: siempre ~1280×750px ─────────────
-                C.drawImage(window._terrainCache, _offX, _offY);
+                // ── Blit: UN drawImage tamaño viewport ───────────────────────────
+                C.drawImage(window._terrainCache, window._tCacheOffX, window._tCacheOffY);
 
-                // ── Overlay: grietas de minado en progreso (pocos bloques, no cacheados) ──
+                // ── Overlay: grietas de minado (no cacheadas) ────────────────────
                 if (window._cellDamage && Object.keys(window._cellDamage).length > 0) {
                     for (const _crKey of Object.keys(window._cellDamage)) {
                         const [_crC, _crR] = _crKey.split('_').map(Number);
-                        const _crCD = window.getTerrainCol(_crC);
-                        if (!_crCD) continue;
-                        const _crX  = _crC * bs, _crCY = _crCD.topY + _crR * bs;
-                        const _crDW = bs + 0.5, _crH  = bs + 1;
-                        const frac  = window.getCellDmgFrac ? window.getCellDmgFrac(_crC, _crR) : 0;
+                        const _crCD = window.getTerrainCol(_crC); if (!_crCD) continue;
+                        const _crX = _crC*bs, _crCY = _crCD.topY + _crR*bs;
+                        const frac = window.getCellDmgFrac ? window.getCellDmgFrac(_crC,_crR) : 0;
                         if (frac <= 0) continue;
-                        const cSeed = (_crC * 7 + _crR * 13) & 0xFF;
-                        C.fillStyle = `rgba(0,0,0,${0.18 + frac * 0.70})`;
-                        const nCracks = 2 + Math.floor(frac * 4);
-                        for (let cr2 = 0; cr2 < nCracks; cr2++) {
-                            const cx2  = _crX + ((cSeed*(cr2+1)*37) % (bs-6)) + 2;
-                            const cy2  = Math.floor(_crCY) + ((cSeed*(cr2+1)*53) % (bs-6)) + 2;
-                            const cw2  = 1 + Math.floor(frac * 3);
-                            const ch2  = Math.floor(frac * 10) + 2 + (cr2 & 1) * 4;
-                            C.fillRect(cx2, cy2, cw2, ch2);
-                            if (frac > 0.4) C.fillRect(cx2+(cr2&1?2:-2), cy2+Math.floor(ch2*0.4), ch2, cw2);
+                        const cSeed = (_crC*7+_crR*13)&0xFF;
+                        C.fillStyle = `rgba(0,0,0,${0.18+frac*0.70})`;
+                        for (let cr2=0; cr2<2+Math.floor(frac*4); cr2++) {
+                            const cx2=_crX+((cSeed*(cr2+1)*37)%(bs-6))+2;
+                            const cy2=Math.floor(_crCY)+((cSeed*(cr2+1)*53)%(bs-6))+2;
+                            const cw2=1+Math.floor(frac*3), ch2=Math.floor(frac*10)+2+(cr2&1)*4;
+                            C.fillRect(cx2,cy2,cw2,ch2);
+                            if (frac>0.4) C.fillRect(cx2+(cr2&1?2:-2),cy2+Math.floor(ch2*0.4),ch2,cw2);
                         }
-                        if (frac > 0.75) { C.fillStyle=`rgba(255,180,60,${(frac-0.75)*0.28})`; C.fillRect(_crX,Math.floor(_crCY),_crDW,_crH); }
+                        if (frac>0.75){C.fillStyle=`rgba(255,180,60,${(frac-0.75)*0.28})`;C.fillRect(_crX,Math.floor(_crCY),bs+0.5,bs+1);}
                     }
                 }
 
-                // ── Diamond pulse (overlay fino, no cacheado, solo visibles) ──
+                // ── Diamond pulse (overlay, cada 2 frames) ───────────────────────
                 if (window.game.frameCount % 2 === 0) {
-                    for (let col = startCol; col <= endCol; col++) {
-                        const cd = window.getTerrainCol(col);
-                        if (!cd || cd.type === 'hole') continue;
-                        const topY = cd.topY;
-                        for (let row = 41; row < (window.UG_MAX_DEPTH || 50); row++) {
-                            const cellY = topY + row * bs;
-                            if (cellY >= bottomYu || cellY < _iCamY - bs) continue;
-                            if (_fogEnabled && !window._caveExplored?.has(`${col}_${row}`)) continue;
-                            if (window.getUGCellV(col, row) !== 'diamond') continue;
-                            const pulse = 0.08 + Math.abs(Math.sin(window.game.frameCount * 0.03 + col * 0.4 + row * 0.6)) * 0.10;
-                            C.fillStyle = `rgba(120,255,255,${pulse})`;
-                            C.fillRect(col * bs, Math.floor(cellY), bs + 0.5, bs + 1);
+                    for (let col=startCol; col<=endCol; col++) {
+                        const cd=window.getTerrainCol(col); if (!cd||cd.type==='hole') continue;
+                        for (let row=41; row<(window.UG_MAX_DEPTH||50); row++) {
+                            const cY=cd.topY+row*bs;
+                            if (cY>=bottomYu||cY<_iCamY-bs) continue;
+                            if (_fogEnabled&&!window._caveExplored?.has(`${col}_${row}`)) continue;
+                            if (window.getUGCellV(col,row)!=='diamond') continue;
+                            const pulse=0.08+Math.abs(Math.sin(window.game.frameCount*0.03+col*0.4+row*0.6))*0.10;
+                            C.fillStyle=`rgba(120,255,255,${pulse})`;
+                            C.fillRect(col*bs,Math.floor(cY),bs+0.5,bs+1);
                         }
                     }
                 }
