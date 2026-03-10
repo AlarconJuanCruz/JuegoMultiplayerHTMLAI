@@ -204,6 +204,7 @@ window.draw = function() {
 
     // ── Variables de culling de superficie — usadas en todo el draw ──────────
     // Se calculan una sola vez y se reusan en entidades, items, plantas.
+    const bs = window.game.blockSize;
     const _surfUGCol  = window.getTerrainCol ? Math.floor((window.player.x + window.player.width/2) / bs) : 0;
     const _surfUGCD   = window.getTerrainCol ? window.getTerrainCol(_surfUGCol) : null;
     const _surfY      = (_surfUGCD && _surfUGCD.type !== 'hole') ? _surfUGCD.topY : (window.game.baseGroundLevel || 510);
