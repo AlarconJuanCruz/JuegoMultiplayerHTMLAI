@@ -528,14 +528,36 @@ document.addEventListener('drop', (e) => {
 // === COMBATE ===
 window.tryHitEntity = function(pCX, pCY, dmg, meleeRange) {
     const range = meleeRange || window.player.miningRange;
+    // Ángulo del swing hacia el mouse (o la dirección en que mira el personaje)
+    const _mWX = window.mouseWorldX || pCX;
+    const _mWY = window.mouseWorldY || pCY;
+    const _swingAngle = Math.atan2(_mWY - pCY, _mWX - pCX);
+    const _halfArc = Math.PI * 0.60; // ±108°: amplio para que sea jugable, pero no 360°
+
+    function _inArc(ex, ey) {
+        const _ea = Math.atan2(ey - pCY, ex - pCX);
+        let _diff = Math.abs(_swingAngle - _ea);
+        if (_diff > Math.PI) _diff = Math.PI * 2 - _diff;
+        return _diff <= _halfArc;
+    }
+
     let target = null;
     if (window.hoveredEntity && !window.hoveredEntity.isDead) {
         const hd = Math.hypot(pCX - (window.hoveredEntity.x+window.hoveredEntity.width/2), pCY - (window.hoveredEntity.y+window.hoveredEntity.height/2));
-        if (hd <= range) target = window.hoveredEntity;
+        // Solo usar hoveredEntity si está dentro del arco de swing
+        if (hd <= range && _inArc(window.hoveredEntity.x+window.hoveredEntity.width/2, window.hoveredEntity.y+window.hoveredEntity.height/2))
+            target = window.hoveredEntity;
     }
     if (!target) {
         let minD = Infinity;
-        for (let _e of window.entities) { const d = Math.hypot(pCX - (_e.x+_e.width/2), pCY - (_e.y+_e.height/2)); if (d <= range && d < minD) { minD = d; target = _e; } }
+        for (let _e of window.entities) {
+            if (_e.isDead) continue;
+            const d = Math.hypot(pCX - (_e.x+_e.width/2), pCY - (_e.y+_e.height/2));
+            if (d > range || d >= minD) continue;
+            // Filtro direccional: entidad debe estar dentro del arco de golpe
+            if (!_inArc(_e.x+_e.width/2, _e.y+_e.height/2)) continue;
+            minD = d; target = _e;
+        }
     }
     if (!target) return false;
     let i = window.entities.indexOf(target); if (i === -1) return false;
@@ -1228,7 +1250,11 @@ function update() {
             // la micro-oscilación y la "vibración" visual contra bloques de superficie.
             const _wallDir = window.player._wallDir || 0;  // 1=derecha, -1=izquierda, 0=libre
             const _pressingIntoWall = (_wallDir === 1 && window.keys?.d) || (_wallDir === -1 && window.keys?.a);
-            if (_pressingIntoWall) {
+            // Si el jugador quiere saltar MIENTRAS está contra una pared de 1 bloque,
+            // NO suprimimos vx — así puede saltar hacia adelante en lugar de subir en vertical.
+            const _wantsJump = !!(window.keys?.jumpPressed && window.player.jumpKeyReleased &&
+                                  window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead);
+            if (_pressingIntoWall && !_wantsJump) {
                 // Mantener vx en 0, no ramp, no animar
                 window.player.vx = 0;
                 window.player._accelRamp = 0;

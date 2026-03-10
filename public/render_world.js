@@ -904,6 +904,19 @@ window.draw = function() {
             C.fillText('?', _qCX, _qCY + 1);
             C.restore();
         }
+        // ── Hover glow: iluminación sutil cuando el mouse está sobre la entidad ──
+        if (window.hoveredEntity === ent) {
+            const _hPulse = 0.10 + Math.sin(window.game.frameCount * 0.18) * 0.04;
+            C.globalCompositeOperation = 'screen';
+            C.globalAlpha = _hPulse;
+            C.fillStyle = '#ffffff';
+            C.beginPath();
+            C.ellipse(ent.x + ent.width/2, ent.y + ent.height/2,
+                      ent.width * 0.62, ent.height * 0.55, 0, 0, Math.PI * 2);
+            C.fill();
+            C.globalCompositeOperation = 'source-over';
+            C.globalAlpha = 1;
+        }
         C.restore();
     });
 
@@ -1350,6 +1363,46 @@ window.draw = function() {
         C.fillRect(_ppW - tw - 10, _ppH - 16, tw + 8, 13);
         C.fillStyle    = fCol;
         C.fillText(label, _ppW - 6, _ppH - 4);
+        C.restore();
+    }
+
+    // ── Cursor personalizado (crosshair) ────────────────────────────────────────
+    // Dibujado en coordenadas de pantalla, siempre encima de todo.
+    // Se oculta si el juego no está corriendo o el menú está visible.
+    if (window.game.isRunning && window.screenMouseX != null) {
+        const C   = window.ctx;
+        const _cx = window.screenMouseX;
+        const _cy = window.screenMouseY;
+        const _hovering = !!window.hoveredEntity;
+        const _arm  = _hovering ? 7  : 9;   // longitud de cada brazo
+        const _gap  = _hovering ? 3  : 4;   // hueco central
+        const _lw   = _hovering ? 2.0 : 1.5;
+
+        C.save();
+        // Sombra/borde negro para legibilidad
+        C.strokeStyle = 'rgba(0,0,0,0.75)';
+        C.lineWidth   = _lw + 1.5;
+        C.lineCap     = 'round';
+        C.beginPath();
+        C.moveTo(_cx - _arm - _gap, _cy); C.lineTo(_cx - _gap, _cy);
+        C.moveTo(_cx + _gap, _cy);        C.lineTo(_cx + _arm + _gap, _cy);
+        C.moveTo(_cx, _cy - _arm - _gap); C.lineTo(_cx, _cy - _gap);
+        C.moveTo(_cx, _cy + _gap);        C.lineTo(_cx, _cy + _arm + _gap);
+        C.stroke();
+        // Cruz principal — blanca, o amarilla si hay entidad bajo el cursor
+        C.strokeStyle = _hovering ? '#ffe566' : '#ffffff';
+        C.lineWidth   = _lw;
+        C.beginPath();
+        C.moveTo(_cx - _arm - _gap, _cy); C.lineTo(_cx - _gap, _cy);
+        C.moveTo(_cx + _gap, _cy);        C.lineTo(_cx + _arm + _gap, _cy);
+        C.moveTo(_cx, _cy - _arm - _gap); C.lineTo(_cx, _cy - _gap);
+        C.moveTo(_cx, _cy + _gap);        C.lineTo(_cx, _cy + _arm + _gap);
+        C.stroke();
+        // Punto central pequeño
+        if (_hovering) {
+            C.fillStyle = '#ffe566';
+            C.beginPath(); C.arc(_cx, _cy, 2, 0, Math.PI * 2); C.fill();
+        }
         C.restore();
     }
 };
