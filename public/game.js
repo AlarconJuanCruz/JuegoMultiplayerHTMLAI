@@ -1856,6 +1856,10 @@ function update() {
                             }
                         }
                         if (_caveFloorY !== null && _caveFloorY > _ugSurfY + bs) {
+                            // Asegurar distancia mínima al jugador (evita que aparezcan "de la nada")
+                            const _spDistX = Math.abs(_spawnX - (window.player.x + window.player.width/2));
+                            const _spDistY = Math.abs(_caveFloorY - (window.player.y + window.player.height));
+                            if (_spDistX < 280 || _spDistY < 60) { /* demasiado cerca — no spawnear */ } else {
                             const _isBig  = Math.random() < 0.22 && (window.game.days || 1) > 2;
                             const _spLvl  = Math.max(1, Math.floor(((window.game.days || 1) - 1) * 0.6) + (_isBig ? 3 : 0));
                             const _spHp   = _isBig ? 70 + _spLvl * 18 : 18 + _spLvl * 7;
@@ -1872,17 +1876,16 @@ function update() {
                                 hp: _spHp, maxHp: _spHp,
                                 damage: _isBig ? 14 + _spLvl * 3 : 4 + _spLvl * 2,
                                 isHit: false, attackCooldown: 0,
-                                stuckFrames: 0, ignorePlayer: 60, lastX: _spawnX,
+                                stuckFrames: 0, ignorePlayer: 180, lastX: _spawnX,
                                 inCave: true,  // flag para distinguirlas de arañas de superficie
                             };
                             window.entities.push(_spEnt);
                             if (window.sendWorldUpdate) window.sendWorldUpdate('spawn_entity', { entity: _spEnt });
+                            } // end distance check else
                         }
                     }
                 }
             }
-
-            // ── Generación de telas de araña (decoración de cueva) ─────────────
             // Se generan cerca del jugador cuando está bajo tierra en una cueva.
             // Se almacenan en window.caveCobwebs y persisten hasta ser destruidas.
             if (_playerInCave && window.game.frameCount % 90 === 0) {
@@ -1931,6 +1934,110 @@ function update() {
                 }
                 // Limitar tamaño del array de telas
                 if (window.caveCobwebs.length > 120) window.caveCobwebs.splice(0, window.caveCobwebs.length - 120);
+            }
+
+            // ── Exploración de cuevas (fog of war bajo tierra) ─────────────────
+            // Marca celdas UG como exploradas para que el renderer las muestre.
+            // Las celdas NO exploradas se renderizan como roca oscura sólida.
+            if (_playerInCave) {
+                if (!window._caveExplored) window._caveExplored = new Set();
+                const _ePCol = Math.floor(pCX / bs);
+                const _ePRow = Math.floor((window.player.y + window.player.height/2 - _ugSurfY) / bs);
+                const _eRadH = 14, _eRadV = 9;  // radio de visión horizontal/vertical
+                for (let _ec = _ePCol - _eRadH; _ec <= _ePCol + _eRadH; _ec++) {
+                    for (let _er = Math.max(0, _ePRow - _eRadV); _er <= _ePRow + _eRadV; _er++) {
+                        const _ef = (_ec-_ePCol)/_eRadH; const _ef2 = (_er-_ePRow)/_eRadV;
+                        if (_ef*_ef + _ef2*_ef2 > 1.2) continue;  // elipse
+                        window._caveExplored.add(`${_ec}_${_er}`);
+                    }
+                }
+            }
+
+            // ── Spawn de murciélagos de cueva ──────────────────────────────────
+            if (_playerInCave && isMasterClient && window.game.frameCount % 480 === 12) {
+                window._caveBats = window._caveBats; // ya declarado en entities
+                const _batCap = 3 + Math.floor((window.game.days||1) * 0.3);
+                const _curBats = window.entities.filter(e => e.type === 'bat').length;
+                if (_curBats < _batCap) {
+                    // Buscar techo de cueva cerca del jugador (offset 200-600px)
+                    const _bSide = Math.random() > 0.5 ? 1 : -1;
+                    const _bSpX  = window.player.x + _bSide * (200 + Math.random() * 400);
+                    const _bCol  = Math.floor(_bSpX / bs);
+                    const _bCD   = window.getTerrainCol ? window.getTerrainCol(_bCol) : null;
+                    if (_bCD && _bCD.type !== 'hole') {
+                        // Encontrar techo de cueva: primera fila de aire bajo superficie
+                        let _batCeilY = null;
+                        for (let _br = 0; _br < (window.UG_MAX_DEPTH || 50); _br++) {
+                            if (window.getUGCellV && window.getUGCellV(_bCol, _br) === 'air') {
+                                _batCeilY = _bCD.topY + _br * bs;
+                                break;
+                            }
+                        }
+                        if (_batCeilY !== null && _batCeilY > _ugSurfY) {
+                            const _bLvl = Math.max(1, Math.floor(((window.game.days||1)-1)*0.5));
+                            const _bHp  = 10 + _bLvl * 5;
+                            window.entities.push({
+                                id: 'bat_' + Math.random().toString(36).substr(2,8),
+                                type: 'bat', name: 'Murciélago',
+                                level: _bLvl, x: _bSpX, y: _batCeilY + 4,
+                                width: 20, height: 12,
+                                vx: _bSide > 0 ? -0.8 : 0.8, vy: 0,
+                                hp: _bHp, maxHp: _bHp,
+                                damage: 2 + _bLvl,
+                                isHit: false, attackCooldown: 0,
+                                stuckFrames: 0, ignorePlayer: 120, lastX: _bSpX,
+                                batState: 'roost',  // roost → swoop → flee
+                                batAltY: _batCeilY + 6,  // altura de descanso (techo)
+                                inCave: true,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // ── Plantas fluorescentes de cueva ─────────────────────────────────
+            // Generadas determinísticamente — persisten en window.cavePlants
+            if (_playerInCave && window.game.frameCount % 150 === 30) {
+                window.cavePlants = window.cavePlants || [];
+                window._cavePlantSet = window._cavePlantSet || new Set();
+                const _cpStart = Math.floor((window.player.x - 350) / bs);
+                const _cpEnd   = Math.floor((window.player.x + 350) / bs);
+                for (let _cc = _cpStart; _cc <= _cpEnd; _cc++) {
+                    const _cpCD = window.getTerrainCol ? window.getTerrainCol(_cc) : null;
+                    if (!_cpCD || _cpCD.type === 'hole') continue;
+                    for (let _cr = 1; _cr < Math.min(window.UG_MAX_DEPTH || 50, 30); _cr++) {
+                        const _cpKey = `p_${_cc}_${_cr}`;
+                        if (window._cavePlantSet.has(_cpKey)) continue;
+                        const _cpMat = window.getUGCellV ? window.getUGCellV(_cc, _cr) : 'stone';
+                        if (_cpMat !== 'air') continue;
+                        const _cpBelow = window.getUGCellV ? window.getUGCellV(_cc, _cr + 1) : 'stone';
+                        const _cpAbove = window.getUGCellV ? window.getUGCellV(_cc, _cr - 1) : 'stone';
+                        const _cpHash  = ((_cc * 48271 ^ _cr * 16807) >>> 0) / 0xFFFFFFFF;
+                        window._cavePlantSet.add(_cpKey);
+                        // Hongos: crecen desde el suelo (3% chance)
+                        if (_cpBelow !== 'air' && _cpBelow !== 'bedrock' && _cpHash < 0.03) {
+                            window.cavePlants.push({
+                                col: _cc, row: _cr,
+                                x: _cc * bs + bs*0.15 + _cpHash*bs*0.7,
+                                y: _cpCD.topY + _cr * bs,
+                                type: 'shroom',
+                                variant: Math.floor(_cpHash * 3), // 0=azul 1=verde 2=violeta
+                                seed: _cpHash,
+                            });
+                        }
+                        // Musgo: cuelga del techo (2.5% chance)
+                        else if (_cpAbove !== 'air' && _cpAbove !== 'bedrock' && _cpHash > 0.97) {
+                            window.cavePlants.push({
+                                col: _cc, row: _cr,
+                                x: _cc * bs + bs*0.1 + _cpHash*bs*0.8,
+                                y: _cpCD.topY + _cr * bs,
+                                type: 'moss',
+                                seed: _cpHash,
+                            });
+                        }
+                    }
+                }
+                if (window.cavePlants.length > 300) window.cavePlants.splice(0, window.cavePlants.length - 300);
             }
         }
 
@@ -1987,12 +2094,30 @@ window.gameLoop = function(timestamp) {
     if (window._fpsLastTime === undefined) { window._fpsLastTime = timestamp; window._fpsFrames = 0; window._fps = 60; }
     window._fpsFrames++;
     const fpsDelta = timestamp - window._fpsLastTime;
-    if (fpsDelta >= 500) {   // actualizar cada 500 ms para evitar parpadeo
+    if (fpsDelta >= 500) {
         window._fps = Math.round(window._fpsFrames / (fpsDelta / 1000));
         window._fpsFrames = 0;
         window._fpsLastTime = timestamp;
     }
-    if (window.game?.isRunning && !document.hidden) update();
+
+    // ── Fixed-timestep accumulator ────────────────────────────────────
+    // update() asume exactamente 1/60s por llamada (física, contadores, animaciones).
+    // Sin esto, en monitores de 120/144 Hz update() se llamaba 2-2.4x por segundo
+    // causando física acelerada y animaciones "lentas" (en relación al tiempo real).
+    const FIXED_DT = 1000 / 60;  // 16.666 ms por step lógico
+    if (!window._gameAccum) { window._gameAccum = 0; window._lastLoopTime = timestamp; }
+    let elapsed = timestamp - window._lastLoopTime;
+    window._lastLoopTime = timestamp;
+    // Cap: si la pestaña estuvo en background, no ejecutar más de 3 steps para evitar
+    // el "spiral of death" (el juego intenta ponerse al día infinitamente).
+    if (elapsed > FIXED_DT * 3) elapsed = FIXED_DT * 3;
+    window._gameAccum += elapsed;
+
+    while (window._gameAccum >= FIXED_DT) {
+        if (window.game?.isRunning && !document.hidden) update();
+        window._gameAccum -= FIXED_DT;
+    }
+
     if (typeof window.draw === 'function' && !document.hidden) window.draw();
     requestAnimationFrame(window.gameLoop);
 };

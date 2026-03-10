@@ -30,6 +30,10 @@ window.killEntityLoot = function (ent) {
             drop('web', ent.inCave ? 3 + Math.floor(Math.random() * 3) : 2);
             window.gainXP((ent.inCave ? 30 : 20) * ent.level);
             break;
+        case 'bat':
+            drop('meat', 1);
+            window.gainXP(15 * ent.level);
+            break;
         case 'chicken':
             drop('meat', 1);
             window.gainXP(10);
@@ -951,6 +955,63 @@ function _updateEntityAI(ent, idx, target, targetCX, targetCY, minDist, isDay, i
         }
 
         if (ent.attackCooldown > 0) ent.attackCooldown--;
+    }
+
+    else if (ent.type === 'bat') {
+        // ── Murciélago: duerme en el techo, se lanza en picado cuando el jugador se acerca ──
+        if (!ent.batState) { ent.batState = 'roost'; ent.batAltY = ent.y; }
+        const _batDist = Math.hypot(pCX - (ent.x + ent.width/2), pCY - (ent.y + ent.height/2));
+        const _batAggroRange = 280;
+
+        if (ent.batState === 'roost') {
+            // Dormido en el techo: vibración mínima, sin moverse
+            ent.vx *= 0.5;
+            ent.vy  = 0;
+            ent.y   = ent.batAltY; // fijado al techo
+            if (_batDist < _batAggroRange && (ent.ignorePlayer||0) <= 0) {
+                ent.batState = 'swoop';
+                ent.batTimer = 0;
+            }
+        } else if (ent.batState === 'swoop') {
+            // Picada hacia el jugador
+            ent.batTimer = (ent.batTimer || 0) + 1;
+            const _tdx = pCX - (ent.x + ent.width/2);
+            const _tdy = pCY - (ent.y + ent.height/2);
+            const _tdist = Math.hypot(_tdx, _tdy) || 1;
+            ent.vx += (_tdx / _tdist) * 0.35;
+            ent.vy += (_tdy / _tdist) * 0.25;
+            // Limitar velocidad
+            const _spd = Math.hypot(ent.vx, ent.vy);
+            if (_spd > 3.5) { ent.vx = ent.vx/_spd*3.5; ent.vy = ent.vy/_spd*3.5; }
+            // Ataque de contacto
+            if (_batDist < 22 && (ent.attackCooldown||0) <= 0) {
+                window.damagePlayer(ent.damage, 'murciélago');
+                ent.attackCooldown = 60;
+                ent.batState = 'flee';
+                ent.batTimer = 0;
+            }
+            // Si pasa el tiempo sin golpear, huye y vuelve al techo
+            if (ent.batTimer > 120) { ent.batState = 'flee'; ent.batTimer = 0; }
+        } else if (ent.batState === 'flee') {
+            ent.batTimer = (ent.batTimer||0) + 1;
+            // Subir de vuelta al techo
+            ent.vy -= 0.18;
+            ent.vx *= 0.92;
+            if (ent.batTimer > 80 || ent.y <= ent.batAltY + 10) {
+                ent.batState = 'roost';
+                ent.vy = 0;
+                ent.y  = ent.batAltY;
+                ent.attackCooldown = 90; // breve pausa antes del próximo swoop
+            }
+        }
+        ent.x += ent.vx;
+        ent.y += ent.vy;
+        // Mantener dentro de límites razonables
+        ent.x = Math.max(window.game.shoreX || 0, ent.x);
+        if (ent.attackCooldown > 0) ent.attackCooldown--;
+        if ((ent.ignorePlayer||0) > 0) ent.ignorePlayer--;
+        // Los murciélagos no usan física normal del terreno — flotan
+        return;
     }
 
         else if (ent.type === 'chicken') {

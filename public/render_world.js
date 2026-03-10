@@ -128,9 +128,9 @@ window.draw = function() {
 
     // mid: anclado en el horizonte (su base toca bgHorizonY)
     const midY  = Math.floor(bgHorizonY - bgMidDisplayH);
-    // back: posicionado independientemente, justo encima de mid con ligero solapamiento
-    // Así aparece en la zona media del cielo, bien visible y más abajo que antes.
-    const backY = Math.floor(midY - bgBackDisplayH * 0.60);
+    // back: ahora se ancla TAMBIÉN desde bgHorizonY con un offset menor,
+    // solapando parcialmente con mid para que quede en la franja baja del cielo.
+    const backY = Math.floor(bgHorizonY - bgBackDisplayH * 0.95);
 
     // Parallax X
     const _rawBackX = -(window.camera.x * 0.05) % bgBackDisplayW;
@@ -345,19 +345,22 @@ window.draw = function() {
         //   • Cache por frame para evitar recalcular noise varias veces por columna
         if (window.getUGCellV && window.getTerrainCol) {
             const C        = window.ctx;
-            // bottomYu debe cubrir TODO lo visible en zoom-out: la pantalla muestra H/z px de mundo.
-            // Usar H/z + margen en vez de la altura fija 720 que se quedaba corta al hacer zoom out.
             const bottomYu = window.camera.y + H / z + bs * 4;
             const UG_COLOR = {
                 dirt:    '#5c3d22', stone:   '#5a5a6a',
                 coal:    '#2a2a30', sulfur:  '#7a6a10',
                 diamond: '#1a6068', bedrock: '#1a1a1a',
             };
-            // Color del bloque de fondo de cueva: piedra muy oscura, indestructible
-            const BG_DARK  = '#141210';   // roca oscura de fondo
-            const BG_VAR   = '#181512';   // variante ligeramente más clara
+            const BG_DARK  = '#141210';
+            const BG_VAR   = '#181512';
 
-            window._ugFrameCache = {};   // cache por frame
+            // ── Player UG row para fog-of-war ──
+            const _fogEnabled = !!window._caveExplored;
+            const _playerUGCol = Math.floor((window.player.x + window.player.width/2) / bs);
+            const _playerUGCD  = window.getTerrainCol ? window.getTerrainCol(_playerUGCol) : null;
+            const _playerSurfY = _playerUGCD ? _playerUGCD.topY : (window.game.baseGroundLevel || 510);
+
+            window._ugFrameCache = {};
 
             for (let col = startCol; col <= endCol; col++) {
                 const cd = window.getTerrainCol(col);
@@ -373,6 +376,22 @@ window.draw = function() {
                     if (cellY >= bottomYu) break;
                     const cH = Math.min(bs, bottomYu - cellY) + 1;
 
+                    // ── Fog de cueva: solo renderizar detalle de celdas exploradas ──
+                    // Row 0 (superficie) siempre visible. Celdas subterráneas no exploradas
+                    // se muestran como roca oscura sólida (no revela forma de la cueva).
+                    if (_fogEnabled && row > 0) {
+                        const cellWorldY = topY + row * bs;
+                        // Solo aplica fog si estamos claramente bajo tierra
+                        if (cellWorldY > _playerSurfY + bs) {
+                            if (!window._caveExplored.has(`${col}_${row}`)) {
+                                // Celda no explorada: roca oscura uniforme
+                                C.fillStyle = '#111013';
+                                C.fillRect(x, Math.floor(cellY), drawW, cH);
+                                continue;
+                            }
+                        }
+                    }
+
                     const _ck = col + '_' + row;
                     let mat = window._ugFrameCache[_ck];
                     if (mat === undefined) {
@@ -381,9 +400,6 @@ window.draw = function() {
                     }
 
                     if (mat === 'air') {
-                        // ── Celda vacía (cueva/hueco): dibujar fondo oscuro ──
-                        // Siempre se dibuja — los bloques del jugador se renderizan
-                        // después del terreno y quedan encima sin necesidad de omitirlo.
                         const varH = ((col * 374761393 ^ row * 1103515245) >>> 0) / 0xFFFFFFFF;
                         C.fillStyle = varH > 0.55 ? BG_VAR : BG_DARK;
                         C.fillRect(x, Math.floor(cellY), drawW, cH);
@@ -568,6 +584,80 @@ window.draw = function() {
                     C.setLineDash([]);
                 }
 
+                C.globalAlpha = 1;
+                C.restore();
+            }
+        }
+
+        // ── Plantas fluorescentes de cueva ──────────────────────────────────────
+        if (window.cavePlants?.length > 0) {
+            const C   = window.ctx;
+            const _fc = window.game.frameCount;
+            // Paleta: [color principal, color brillo, color glow]
+            const _shroomPalette = [
+                ['#1a4aff','#88aaff','rgba(40,80,255,'],   // azul
+                ['#22cc44','#88ffaa','rgba(40,220,80,'],    // verde
+                ['#aa22ee','#dd88ff','rgba(170,40,240,'],   // violeta
+            ];
+            for (const _cp of window.cavePlants) {
+                // Culling
+                if (_cp.x + bs < startCol * bs || _cp.x > (endCol + 1) * bs) continue;
+                // Fog de cueva: no mostrar si no explorada
+                if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
+                C.save();
+                const _pulse = 0.7 + Math.sin(_fc * 0.08 + _cp.seed * 6.28) * 0.3;
+                if (_cp.type === 'shroom') {
+                    const _pal = _shroomPalette[_cp.variant % 3];
+                    const _h = 8 + _cp.seed * 10;
+                    // Pie
+                    C.fillStyle = '#c8c0a8';
+                    C.fillRect(_cp.x - 2, _cp.y + bs - _h, 4, _h);
+                    // Sombrero
+                    C.fillStyle = _pal[0];
+                    C.beginPath();
+                    C.ellipse(_cp.x, _cp.y + bs - _h - 1, 7 + _cp.seed * 4, 5, 0, 0, Math.PI * 2);
+                    C.fill();
+                    // Brillo
+                    C.globalAlpha = 0.5 * _pulse;
+                    C.fillStyle = _pal[1];
+                    C.beginPath();
+                    C.ellipse(_cp.x - 2, _cp.y + bs - _h - 2, 3, 2, 0, 0, Math.PI * 2);
+                    C.fill();
+                    // Halo de luz
+                    C.globalAlpha = 0.12 * _pulse;
+                    const _gr = C.createRadialGradient(_cp.x, _cp.y + bs - _h, 0, _cp.x, _cp.y + bs - _h, 28);
+                    _gr.addColorStop(0, _pal[2] + '0.6)');
+                    _gr.addColorStop(1, _pal[2] + '0)');
+                    C.fillStyle = _gr;
+                    C.beginPath(); C.arc(_cp.x, _cp.y + bs - _h, 28, 0, Math.PI * 2); C.fill();
+                } else if (_cp.type === 'moss') {
+                    // Musgo colgante del techo — hebras verdes que brillan
+                    const _len = 8 + _cp.seed * 14;
+                    C.globalAlpha = 0.55 + _pulse * 0.25;
+                    C.strokeStyle = '#22cc55';
+                    C.lineWidth = 1.5;
+                    const _strands = 3 + Math.floor(_cp.seed * 3);
+                    for (let _s = 0; _s < _strands; _s++) {
+                        const _sx = _cp.x + (_s / (_strands-1)) * 10 - 5;
+                        const _sLen = _len * (0.6 + ((_cp.seed + _s*0.3)%1) * 0.4);
+                        const _sWave = Math.sin(_fc * 0.04 + _s + _cp.seed * 3) * 2;
+                        C.beginPath();
+                        C.moveTo(_sx, _cp.y);
+                        C.quadraticCurveTo(_sx + _sWave, _cp.y + _sLen * 0.5, _sx + _sWave * 0.5, _cp.y + _sLen);
+                        C.stroke();
+                        // Punta brillante
+                        C.fillStyle = '#88ffbb';
+                        C.globalAlpha = _pulse * 0.5;
+                        C.beginPath(); C.arc(_sx + _sWave*0.5, _cp.y + _sLen, 1.5, 0, Math.PI * 2); C.fill();
+                    }
+                    // Halo tenue
+                    C.globalAlpha = 0.07 * _pulse;
+                    const _mgr = C.createRadialGradient(_cp.x, _cp.y + _len*0.5, 0, _cp.x, _cp.y + _len*0.5, 22);
+                    _mgr.addColorStop(0, 'rgba(40,200,80,0.5)');
+                    _mgr.addColorStop(1, 'rgba(40,200,80,0)');
+                    C.fillStyle = _mgr;
+                    C.beginPath(); C.arc(_cp.x, _cp.y + _len*0.5, 22, 0, Math.PI * 2); C.fill();
+                }
                 C.globalAlpha = 1;
                 C.restore();
             }
@@ -794,6 +884,43 @@ window.draw = function() {
             C.fillStyle=H?'#ff3333':'#dd2222'; C.beginPath(); C.moveTo(bx+w*0.3,hy-4); C.quadraticCurveTo(bx+w*0.25,hy-11,bx+w*0.35,hy-7); C.quadraticCurveTo(bx+w*0.42,hy-13,bx+w*0.47,hy-7); C.quadraticCurveTo(bx+w*0.52,hy-3,bx+w*0.3,hy-4); C.fill(); C.beginPath(); C.arc(bx+w*0.36,hy+6,2.5,0,Math.PI*2); C.fill();
             C.fillStyle='#e08020'; C.beginPath(); C.moveTo(bx+w*0.72,hy-1); C.lineTo(bx+w*0.98,hy); C.lineTo(bx+w*0.72,hy+3); C.fill(); C.strokeStyle='#c06010'; C.lineWidth=0.8; C.beginPath(); C.moveTo(bx+w*0.72,hy+1); C.lineTo(bx+w*0.92,hy+1); C.stroke();
             C.fillStyle='#111'; C.beginPath(); C.arc(bx+w*0.6,hy-1,2,0,Math.PI*2); C.fill(); C.fillStyle='#fff'; C.beginPath(); C.arc(bx+w*0.61,hy-1.5,0.8,0,Math.PI*2); C.fill();
+        } else if (ent.type === 'bat') {
+            const x=ent.x, y=ent.y, w=ent.width, h=ent.height;
+            const _fc = window.game.frameCount;
+            // Alas: ángulo alterna según estado
+            const _sleeping = ent.batState === 'roost';
+            const _wingFlap = _sleeping ? 0 : Math.sin(_fc * 0.45) * 0.7;
+            const _cx = x + w/2, _cy = y + h/2;
+            // Sombra oval
+            C.globalAlpha = 0.15;
+            C.fillStyle = '#000';
+            C.beginPath(); C.ellipse(_cx, y + h + 1, w*0.4, 2, 0, 0, Math.PI*2); C.fill();
+            C.globalAlpha = H ? 0.9 : 1;
+            // Cuerpo
+            C.fillStyle = H ? '#ff4444' : '#1a0a2a';
+            C.beginPath(); C.ellipse(_cx, _cy, w*0.28, h*0.42, 0, 0, Math.PI*2); C.fill();
+            // Ala izquierda
+            C.fillStyle = H ? '#ff6666' : '#2a1040';
+            C.beginPath();
+            C.moveTo(_cx - 1, _cy);
+            C.quadraticCurveTo(_cx - w*0.55, _cy + Math.sin(_wingFlap)*h*0.5, _cx - w*0.9, _cy - Math.cos(_wingFlap)*h*0.4);
+            C.quadraticCurveTo(_cx - w*0.5, _cy - h*0.3, _cx - 1, _cy - 2);
+            C.closePath(); C.fill();
+            // Ala derecha (espejo)
+            C.beginPath();
+            C.moveTo(_cx + 1, _cy);
+            C.quadraticCurveTo(_cx + w*0.55, _cy + Math.sin(_wingFlap)*h*0.5, _cx + w*0.9, _cy - Math.cos(_wingFlap)*h*0.4);
+            C.quadraticCurveTo(_cx + w*0.5, _cy - h*0.3, _cx + 1, _cy - 2);
+            C.closePath(); C.fill();
+            // Orejas
+            C.fillStyle = H ? '#ff8888' : '#3a1860';
+            C.beginPath(); C.moveTo(_cx-4,_cy-h*0.35); C.lineTo(_cx-7,_cy-h*0.7); C.lineTo(_cx-1,_cy-h*0.38); C.fill();
+            C.beginPath(); C.moveTo(_cx+4,_cy-h*0.35); C.lineTo(_cx+7,_cy-h*0.7); C.lineTo(_cx+1,_cy-h*0.38); C.fill();
+            // Ojos rojos
+            C.fillStyle = _sleeping ? '#331122' : '#ff2200';
+            C.beginPath(); C.arc(_cx-3, _cy-2, 1.5, 0, Math.PI*2); C.fill();
+            C.beginPath(); C.arc(_cx+3, _cy-2, 1.5, 0, Math.PI*2); C.fill();
+            C.globalAlpha = 1;
         } else if (ent.type === 'spider') {
             const x=ent.x, y=ent.y, w=ent.width, h=ent.height; const faceX = FR ? x+w : x;
             C.fillStyle = H ? '#ff4444' : '#111'; C.beginPath(); C.ellipse(x + w/2, y + h/2 + 2, w/2, h/3, 0, 0, Math.PI*2); C.fill();
@@ -1218,6 +1345,29 @@ window.draw = function() {
                 window.lightCtx.fillStyle = tGrad; window.lightCtx.beginPath(); window.lightCtx.arc(tx, ty, tGlow, 0, Math.PI*2); window.lightCtx.fill();
             }
         });
+        // Luz de plantas fluorescentes de cueva
+        if (window.cavePlants?.length > 0) {
+            const _plantPulse = 0.7 + Math.sin(_fc * 0.08) * 0.3;
+            const _plantColors = [
+                [40, 80, 255],   // azul
+                [40, 220, 80],   // verde
+                [170, 40, 240],  // violeta
+            ];
+            for (const _cp of window.cavePlants) {
+                if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
+                const _pLightX = _cp.x;
+                const _pLightY = _cp.y + (window.game.blockSize||30) - 8;
+                const [plx, ply] = _wts(_pLightX, _pLightY);
+                const _pGlowR = (_cp.type === 'shroom' ? 45 : 30) * _lz * _plantPulse;
+                const _pIdx = _cp.variant || 0;
+                const [pr, pg, pb] = _plantColors[_pIdx % 3];
+                const _pGr = window.lightCtx.createRadialGradient(plx, ply, 0, plx, ply, _pGlowR);
+                _pGr.addColorStop(0, `rgba(${pr},${pg},${pb},0.55)`);
+                _pGr.addColorStop(1, `rgba(${pr},${pg},${pb},0)`);
+                window.lightCtx.fillStyle = _pGr;
+                window.lightCtx.beginPath(); window.lightCtx.arc(plx, ply, _pGlowR, 0, Math.PI*2); window.lightCtx.fill();
+            }
+        }
         window.lightCtx.globalCompositeOperation = 'source-over';
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW, _lH);
     }
