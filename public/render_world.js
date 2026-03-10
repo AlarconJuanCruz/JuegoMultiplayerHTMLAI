@@ -115,7 +115,8 @@ window.draw = function() {
     const bgBackNW = 512,  bgBackNH = 153;
     const bgMidNW  = 1705, bgMidNH  = 350;
 
-    const bgHorizonY = H * 0.62;   // fijo — línea de terreno en pantalla
+    // bgHorizonY: base del clip parallax. Subimos de 0.62 a 0.78 para bajar ambas capas.
+    const bgHorizonY = H * 0.78;
 
     // Alturas de visualización (independientes de las dimensiones naturales del sprite)
     const bgMidDisplayH  = Math.round(H * 0.28);                                   // ~202px @720p
@@ -125,9 +126,11 @@ window.draw = function() {
     const bgMidDisplayW  = Math.round(bgMidNW  * (bgMidDisplayH  / bgMidNH));      // ~1051px @720p
     const bgBackDisplayW = Math.round(bgBackNW * (bgBackDisplayH / bgBackNH));     //  ~578px @720p
 
-    // Posición Y: mid anclado en horizonte, back anclado encima del mid
+    // mid: anclado en el horizonte (su base toca bgHorizonY)
     const midY  = Math.floor(bgHorizonY - bgMidDisplayH);
-    const backY = Math.floor(midY - bgBackDisplayH + H * 0.06);   // pequeño solapamiento estético
+    // back: posicionado independientemente, justo encima de mid con ligero solapamiento
+    // Así aparece en la zona media del cielo, bien visible y más abajo que antes.
+    const backY = Math.floor(midY - bgBackDisplayH * 0.60);
 
     // Parallax X
     const _rawBackX = -(window.camera.x * 0.05) % bgBackDisplayW;

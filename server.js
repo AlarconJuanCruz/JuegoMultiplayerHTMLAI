@@ -5,6 +5,12 @@ const fs      = require('fs');
 const path    = require('path');
 const { Server } = require('socket.io');
 
+// ── Versión del servidor ───────────────────────────────────────────────────────
+// Incrementar este número cada vez que se despliega una actualización importante
+// de client-side (game.js, render_world.js, physics.js, etc.) para que los clientes
+// con caché vieja detecten el mismatch y hagan reload automático.
+const SERVER_VERSION = 32;  // ← bump this on every deploy
+
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
@@ -184,6 +190,7 @@ io.on('connection', (socket) => {
 
         socket.roomId = roomId;
         socket.join(roomId);
+        socket.emit('serverVersion', SERVER_VERSION);  // cliente verifica compatibilidad
         socket.emit('timeSync', Date.now() - room.createdAt);
         socket.emit('initWorldState', room.worldState);
 
@@ -225,6 +232,7 @@ io.on('connection', (socket) => {
 
         socket.roomId = globalRoom.id;
         socket.join(globalRoom.id);
+        socket.emit('serverVersion', SERVER_VERSION);  // cliente verifica compatibilidad
         socket.emit('timeSync', Date.now() - globalRoom.createdAt);
         socket.emit('initWorldState', globalRoom.worldState);
         if (globalRoom.worldState.seedCode) socket.emit('worldSeed', { seed: globalRoom.worldState.seedCode });

@@ -110,6 +110,18 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             });
 
             window.socket.on('disconnect', () => { alert("⚠ Conexión perdida. La partida se reiniciará."); window.location.reload(); });
+
+            // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
+            // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
+            // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
+            window._CLIENT_VERSION = 32;  // ← debe coincidir con SERVER_VERSION en server.js
+            window.socket.on('serverVersion', (v) => {
+                if (v !== window._CLIENT_VERSION) {
+                    console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
+                    // Forzar recarga ignorando caché del navegador
+                    window.location.reload(true);
+                }
+            });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if (pCount) pCount.innerText = Object.keys(srvPlayers).length; });
 
             window.socket.on('playerMoved', (pInfo) => {
@@ -120,7 +132,28 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 }
                 if (window.otherPlayers[pInfo.id]) {
                     let op = window.otherPlayers[pInfo.id];
-                    Object.assign(op, { targetX: pInfo.x, targetY: pInfo.y, vx: pInfo.vx, vy: pInfo.vy, facingRight: pInfo.facingRight, activeTool: pInfo.activeTool, animTime: pInfo.animTime, attackFrame: pInfo.attackFrame, isAiming: pInfo.isAiming, isCharging: pInfo.isCharging, chargeLevel: pInfo.chargeLevel, level: pInfo.level, mouseX: pInfo.mouseX, mouseY: pInfo.mouseY, isDancing: pInfo.isDancing||false, danceStart: pInfo.danceStart||0, isClimbing: pInfo.isClimbing||false, isGrounded: pInfo.isGrounded||false, isSprinting: pInfo.isSprinting||false, isTyping: pInfo.isTyping||false });
+                    // Campos siempre presentes
+                    Object.assign(op, {
+                        targetX: pInfo.x, targetY: pInfo.y,
+                        vx: pInfo.vx, vy: pInfo.vy,
+                        facingRight: pInfo.facingRight,
+                        animTime: pInfo.animTime,
+                        isClimbing: pInfo.isClimbing || false,
+                        isGrounded: pInfo.isGrounded || false,
+                        isSprinting: pInfo.isSprinting || false,
+                        isTyping: pInfo.isTyping || false,
+                    });
+                    // Campos opcionales: solo actualizar si vienen en el paquete
+                    if (pInfo.activeTool  !== undefined) op.activeTool  = pInfo.activeTool;
+                    if (pInfo.attackFrame !== undefined) op.attackFrame = pInfo.attackFrame;
+                    if (pInfo.isAiming    !== undefined) op.isAiming    = pInfo.isAiming;
+                    if (pInfo.isCharging  !== undefined) op.isCharging  = pInfo.isCharging;
+                    if (pInfo.chargeLevel !== undefined) op.chargeLevel = pInfo.chargeLevel;
+                    if (pInfo.level       !== undefined) op.level       = pInfo.level;
+                    if (pInfo.mouseX      !== undefined) op.mouseX      = pInfo.mouseX;
+                    if (pInfo.mouseY      !== undefined) op.mouseY      = pInfo.mouseY;
+                    if (pInfo.isDancing   !== undefined) op.isDancing   = pInfo.isDancing;
+                    if (pInfo.danceStart  !== undefined) op.danceStart  = pInfo.danceStart;
                     if (pInfo.isDead && !op.isDead) op.deathAnimFrame = 40;
                     op.isDead = pInfo.isDead;
                 }
@@ -1443,8 +1476,14 @@ function update() {
                         _pm.isAiming     = window.player.isAiming;
                         _pm.isCharging   = window.player.isCharging;
                         _pm.chargeLevel  = window.player.chargeLevel;
-                        _pm.mouseX       = window.mouseWorldX;
-                        _pm.mouseY       = window.mouseWorldY;
+                    }
+                    // mouseX/mouseY: siempre en cada paquete frecuente cuando se está apuntando,
+                    // o cada 4 frames si no (para que los remotos sepan la orientación general).
+                    // Esto resuelve que el arco/molotov de otros jugadores apuntara siempre
+                    // al mismo sitio (solo se enviaba al cambiar isAiming).
+                    if (window.player.isAiming || _toolChg || _atkChg || window.game.frameCount % 4 === 0) {
+                        _pm.mouseX = window.mouseWorldX;
+                        _pm.mouseY = window.mouseWorldY;
                     }
                     if (_typChg || _danceChg) {
                         _pm.isDancing    = window.player.isDancing || false;
