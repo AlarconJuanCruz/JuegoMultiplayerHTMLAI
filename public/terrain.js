@@ -274,9 +274,13 @@ window.getUGCell = function(col, row) {
 
 // ── Celdas minadas en esta sesión (persistidas en worldState) ────────
 window._minedCells = window._minedCells || {};
+window._mineStamp  = window._mineStamp  || 0;
 
-window.mineCell   = function(col, row) { window._minedCells[col+'_'+row] = true; };
-window.isMined    = function(col, row) { return !!window._minedCells[col+'_'+row]; };
+window.mineCell = function(col, row) {
+    window._minedCells[col+'_'+row] = true;
+    window._mineStamp = (window._mineStamp + 1) | 0; // invalidar terrain cache
+};
+window.isMined  = function(col, row) { return !!window._minedCells[col+'_'+row]; };
 
 // Cache persistente para getUGCell (el noise es determinista — resultado siempre igual)
 // Evita recalcular 3 octavas de fractal noise para cada celda en cada frame.

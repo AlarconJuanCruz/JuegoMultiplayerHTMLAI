@@ -371,136 +371,174 @@ window.draw = function() {
         }
         if (segStart !== null) drawSolidSegment(segStart, endCol + 1);
 
-        // ── CELDAS UNDERGROUND: bloques con textura + fondo oscuro para cuevas ──
-        // Principios:
-        //   • Celda sólida (stone/dirt/coal/etc) → se dibuja con su color y detalle
-        //   • Celda air (cueva natural o minada) → se dibuja un bloque de FONDO OSCURO
-        //     indestructible y sin colisión — oculta el cielo/fondo que se vería detrás
-        //   • SIN gradiente de oscuridad sobre tiles — el lightCanvas ya maneja la luz
-        //   • Todo determinista: mismo resultado en todos los jugadores
-        //   • Cache por frame para evitar recalcular noise varias veces por columna
+        // ── CELDAS UNDERGROUND: terrain cache canvas ──────────────────────────
+        // Renderiza el terreno al offscreen canvas UNA sola vez por scroll de columna.
+        // Cada frame: solo un ctx.drawImage() en lugar de ~2500 fillRect calls.
+        // Invalida cuando: startCol cambia (scroll > 1 bloque) | se mina una celda | fog avanza
         if (window.getUGCellV && window.getTerrainCol) {
             const C        = window.ctx;
             const bottomYu = _iCamY + H / z + bs * 4;
-            const UG_COLOR = {
-                dirt:    '#5c3d22', stone:   '#5a5a6a',
-                coal:    '#2a2a30', sulfur:  '#7a6a10',
-                diamond: '#1a6068', bedrock: '#1a1a1a',
-            };
-            const BG_DARK  = '#141210';
-            const BG_VAR   = '#181512';
+            const _fogEnabled   = !!window._caveExplored;
+            const _playerOnSurf = _onSurface;
 
-            // ── Player UG row para fog-of-war ──
-            const _fogEnabled    = !!window._caveExplored;
-            // Reusar variables de culling ya calculadas arriba
-            const _playerOnSurf  = _onSurface;
-            const _surfBlackRow  = 3;
+            const UG_COL = { dirt:'#5c3d22', stone:'#5a5a6a', coal:'#2a2a30', sulfur:'#7a6a10', diamond:'#1a6068', bedrock:'#1a1a1a' };
+            const BG_DARK = '#141210', BG_VAR = '#181512';
 
-            window._ugFrameCache = {};
-
-            for (let col = startCol; col <= endCol; col++) {
-                const cd = window.getTerrainCol(col);
-                if (!cd || cd.type === 'hole') continue;
-                const topY  = cd.topY;
-                const x     = col * bs;
-                const drawW = bs + 0.5;
-                const maxRow = Math.min(window.UG_MAX_DEPTH || 90,
-                                        Math.ceil((bottomYu - topY) / bs) + 1);
-
-                for (let row = 0; row < maxRow; row++) {
-                    const cellY = topY + row * bs;
-                    if (cellY >= bottomYu) break;
-                    const cH = Math.min(bs, bottomYu - cellY) + 1;
-
-                    // ── Blackout de superficie: desde la superficie, >3 bloques = negro ──
-                    if (_playerOnSurf && row >= _surfBlackRow) {
+            if (_playerOnSurf) {
+                // ── Superficie: solo 3 filas de transición + UN rect negro por columna ──
+                for (let col = startCol; col <= endCol; col++) {
+                    const cd = window.getTerrainCol(col);
+                    if (!cd || cd.type === 'hole') continue;
+                    const topY = cd.topY, x = col * bs, dW = bs + 0.5;
+                    // Filas 0-2: tierra superficial visible
+                    for (let row = 0; row < 3; row++) {
+                        const cY = topY + row * bs;
+                        if (cY >= bottomYu) break;
+                        const cH = Math.min(bs, bottomYu - cY) + 1;
+                        const mat = window.getUGCellV(col, row);
+                        if (!mat || mat === 'air') { C.fillStyle = BG_DARK; C.fillRect(x, Math.floor(cY), dW, cH); continue; }
+                        C.fillStyle = UG_COL[mat] || '#5a5a6a'; C.fillRect(x, Math.floor(cY), dW, cH);
+                        if (mat === 'dirt') { const v=((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF; if(v>0.6){C.fillStyle='rgba(0,0,0,0.12)';C.fillRect(x,Math.floor(cY),dW,cH);} }
+                    }
+                    // UN solo rect negro cubre todo lo que hay debajo
+                    const blackY = Math.floor(topY + 3 * bs);
+                    if (blackY < bottomYu) {
                         C.fillStyle = '#000000';
-                        C.fillRect(x, Math.floor(cellY), drawW, cH);
-                        continue;
+                        C.fillRect(x, blackY, dW, Math.ceil(bottomYu - blackY) + 2);
                     }
+                }
+            } else {
+                // ── Underground: terrain cache canvas ─────────────────────────────
+                const _exploreCount = _fogEnabled ? window._caveExplored.size : 0;
+                const _mineStamp    = window._mineStamp || 0;
+                const _tDirty = !window._terrainCache
+                    || window._tCacheStartCol  !== startCol
+                    || window._tCacheEndCol    !== endCol
+                    || window._tCacheExplore   !== _exploreCount
+                    || window._tCacheMine      !== _mineStamp;
 
-                    // ── Fog de cueva: celdas no exploradas = roca oscura ──
-                    if (_fogEnabled && row > 0 && !_playerOnSurf) {
-                        if (!window._caveExplored.has(`${col}_${row}`)) {
-                            C.fillStyle = '#0a0a0c';
-                            C.fillRect(x, Math.floor(cellY), drawW, cH);
-                            continue;
-                        }
+                if (_tDirty) {
+                    // ── Construir / reconstruir el offscreen terrain canvas ──
+                    const _numCols  = endCol - startCol + 4;
+                    const _cacheW   = _numCols * bs + 4;
+                    const _cacheH   = Math.ceil(bottomYu) + bs * 2;
+                    if (!window._terrainCache
+                        || window._terrainCache.width  < _cacheW
+                        || window._terrainCache.height < _cacheH) {
+                        window._terrainCache    = document.createElement('canvas');
+                        window._terrainCache.width  = _cacheW  + bs * 4;
+                        window._terrainCache.height = _cacheH  + bs * 4;
+                        window._terrainCacheCtx = window._terrainCache.getContext('2d');
                     }
+                    const CC   = window._terrainCacheCtx;
+                    const offX = startCol * bs; // world X de la esquina izquierda del cache
+                    CC.clearRect(0, 0, window._terrainCache.width, window._terrainCache.height);
 
-                    const _ck = col + '_' + row;
-                    let mat = window._ugFrameCache[_ck];
-                    if (mat === undefined) {
-                        mat = window.getUGCellV(col, row);
-                        window._ugFrameCache[_ck] = mat;
-                    }
+                    for (let col = startCol; col <= endCol + 1; col++) {
+                        const cd = window.getTerrainCol(col);
+                        if (!cd || cd.type === 'hole') continue;
+                        const topY  = cd.topY;
+                        const cx    = col * bs - offX; // local x en el canvas
+                        const dW    = bs + 0.5;
+                        const maxRow = Math.min(window.UG_MAX_DEPTH || 50,
+                                                Math.ceil((bottomYu - topY) / bs) + 1);
 
-                    if (mat === 'air') {
-                        const varH = ((col * 374761393 ^ row * 1103515245) >>> 0) / 0xFFFFFFFF;
-                        C.fillStyle = varH > 0.55 ? BG_VAR : BG_DARK;
-                        C.fillRect(x, Math.floor(cellY), drawW, cH);
-                        if (row % 4 === 0) {
-                            C.fillStyle = 'rgba(0,0,0,0.35)';
-                            C.fillRect(x, Math.floor(cellY), drawW, 1);
-                        }
-                        if (varH > 0.82) {
-                            C.fillStyle = 'rgba(255,255,255,0.025)';
-                            C.fillRect(x + Math.floor(varH * bs * 0.6), Math.floor(cellY) + 2, 2, bs - 4);
-                        }
-                        continue;
-                    }
+                        for (let row = 0; row < maxRow; row++) {
+                            const cellY = topY + row * bs;
+                            if (cellY >= bottomYu) break;
+                            const cH = Math.min(bs, bottomYu - cellY) + 1;
+                            const cyFloor = Math.floor(cellY);
 
-                    // ── Celda sólida: dibujar con su material ──
-                    C.fillStyle = UG_COLOR[mat] || '#5a5a6a';
-                    C.fillRect(x, Math.floor(cellY), drawW, cH);
+                            // Fog: celdas no exploradas = roca negra, skip detalle
+                            if (_fogEnabled && row > 0 && !window._caveExplored.has(`${col}_${row}`)) {
+                                CC.fillStyle = '#0a0a0c';
+                                CC.fillRect(cx, cyFloor, dW, cH);
+                                continue;
+                            }
 
-                    // Variación y detalle por material
-                    const varH = ((col * 374761393 ^ row * 1103515245) >>> 0) / 0xFFFFFFFF;
-                    if (mat === 'stone') {
-                        if (row % 3 === 0) { C.fillStyle = 'rgba(255,255,255,0.04)'; C.fillRect(x, Math.floor(cellY), drawW, 1); }
-                        if (varH > 0.7)    { C.fillStyle = 'rgba(0,0,0,0.08)';       C.fillRect(x, Math.floor(cellY), drawW, cH); }
-                    } else if (mat === 'dirt') {
-                        if (varH > 0.6)    { C.fillStyle = 'rgba(0,0,0,0.12)';       C.fillRect(x, Math.floor(cellY), drawW, cH); }
-                    } else if (mat === 'coal') {
-                        C.fillStyle = 'rgba(80,80,90,0.4)';   C.fillRect(x + Math.floor(varH*bs*0.4), Math.floor(cellY)+3, Math.ceil(bs*0.5), 3);
-                        C.fillStyle = 'rgba(20,20,25,0.6)';   C.fillRect(x, Math.floor(cellY), drawW, 2);
-                    } else if (mat === 'sulfur') {
-                        C.fillStyle = 'rgba(255,220,0,0.18)'; C.fillRect(x + Math.floor(varH*bs*0.3), Math.floor(cellY)+2, Math.ceil(bs*0.4), Math.ceil(bs*0.5));
-                        C.fillStyle = 'rgba(200,160,0,0.3)';  C.fillRect(x, Math.floor(cellY), drawW, 2);
-                        if (varH > 0.78) { C.fillStyle = 'rgba(255,255,100,0.5)'; C.fillRect(x+4, Math.floor(cellY)+4, 3, 3); }
-                    } else if (mat === 'diamond') {
-                        C.fillStyle = 'rgba(100,240,255,0.22)'; C.fillRect(x + Math.floor(varH*bs*0.2), Math.floor(cellY)+1, Math.ceil(bs*0.6), Math.ceil(bs*0.4));
-                        C.fillStyle = 'rgba(0,200,230,0.35)';   C.fillRect(x, Math.floor(cellY), drawW, 2);
-                        if (varH > 0.60) { C.fillStyle = 'rgba(180,255,255,0.7)'; C.fillRect(x+2+Math.floor(varH*bs*0.5), Math.floor(cellY)+2, 2, 2); }
-                        if (varH > 0.85) { C.fillStyle = 'rgba(255,255,255,0.8)'; C.fillRect(x+Math.floor(bs*0.6), Math.floor(cellY)+5, 2, 2); }
-                        if ((window.game.frameCount & 3) === (col & 3)) {
-                            const pulse = 0.10 + Math.abs(Math.sin(window.game.frameCount * 0.03 + col * 0.4 + row * 0.6)) * 0.12;
-                            C.fillStyle = `rgba(120,255,255,${pulse})`; C.fillRect(x, Math.floor(cellY), drawW, cH);
-                        }
-                    }
+                            const mat = window.getUGCellV(col, row);
 
-                    // Grietas de minado (sin barra de HP — la textura de grietas es suficiente)
-                    const frac = window.getCellDmgFrac ? window.getCellDmgFrac(col, row) : 0;
-                    if (frac > 0) {
-                        const crackAlpha = 0.18 + frac * 0.70;
-                        const cSeed = (col * 7 + row * 13) & 0xFF;
-                        C.fillStyle = `rgba(0,0,0,${crackAlpha})`;
-                        const numCracks = 2 + Math.floor(frac * 4);
-                        for (let cr = 0; cr < numCracks; cr++) {
-                            const cx  = x + ((cSeed * (cr + 1) * 37) % (bs - 6)) + 2;
-                            const cy  = Math.floor(cellY) + ((cSeed * (cr + 1) * 53) % (bs - 6)) + 2;
-                            const cw  = 1 + Math.floor(frac * 3);
-                            const ch  = Math.floor(frac * 10) + 2 + (cr & 1) * 4;
-                            C.fillRect(cx, cy, cw, ch);
-                            // grieta cruzada en ángulo para dar volumen
-                            if (frac > 0.4) {
-                                C.fillRect(cx + (cr & 1 ? 2 : -2), cy + Math.floor(ch * 0.4), ch, cw);
+                            if (mat === 'air') {
+                                const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
+                                CC.fillStyle = v > 0.55 ? BG_VAR : BG_DARK;
+                                CC.fillRect(cx, cyFloor, dW, cH);
+                                if (row % 4 === 0) { CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cyFloor,dW,1); }
+                                if (v > 0.82) { CC.fillStyle='rgba(255,255,255,0.025)'; CC.fillRect(cx+Math.floor(v*bs*0.6),cyFloor+2,2,bs-4); }
+                                continue;
+                            }
+
+                            CC.fillStyle = UG_COL[mat] || '#5a5a6a';
+                            CC.fillRect(cx, cyFloor, dW, cH);
+                            const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
+                            if (mat === 'stone') {
+                                if (row%3===0) { CC.fillStyle='rgba(255,255,255,0.04)'; CC.fillRect(cx,cyFloor,dW,1); }
+                                if (v>0.7)     { CC.fillStyle='rgba(0,0,0,0.08)';       CC.fillRect(cx,cyFloor,dW,cH); }
+                            } else if (mat === 'dirt') {
+                                if (v>0.6)     { CC.fillStyle='rgba(0,0,0,0.12)';       CC.fillRect(cx,cyFloor,dW,cH); }
+                            } else if (mat === 'coal') {
+                                CC.fillStyle='rgba(80,80,90,0.4)';  CC.fillRect(cx+Math.floor(v*bs*0.4),cyFloor+3,Math.ceil(bs*0.5),3);
+                                CC.fillStyle='rgba(20,20,25,0.6)';  CC.fillRect(cx,cyFloor,dW,2);
+                            } else if (mat === 'sulfur') {
+                                CC.fillStyle='rgba(255,220,0,0.18)'; CC.fillRect(cx+Math.floor(v*bs*0.3),cyFloor+2,Math.ceil(bs*0.4),Math.ceil(bs*0.5));
+                                CC.fillStyle='rgba(200,160,0,0.3)';  CC.fillRect(cx,cyFloor,dW,2);
+                                if (v>0.78) { CC.fillStyle='rgba(255,255,100,0.5)'; CC.fillRect(cx+4,cyFloor+4,3,3); }
+                            } else if (mat === 'diamond') {
+                                CC.fillStyle='rgba(100,240,255,0.22)'; CC.fillRect(cx+Math.floor(v*bs*0.2),cyFloor+1,Math.ceil(bs*0.6),Math.ceil(bs*0.4));
+                                CC.fillStyle='rgba(0,200,230,0.35)';   CC.fillRect(cx,cyFloor,dW,2);
+                                if (v>0.60) { CC.fillStyle='rgba(180,255,255,0.7)';  CC.fillRect(cx+2+Math.floor(v*bs*0.5),cyFloor+2,2,2); }
+                                if (v>0.85) { CC.fillStyle='rgba(255,255,255,0.8)';  CC.fillRect(cx+Math.floor(bs*0.6),cyFloor+5,2,2); }
                             }
                         }
-                        // Overlay semitransparente cuando está a punto de romperse
-                        if (frac > 0.75) {
-                            C.fillStyle = `rgba(255,180,60,${(frac - 0.75) * 0.28})`;
-                            C.fillRect(x, Math.floor(cellY), drawW, cH);
+                    }
+                    window._tCacheStartCol = startCol;
+                    window._tCacheEndCol   = endCol;
+                    window._tCacheExplore  = _exploreCount;
+                    window._tCacheMine     = _mineStamp;
+                    window._tCacheOffX     = offX;
+                }
+
+                // ── Blit: UN drawImage en lugar de ~2500 fillRect ──────────────
+                C.drawImage(window._terrainCache, window._tCacheOffX, 0);
+
+                // ── Overlay: grietas de minado en progreso (pocos bloques, no cacheados) ──
+                if (window._cellDamage && Object.keys(window._cellDamage).length > 0) {
+                    for (const _crKey of Object.keys(window._cellDamage)) {
+                        const [_crC, _crR] = _crKey.split('_').map(Number);
+                        const _crCD = window.getTerrainCol(_crC);
+                        if (!_crCD) continue;
+                        const _crX  = _crC * bs, _crCY = _crCD.topY + _crR * bs;
+                        const _crDW = bs + 0.5, _crH  = bs + 1;
+                        const frac  = window.getCellDmgFrac ? window.getCellDmgFrac(_crC, _crR) : 0;
+                        if (frac <= 0) continue;
+                        const cSeed = (_crC * 7 + _crR * 13) & 0xFF;
+                        C.fillStyle = `rgba(0,0,0,${0.18 + frac * 0.70})`;
+                        const nCracks = 2 + Math.floor(frac * 4);
+                        for (let cr2 = 0; cr2 < nCracks; cr2++) {
+                            const cx2  = _crX + ((cSeed*(cr2+1)*37) % (bs-6)) + 2;
+                            const cy2  = Math.floor(_crCY) + ((cSeed*(cr2+1)*53) % (bs-6)) + 2;
+                            const cw2  = 1 + Math.floor(frac * 3);
+                            const ch2  = Math.floor(frac * 10) + 2 + (cr2 & 1) * 4;
+                            C.fillRect(cx2, cy2, cw2, ch2);
+                            if (frac > 0.4) C.fillRect(cx2+(cr2&1?2:-2), cy2+Math.floor(ch2*0.4), ch2, cw2);
+                        }
+                        if (frac > 0.75) { C.fillStyle=`rgba(255,180,60,${(frac-0.75)*0.28})`; C.fillRect(_crX,Math.floor(_crCY),_crDW,_crH); }
+                    }
+                }
+
+                // ── Diamond pulse (overlay fino, no cacheado, solo visibles) ──
+                if (window.game.frameCount % 2 === 0) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        const cd = window.getTerrainCol(col);
+                        if (!cd || cd.type === 'hole') continue;
+                        const topY = cd.topY;
+                        for (let row = 41; row < (window.UG_MAX_DEPTH || 50); row++) {
+                            const cellY = topY + row * bs;
+                            if (cellY >= bottomYu || cellY < _iCamY - bs) continue;
+                            if (_fogEnabled && !window._caveExplored?.has(`${col}_${row}`)) continue;
+                            if (window.getUGCellV(col, row) !== 'diamond') continue;
+                            const pulse = 0.08 + Math.abs(Math.sin(window.game.frameCount * 0.03 + col * 0.4 + row * 0.6)) * 0.10;
+                            C.fillStyle = `rgba(120,255,255,${pulse})`;
+                            C.fillRect(col * bs, Math.floor(cellY), bs + 0.5, bs + 1);
                         }
                     }
                 }
