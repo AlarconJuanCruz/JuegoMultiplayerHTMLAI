@@ -362,28 +362,18 @@ window.draw = function() {
             window.ctx.globalAlpha = 1; window.ctx.restore();
         }
 
-        // Cache del check de agujeros de superficie (actualizar cada vez que _mineStamp cambia)
-        if (window._surfHoleStamp !== (window._mineStamp || 0)) {
-            window._surfHoleStamp = window._mineStamp || 0;
-            window._hasSurfaceHoles = !!window._minedCells && Object.keys(window._minedCells).some(k => k.endsWith('_0'));
-        }
-
-        // Iterar columnas, dibujar tramos sólidos (los pozos quedan transparentes)
-        // También se rompe el tramo en columnas donde row=0 fue minado (agujeros de superficie)
+        // Iterar columnas, dibujar tramos sólidos
         let segStart = null;
-        const _checkSurfHoles = !!window._hasSurfaceHoles && !!window.getUGCellV;
         for (let col = startCol; col <= endCol + 2; col++) {
             const d = window.getTerrainCol ? window.getTerrainCol(col) : { type: 'flat' };
-            const isHole = (d.type === 'hole')
-                || (_checkSurfHoles && d.type !== 'hole' && window.getUGCellV(col, 0) === 'air');
+            const isHole = d.type === 'hole';
             if (!isHole && segStart === null) { segStart = col; }
             else if (isHole && segStart !== null) { drawSolidSegment(segStart, col - 1); segStart = null; }
         }
         if (segStart !== null) drawSolidSegment(segStart, endCol + 1);
 
-        // Underground terrain: se renderiza cuando el jugador está bajo tierra
-        // O cuando hay columnas con row=0 minado (para mostrar el agujero/cueva debajo)
-        if (window.getUGCellV && window.getTerrainCol && (!_onSurface || window._hasSurfaceHoles)) {
+        // Underground terrain: siempre renderizar (cuevas visibles en todo momento)
+        if (window.getUGCellV && window.getTerrainCol) {
             const C       = window.ctx;
             const bottomYu= _iCamY + H / z + bs * 4;
             const _fogEnabled = false; // FOG DESACTIVADO
@@ -501,21 +491,6 @@ window.draw = function() {
                 }
             }
 
-            // Diamond pulse
-            if (window.game.frameCount % 2 === 0) {
-                for (let col=startCol; col<=endCol; col++) {
-                    const cd=window.getTerrainCol(col); if (!cd||cd.type==='hole') continue;
-                    for (let row=41; row<(window.UG_MAX_DEPTH||50); row++) {
-                        const cY=cd.topY+row*bs;
-                        if (cY>=bottomYu||cY<_iCamY-bs) continue;
-                        if (_fogEnabled&&!window._caveExplored?.has(`${col}_${row}`)) continue;
-                        if (window.getUGCellV(col,row)!=='diamond') continue;
-                        const pulse=0.08+Math.abs(Math.sin(window.game.frameCount*0.03+col*0.4+row*0.6))*0.10;
-                        C.fillStyle=`rgba(120,255,255,${pulse})`;
-                        C.fillRect(col*bs,Math.floor(cY),bs+0.5,bs+1);
-                    }
-                }
-            }
         }
 
         // ── Cursor de minado (celda apuntada + barra de progreso) ──────────────
@@ -705,7 +680,7 @@ window.draw = function() {
             // ── Pre-render plantas a canvas offscreen ──────────────────────────
             // Se rebuilda solo cuando la cámara se mueve >2 bloques o cada 120 frames.
             // Elimina ~50 createRadialGradient + 100 save/restore por frame.
-            const _plantCamKey = `${(startCol>>2)}_${(_iCamY/bs>>2)}_${window._tCacheExploreSt||0}_${window._mineStamp||0}`;
+            const _plantCamKey = `${(startCol>>2)}_${(_iCamY/bs>>2)}`;
             if (!window._plantCanvas || window._plantCamKey !== _plantCamKey) {
                 window._plantCamKey = _plantCamKey;
                 const _pcW = (endCol - startCol + 4) * bs;

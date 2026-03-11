@@ -194,6 +194,10 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 window.blocks = []; window.droppedItems = []; window.removedTrees = []; window.removedRocks = []; window.treeState = {}; window.killedEntities = []; window.stuckArrows = []; window.fires = []; window.scorchMarks = []; window.trees = []; window.rocks = []; window.entities = []; window.game.exploredRight = window.game.shoreX;
                 // Reset explícito del mundo: limpiar terreno minado (applySeed ya no lo hace)
                 window._minedCells = {}; window._cellDamage = {}; window._ugCellCache = {};
+                window._mineStamp = 1; // forzar rebuild del terrain cache en primer frame
+                window._terrainCache = null; // borrar cache viejo de sesión anterior
+                window._staticLightCanvas = null; // reset light cache
+                window._plantCanvas = null; // reset plant cache
                 if (window.applySeed) window.applySeed();
                 window.generateWorldSector(window.game.shoreX, window.game.shoreX + window.game.chunkSize);
                 window.game.exploredRight = window.game.shoreX + window.game.chunkSize;
