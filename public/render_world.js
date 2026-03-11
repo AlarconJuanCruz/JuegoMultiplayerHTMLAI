@@ -365,16 +365,28 @@ window.draw = function() {
             window.ctx.globalAlpha = 1; window.ctx.restore();
         }
 
+        // Cache del check de agujeros de superficie (actualizar cada vez que _mineStamp cambia)
+        if (window._surfHoleStamp !== (window._mineStamp || 0)) {
+            window._surfHoleStamp = window._mineStamp || 0;
+            window._hasSurfaceHoles = !!window._minedCells && Object.keys(window._minedCells).some(k => k.endsWith('_0'));
+        }
+
         // Iterar columnas, dibujar tramos sólidos (los pozos quedan transparentes)
+        // También se rompe el tramo en columnas donde row=0 fue minado (agujeros de superficie)
         let segStart = null;
+        const _checkSurfHoles = !!window._hasSurfaceHoles && !!window.getUGCellV;
         for (let col = startCol; col <= endCol + 2; col++) {
-            const d = window.getTerrainCol ? window.getTerrainCol(col) : { type: 'flat' }; const isHole = (d.type === 'hole');
-            if (!isHole && segStart === null) { segStart = col; } else if (isHole && segStart !== null) { drawSolidSegment(segStart, col - 1); segStart = null; }
+            const d = window.getTerrainCol ? window.getTerrainCol(col) : { type: 'flat' };
+            const isHole = (d.type === 'hole')
+                || (_checkSurfHoles && d.type !== 'hole' && window.getUGCellV(col, 0) === 'air');
+            if (!isHole && segStart === null) { segStart = col; }
+            else if (isHole && segStart !== null) { drawSolidSegment(segStart, col - 1); segStart = null; }
         }
         if (segStart !== null) drawSolidSegment(segStart, endCol + 1);
 
-        // Underground terrain: solo se renderiza cuando el jugador está bajo tierra
-        if (window.getUGCellV && window.getTerrainCol && !_onSurface) {
+        // Underground terrain: se renderiza cuando el jugador está bajo tierra
+        // O cuando hay columnas con row=0 minado (para mostrar el agujero/cueva debajo)
+        if (window.getUGCellV && window.getTerrainCol && (!_onSurface || window._hasSurfaceHoles)) {
             const C       = window.ctx;
             const bottomYu= _iCamY + H / z + bs * 4;
             const _fogEnabled = !!window._caveExplored;
@@ -508,6 +520,41 @@ window.draw = function() {
                         C.fillRect(col*bs,Math.floor(cY),bs+0.5,bs+1);
                     }
                 }
+            }
+        }
+
+        // ── Cursor de minado (celda apuntada + barra de progreso) ──────────────
+        if (window._mineCursor) {
+            const _mc = window._mineCursor;
+            const _mcCD = window.getTerrainCol ? window.getTerrainCol(_mc.col) : null;
+            if (_mcCD && _mcCD.type !== 'hole') {
+                const _mcX = _mc.col * bs;
+                const _mcY = _mcCD.topY + _mc.row * bs;
+                const C = window.ctx;
+                // Parpadeo de selección: borde blanco-azul animado
+                const _pulse = 0.55 + Math.abs(Math.sin(window.game.frameCount * 0.18)) * 0.35;
+                C.save();
+                C.strokeStyle = `rgba(180,220,255,${_pulse})`;
+                C.lineWidth = 2;
+                C.setLineDash([4, 3]);
+                C.strokeRect(_mcX + 1, _mcY + 1, bs - 2, bs - 2);
+                C.setLineDash([]);
+                // Barra de progreso de minado
+                const _frac = window.getCellDmgFrac ? window.getCellDmgFrac(_mc.col, _mc.row) : 0;
+                if (_frac > 0) {
+                    const _bW = bs - 6;
+                    const _bH = 4;
+                    const _bX = _mcX + 3;
+                    const _bY = _mcY + bs - 7;
+                    C.fillStyle = 'rgba(0,0,0,0.6)';
+                    C.fillRect(_bX, _bY, _bW, _bH);
+                    // Color de barra: verde → naranja → rojo según progreso
+                    const r = Math.floor(255 * Math.min(1, _frac * 2));
+                    const g = Math.floor(255 * Math.min(1, (1 - _frac) * 2));
+                    C.fillStyle = `rgb(${r},${g},30)`;
+                    C.fillRect(_bX, _bY, Math.floor(_bW * _frac), _bH);
+                }
+                C.restore();
             }
         }
 
@@ -663,7 +710,7 @@ window.draw = function() {
             // ── Pre-render plantas a canvas offscreen ──────────────────────────
             // Se rebuilda solo cuando la cámara se mueve >2 bloques o cada 120 frames.
             // Elimina ~50 createRadialGradient + 100 save/restore por frame.
-            const _plantCamKey = `${(startCol>>2)}_${(_iCamY/bs>>2)}_${window._tCacheExploreSt||0}`;
+            const _plantCamKey = `${(startCol>>2)}_${(_iCamY/bs>>2)}_${window._tCacheExploreSt||0}_${window._mineStamp||0}`;
             if (!window._plantCanvas || window._plantCamKey !== _plantCamKey) {
                 window._plantCamKey = _plantCamKey;
                 const _pcW = (endCol - startCol + 4) * bs;
@@ -763,6 +810,32 @@ window.draw = function() {
             // Sombra en cara vertical de acantilado
             const leftData = window.getTerrainCol ? window.getTerrainCol(col - 1) : null;
             if (leftData && leftData.type !== 'hole' && leftData.topY > topY) { window.ctx.save(); window.ctx.beginPath(); window.ctx.rect(x, topY, 4, leftData.topY - topY); window.ctx.clip(); window.ctx.fillStyle = 'rgba(0,0,0,0.22)'; window.ctx.fill(); window.ctx.restore(); }
+        }
+
+        // Cursor de minado en SUPERFICIE (row=0): también visible cuando _onSurface=true
+        if (window._mineCursor && window._mineCursor.row === 0) {
+            const _mc = window._mineCursor;
+            const _mcCD = window.getTerrainCol ? window.getTerrainCol(_mc.col) : null;
+            if (_mcCD && _mcCD.type !== 'hole') {
+                const _mcX = _mc.col * bs;
+                const _mcY = _mcCD.topY;
+                const C = window.ctx;
+                const _pulse = 0.55 + Math.abs(Math.sin(window.game.frameCount * 0.18)) * 0.35;
+                C.save();
+                C.strokeStyle = `rgba(180,220,255,${_pulse})`;
+                C.lineWidth = 2; C.setLineDash([4, 3]);
+                C.strokeRect(_mcX + 1, _mcY + 1, bs - 2, bs - 2);
+                C.setLineDash([]);
+                const _frac = window.getCellDmgFrac ? window.getCellDmgFrac(_mc.col, _mc.row) : 0;
+                if (_frac > 0) {
+                    const _bW = bs - 6, _bX = _mcX + 3, _bY = _mcY + bs - 7;
+                    C.fillStyle = 'rgba(0,0,0,0.6)'; C.fillRect(_bX, _bY, _bW, 4);
+                    const r2 = Math.floor(255 * Math.min(1, _frac * 2));
+                    const g2 = Math.floor(255 * Math.min(1, (1 - _frac) * 2));
+                    C.fillStyle = `rgb(${r2},${g2},30)`; C.fillRect(_bX, _bY, Math.floor(_bW * _frac), 4);
+                }
+                C.restore();
+            }
         }
 
         // Vegetación animada (pasto, flores, hongos, detalles desierto) por columna
@@ -1840,7 +1913,12 @@ window.draw = function() {
         }
     }
 
-    // === LUZ DINÁMICA (lightCanvas, destination-out) ===
+    // Detectar transición superficie→subterráneo: forzar rebuild de lightCanvas inmediato
+    if (window._prevOnSurface === undefined) window._prevOnSurface = _onSurface;
+    if (window._prevOnSurface !== _onSurface) {
+        window._lightCanvasDirty = true;
+        window._prevOnSurface = _onSurface;
+    }
     // Throttle: cada 4 frames. En frames intermedios se reutiliza resultado anterior.
     const _lcFrame = window.game.frameCount || 0;
     const _skipLight = (_lcFrame % 4 !== 0) && window._lightCanvasDirty === false;
@@ -1878,12 +1956,24 @@ window.draw = function() {
             const _fc = window.game.frameCount || 0;
             const _tf = 0.9 + Math.sin(_fc * 0.21) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04;
 
-            if (!window.player.isDead && (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit) {
-                let pGlowSize = 260 * _tf * _lz;
+            if (!window.player.isDead) {
                 let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
-                let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
-                pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
-                window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
+                const hasTorch = (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit;
+                if (hasTorch) {
+                    let pGlowSize = 260 * _tf * _lz;
+                    let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
+                    pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
+                    window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
+                } else if (!_onSurface) {
+                    // Glow de emergencia: radio amplio para que el jugador siempre sea visible sin antorcha
+                    const bodyGlowR = 110 * _lz;
+                    let bGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, bodyGlowR);
+                    bGrad.addColorStop(0,   'rgba(200, 220, 255, 0.85)');
+                    bGrad.addColorStop(0.35,'rgba(170, 200, 240, 0.55)');
+                    bGrad.addColorStop(0.65,'rgba(140, 170, 220, 0.20)');
+                    bGrad.addColorStop(1,   'rgba(120, 150, 200, 0)');
+                    window.lightCtx.fillStyle = bGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, bodyGlowR, 0, Math.PI*2); window.lightCtx.fill();
+                }
             }
             if (window.game.isMultiplayer) {
                 Object.values(window.otherPlayers).forEach(p => {
@@ -1899,8 +1989,7 @@ window.draw = function() {
             }
 
             // ── Luces estáticas cacheadas ──────────────────────────────────────
-            // Threshold: 1 bloque (bs) en lugar de 4px — no se rebuilda cada frame al caminar
-            const _slThresh = bs;
+            const _slThresh = bs * 3;  // era bs: reconstruía en cada paso, ahora cada 3 bloques
             const _camMX = Math.abs((window._slCamX||0) - _iCamX);
             const _camMY = Math.abs((window._slCamY||0) - _iCamY);
             const _slDirty = !window._staticLightCanvas || _camMX > _slThresh || _camMY > _slThresh || (_lcFrame % 180 === 0);
