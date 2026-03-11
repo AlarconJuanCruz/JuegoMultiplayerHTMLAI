@@ -1470,6 +1470,15 @@ function update() {
             const jumpPower = Math.abs(window.player.jumpPower), headroom = Math.ceil((jumpPower*jumpPower) / (2*0.5));
             window.player.vy = (window.hasCeilingAbove && window.hasCeilingAbove(headroom)) ? Math.max(window.player.jumpPower, -3) : window.player.jumpPower;
             window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false;
+            // Si estaba pegado a una pared presionando hacia ella, dar impulso horizontal
+            // inmediato para que el salto vaya hacia adelante (no recto hacia arriba)
+            if (_pressingIntoWall) {
+                const _jDir = (window.keys?.d) ? 1 : (window.keys?.a ? -1 : 0);
+                if (_jDir !== 0) {
+                    window.player.vx = _jDir * Math.min(window.player.speed * 0.9, 1.4);
+                    window.player._accelRamp = 0.55; // arranque rápido en el aire
+                }
+            }
             window.player._wallDir = 0;  // al saltar, liberar bloqueo de pared
         }
         if (window.keys && !window.keys.jumpPressed && window.player.vy < 0 && !_isClimbing) window.player.vy *= 0.5;

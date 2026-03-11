@@ -1680,11 +1680,32 @@ window.draw = function() {
         const pts = []; let hitX = null, hitY = null;
         for (let i = 0; i < 240; i++) {
             simX += simVx; simVy += grav; simY += simVy;
-            let blockedByBlock = false;
-            for (const b of window.blocks) { if (b.type === 'ladder' || (b.type === 'door' && b.open) || b.type === 'stair') continue; const bh = b.type === 'door' ? bs * 2 : bs; if (simX >= b.x && simX <= b.x + bs && simY >= b.y && simY <= b.y + bh) { blockedByBlock = true; break; } }
-            const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
-            if (simY >= gY || blockedByBlock) { hitX = simX; hitY = blockedByBlock ? simY : gY; break; }
-            if (i % 2 === 0) pts.push({ x: simX, y: simY, t: i / 120 });
+            let blocked = false;
+            // Bloques colocados
+            for (const b of window.blocks) {
+                if (b.type === 'ladder' || (b.type === 'door' && b.open) || b.type === 'stair') continue;
+                const bh = b.type === 'door' ? bs * 2 : bs;
+                if (simX >= b.x && simX <= b.x + bs && simY >= b.y && simY <= b.y + bh) { blocked = true; break; }
+            }
+            if (!blocked) {
+                // Terreno de superficie
+                const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
+                if (simY >= gY) { hitX = simX; hitY = gY; break; }
+                // Bloques UG (cuevas y terreno subterráneo)
+                if (window.getUGCellV && window.getTerrainCol) {
+                    const _simCol = Math.floor(simX / bs);
+                    const _simCD  = window.getTerrainCol(_simCol);
+                    if (_simCD && _simCD.type !== 'hole') {
+                        const _simRow = Math.floor((simY - _simCD.topY) / bs);
+                        if (_simRow >= 0) {
+                            const _simMat = window.getUGCellV(_simCol, _simRow);
+                            if (_simMat && _simMat !== 'air') { blocked = true; }
+                        }
+                    }
+                }
+            }
+            if (blocked) { hitX = simX; hitY = simY; break; }
+            if (i % 2 === 0) pts.push({ x: simX, y: simY });
         }
         if (!hitX && pts.length) { hitX = pts[pts.length-1].x; hitY = pts[pts.length-1].y; }
         window.ctx.save(); window.ctx.lineWidth = 1.5; window.ctx.setLineDash([5, 6]);
@@ -1705,8 +1726,15 @@ window.draw = function() {
         for (let i = 0; i < 300; i++) {
             simX += simVx; simVy += grav; simY += simVy;
             if (i % 4 === 0) dotPositions.push({ x: simX, y: simY, t: i / 300 });
-            const groundY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel; if (simY >= groundY) { simX = simX; simY = groundY; break; }
-            let hitB = false; for (const b of window.blocks) { const bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(simX - 4, simY - 4, 8, 8, b.x, b.y, window.game.blockSize, bh)) { hitB = true; break; } } if (hitB) break;
+            const groundY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
+            if (simY >= groundY) { simY = groundY; break; }
+            let hitB = false;
+            for (const b of window.blocks) { const bh = b.type === 'door' ? window.game.blockSize * 2 : window.game.blockSize; if (!b.open && window.checkRectIntersection(simX - 4, simY - 4, 8, 8, b.x, b.y, window.game.blockSize, bh)) { hitB = true; break; } }
+            if (!hitB && window.getUGCellV && window.getTerrainCol) {
+                const _mc2 = Math.floor(simX / bs); const _cd2 = window.getTerrainCol(_mc2);
+                if (_cd2 && _cd2.type !== 'hole') { const _mr2 = Math.floor((simY - _cd2.topY) / bs); if (_mr2 >= 0 && window.getUGCellV(_mc2, _mr2) !== 'air') hitB = true; }
+            }
+            if (hitB) break;
         }
         const C = window.ctx; C.save();
         for (let di = 0; di < dotPositions.length; di++) { const dot = dotPositions[di]; const prog = di / dotPositions.length; const r = 3.5 - prog * 2.5; const a = (1 - prog * 0.75) * 0.85; const hue = prog < 0.5 ? `rgba(255,${Math.floor(140 + prog * 80)},0,${a})` : `rgba(255,${Math.floor(220 - (prog-0.5)*160)},0,${a})`; C.fillStyle = hue; C.beginPath(); C.arc(dot.x, dot.y, Math.max(0.8, r), 0, Math.PI * 2); C.fill(); }

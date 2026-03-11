@@ -203,12 +203,10 @@ window.hasCeilingAbove = function (margin) {
     if (window.player.inBackground) return false;
     const p  = window.player;
     const bs = window.game.blockSize;
-    // Rectángulo de búsqueda: mismo ancho del jugador (ligeramente reducido), margin px encima
-    const cx = p.x + 2;
-    const cw = p.width - 4;
-    const cy = p.y - margin;
-    const ch = margin;
+    const cx = p.x + 2, cw = p.width - 4;
+    const cy = p.y - margin, ch = margin;
 
+    // Bloques colocados
     for (const b of window.blocks) {
         if (
             (b.type === 'door' && b.open) ||
@@ -219,6 +217,25 @@ window.hasCeilingAbove = function (margin) {
         ) continue;
         const bh = b.type === 'door' ? bs * 2 : bs;
         if (window.checkRectIntersection(cx, cy, cw, ch, b.x, b.y, bs, bh)) return true;
+    }
+
+    // Bloques UG (techo de cueva)
+    if (window.getUGCellV && window.getTerrainCol) {
+        const colL = Math.floor((p.x + 2) / bs);
+        const colR = Math.floor((p.x + p.width - 3) / bs);
+        for (let vc = colL; vc <= colR; vc++) {
+            const cd = window.getTerrainCol(vc);
+            if (!cd || cd.type === 'hole') continue;
+            // Fila del techo: la celda justo encima de la cabeza del jugador
+            const rowHead = Math.floor((cy - cd.topY) / bs);
+            const rowCheck = Math.max(0, rowHead);
+            for (let vr = rowCheck; vr <= rowCheck + Math.ceil(ch / bs) + 1; vr++) {
+                const mat = window.getUGCellV(vc, vr);
+                if (!mat || mat === 'air') continue;
+                const cellY = cd.topY + vr * bs;
+                if (window.checkRectIntersection(cx, cy, cw, ch, vc * bs, cellY, bs, bs)) return true;
+            }
+        }
     }
     return false;
 };
