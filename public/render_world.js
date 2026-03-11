@@ -1831,31 +1831,17 @@ window.draw = function() {
         window.ctx.globalAlpha = 1;
     }
 
-    // Polvo al correr
+    // Polvo al correr — siempre medium (gradientes de polvo son caros y poco visibles)
     if (window.dustParticles && window.dustParticles.length > 0) {
         const C = window.ctx; C.save();
-        if (Q === 'high') {
-            // Alta calidad: gradiente radial nebuloso
-            window.dustParticles.forEach(d => {
-                const alpha = d.life * d.alpha; if (alpha <= 0) return;
-                const grad = C.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r);
-                const g = d.gray;
-                grad.addColorStop(0,   `rgba(${g},${g},${g},${alpha})`);
-                grad.addColorStop(0.5, `rgba(${g},${g},${g},${alpha * 0.5})`);
-                grad.addColorStop(1,   `rgba(${g},${g},${g},0)`);
-                C.fillStyle = grad; C.beginPath(); C.arc(d.x, d.y, d.r, 0, Math.PI * 2); C.fill();
-            });
-        } else {
-            // Calidad media/baja: elipse sólida semitransparente (5× más rápido)
-            window.dustParticles.forEach(d => {
-                const alpha = d.life * d.alpha * 0.55; if (alpha <= 0.02) return;
-                const g = d.gray;
-                C.globalAlpha = alpha;
-                C.fillStyle = `rgb(${g},${g},${g})`;
-                C.beginPath(); C.ellipse(d.x, d.y, d.r * 0.8, d.r * 0.5, 0, 0, Math.PI * 2); C.fill();
-            });
-            C.globalAlpha = 1;
-        }
+        window.dustParticles.forEach(d => {
+            const alpha = d.life * d.alpha * 0.55; if (alpha <= 0.02) return;
+            const g = d.gray;
+            C.globalAlpha = alpha;
+            C.fillStyle = `rgb(${g},${g},${g})`;
+            C.beginPath(); C.ellipse(d.x, d.y, d.r * 0.8, d.r * 0.5, 0, 0, Math.PI * 2); C.fill();
+        });
+        C.globalAlpha = 1;
         C.restore();
     }
 
@@ -1930,9 +1916,9 @@ window.draw = function() {
     }
 
     // === LUZ DINÁMICA ===
-    // Throttle: cada 6 frames en superficie, cada 4 bajo tierra
+    // Sin plantas: throttle aumentado. En superficie casi no hay luces, en cueva cada 6 frames.
     const _lcFrame = window.game.frameCount || 0;
-    const _lcThrottle = _onSurface ? 6 : 4;
+    const _lcThrottle = _onSurface ? 10 : 6;
     const _skipLight = (_lcFrame % _lcThrottle !== 0) && window._lightCanvasDirty === false;
 
     if (window.lightCtx && !_skipLight) {
@@ -1971,16 +1957,15 @@ window.draw = function() {
             window.lightCtx.fillRect(0, 0, _lW, _lH);
             window.lightCtx.globalCompositeOperation = 'destination-out';
 
-            // ── 1. Luces estáticas (antorchas, hogueras, plantas, gólems) ──────
-            // Se reconstruyen en coordenadas de PANTALLA solo cuando el jugador
-            // se mueve >4 bloques O cada 120 frames (plantas no se mueven).
+            // ── 1. Luces estáticas (antorchas, hogueras, gólems) ──────
+            // Sin plantas: solo antorchas/hogueras (estáticas). Rebuild cada 8 bloques de drift.
             const _bs = window.game.blockSize;
             const _slMoveX = Math.abs((window._slCamX||0) - _iCamX);
             const _slMoveY = Math.abs((window._slCamY||0) - _iCamY);
             const _slNeedRebuild = !window._staticLightCanvas
-                || _slMoveX > _bs * 4 || _slMoveY > _bs * 4
+                || _slMoveX > _bs * 8 || _slMoveY > _bs * 8
                 || (window._slDirty)
-                || (_lcFrame % 120 === 0);
+                || (_lcFrame % 300 === 0);
             window._slDirty = false;
 
             if (_slNeedRebuild) {
@@ -2037,17 +2022,8 @@ window.draw = function() {
                         }
                     }
 
-                    // Plantas de cueva — solo las visibles en pantalla + buffer de 200px
-                    const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
-                    for (const _cp of (window.cavePlants||[])) {
-                        const [plx2,ply2]=_wts(_cp.x, _cp.y+_bs-8);
-                        if (plx2 < -200 || plx2 > _lW+200 || ply2 < -200 || ply2 > _lH+200) continue;
-                        const pR2=(_cp.type==='shroom'?45:30)*_lz;
-                        const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
-                        const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
-                        pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`); pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
-                        _slc.fillStyle=pg3; _slc.beginPath(); _slc.arc(plx2,ply2,pR2,0,Math.PI*2); _slc.fill();
-                    }
+                    // Plantas de cueva: sin luz propia (se veía con delay por drift de cámara)
+                    // El efecto visual de las plantas viene del canvas de plantas offscreen.
                 }
             }
 

@@ -1267,8 +1267,15 @@ function update() {
                 window.player._accelRamp = 0;
                 window.player.animTime   = 0;
             } else {
-                window.player._accelRamp = isPressingMove ? Math.min(1.0, (window.player._accelRamp||0) + 0.09) : Math.max(0.0, (window.player._accelRamp||0) - 0.18);
-                const accel = (window.player.isGrounded ? 0.6 : 0.4) * window.player._accelRamp, fric = window.player.isGrounded ? 0.78 : 0.95;
+                // _accelRamp: 0→1 en ~4 ticks (era 11). Permite arranque rápido y sensación responsiva.
+                window.player._accelRamp = isPressingMove
+                    ? Math.min(1.0, (window.player._accelRamp||0) + 0.28)
+                    : Math.max(0.0, (window.player._accelRamp||0) - 0.35);
+                // En el aire: control total desde el primer frame (sin ramp artificial)
+                const _ramp = window.player.isGrounded ? window.player._accelRamp : 1.0;
+                const accel = (window.player.isGrounded ? 0.72 : 0.38) * _ramp;
+                // Fricción: en suelo más firme (0.82 era 0.78=muy pesado), en aire más libre
+                const fric = window.player.isGrounded ? 0.82 : 0.92;
                 if (window.keys?.a) window.player.vx -= accel;
                 if (window.keys?.d) window.player.vx += accel;
                 window.player.vx *= fric;
@@ -2024,9 +2031,15 @@ function update() {
 function updateCamera(dt) {
     if (!window.game?.isRunning || !window.player || !window.camera) return;
     const _W = window._canvasLogicW || 1280, _H = window._canvasLogicH || 720;
-    const _lerpY = 1 - Math.pow(1 - 0.08, dt / (1000/60)); // framerate-independent lerp
+    const _lerpY = 1 - Math.pow(1 - 0.08, dt / (1000/60));
     window.game.zoom += (window.game.zoomTarget - window.game.zoom) * Math.min(1, 0.12 * dt / (1000/60));
-    window.camera.x = window.player.x + window.player.width/2 - _W/2;
+
+    // Predecir posición X del jugador para el próximo render usando vx actual
+    // Esto elimina el lag perceptible de input a 60UPS cuando se renderiza a 165fps
+    const _alpha = window._renderAlpha ?? 0;
+    const _predX = window.player.x + window.player.vx * _alpha;
+    window.camera.x = _predX + window.player.width/2 - _W/2;
+
     if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.72;
     window.camera._targetY += (window.player.y + window.player.height - _H*0.72 - window.camera._targetY) * _lerpY;
     window.camera.y = window.camera._targetY;
