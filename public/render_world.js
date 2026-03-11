@@ -469,7 +469,7 @@ window.draw = function() {
             const _snapOffY = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
             // Stamp throttleado: actualiza cada 30 frames para no rebuildar el cache
             // en cada step de exploración (cada 6 frames). El fog se nota en <0.5s.
-            if (_lcFrame % 30 === 0 && _fogEnabled) window._tCacheExploreSt = window._caveExplored.size;
+            if ((window.game.frameCount||0) % 30 === 0 && _fogEnabled) window._tCacheExploreSt = window._caveExplored.size;
             const _expCount = window._tCacheExploreSt || 0;
             const _mStamp   = window._mineStamp || 0;
             const _outH = startCol < (window._tCacheBufStart||0) + 3
