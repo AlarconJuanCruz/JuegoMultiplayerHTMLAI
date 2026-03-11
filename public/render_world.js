@@ -203,12 +203,9 @@ window.draw = function() {
     const z = window.game.zoom || 1;
     // ── Interpolación de cámara para suavidad en 120/144Hz ──────────────
     const _ra = window._renderAlpha ?? 1;
-    const _iCamX = window._prevCamX !== undefined
-        ? window._prevCamX + (window.camera.x - window._prevCamX) * _ra
-        : window.camera.x;
-    const _iCamY = window._prevCamY !== undefined
-        ? window._prevCamY + (window.camera.y - window._prevCamY) * _ra
-        : window.camera.y;
+    // Cámara se actualiza cada frame de render — usar posición directa (ya es fluida)
+    const _iCamX = window.camera.x;
+    const _iCamY = window.camera.y;
 
     window.ctx.save();
     window.ctx.translate(W / 2, H / 2); window.ctx.scale(z, z); window.ctx.translate(-W / 2, -H / 2); window.ctx.translate(-_iCamX, -_iCamY);
@@ -1003,9 +1000,19 @@ window.draw = function() {
     });
 
     if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
-    // Jugador: NO interpolar posición — el personaje del jugador siempre en posición física
-    // exacta para evitar lag perceptible en input. Solo la cámara se interpola.
-    if (!window.player.inBackground) window.drawCharacter(window.player, true);
+
+    // Jugador: interpolar posición visual para suavizar a alta tasa de frames
+    if (!window.player.inBackground) {
+        const _ra2 = window._renderAlpha ?? 1;
+        const _pRealX = window.player.x, _pRealY = window.player.y;
+        if (window.player._prevX !== undefined && _ra2 < 0.9999) {
+            window.player.x = window.player._prevX + (_pRealX - window.player._prevX) * _ra2;
+            window.player.y = window.player._prevY + (_pRealY - window.player._prevY) * _ra2;
+        }
+        window.drawCharacter(window.player, true);
+        window.player.x = _pRealX;
+        window.player.y = _pRealY;
+    }
 
     // === ENTIDADES (chicken, spider, zombie, archer, wolf) ===
     window.entities.forEach(ent => {

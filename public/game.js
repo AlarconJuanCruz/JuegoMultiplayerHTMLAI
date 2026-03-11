@@ -2005,18 +2005,20 @@ function update() {
         if (typeof window.updateEntityHUD === 'function') window.updateEntityHUD();
 
     } catch (err) { console.error('Motor de juego protegido:', err); }
+}
 
-    // ── Cámara — FUERA del try/catch para que siempre se actualice ──────────
-    if (window.game?.isRunning && window.player && window.camera) {
-        const _W = window._canvasLogicW || 1280, _H = window._canvasLogicH || 720;
-        window.game.zoom += (window.game.zoomTarget - window.game.zoom) * 0.12;
-        window.camera.x = window.player.x + window.player.width/2 - _W/2;
-        if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.62;
-        window.camera._targetY += (window.player.y + window.player.height - _H*0.62 - window.camera._targetY) * 0.08;
-        window.camera.y = window.camera._targetY;
-        if (window.camera.x < (window.game.shoreX||0) - _W/2) window.camera.x = (window.game.shoreX||0) - _W/2;
-        if (window.player.x + _W/2 > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
-    }
+// Cámara separada — se llama cada frame de render para máxima fluidez
+function updateCamera(dt) {
+    if (!window.game?.isRunning || !window.player || !window.camera) return;
+    const _W = window._canvasLogicW || 1280, _H = window._canvasLogicH || 720;
+    const _lerpY = 1 - Math.pow(1 - 0.08, dt / (1000/60)); // framerate-independent lerp
+    window.game.zoom += (window.game.zoomTarget - window.game.zoom) * Math.min(1, 0.12 * dt / (1000/60));
+    window.camera.x = window.player.x + window.player.width/2 - _W/2;
+    if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.62;
+    window.camera._targetY += (window.player.y + window.player.height - _H*0.62 - window.camera._targetY) * _lerpY;
+    window.camera.y = window.camera._targetY;
+    if (window.camera.x < (window.game.shoreX||0) - _W/2) window.camera.x = (window.game.shoreX||0) - _W/2;
+    if (window.player.x + _W/2 > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
 }
 
 window.gameLoop = function(timestamp) {
@@ -2044,10 +2046,6 @@ window.gameLoop = function(timestamp) {
                 window.player._prevX = window.player.x;
                 window.player._prevY = window.player.y;
             }
-            if (window.camera) {
-                window._prevCamX = window.camera.x;
-                window._prevCamY = window.camera.y;
-            }
             // Solo guardar prev para entidades visibles (dentro del viewport ±2 bloques)
             if (window.entities?.length > 0) {
                 const _camW = window._canvasLogicW || 1280;
@@ -2070,6 +2068,9 @@ window.gameLoop = function(timestamp) {
 
     // Fracción de interpolación: cuánto del siguiente step ya transcurrió
     window._renderAlpha = Math.min(1, window._gameAccum / FIXED_DT);
+
+    // Cámara se actualiza cada frame de render (no en el fixed-step) para máxima fluidez
+    updateCamera(elapsed);
 
     // UPS real (actualizaciones de lógica por segundo)
     const _upsDelta = timestamp - window._upsLastTime;
