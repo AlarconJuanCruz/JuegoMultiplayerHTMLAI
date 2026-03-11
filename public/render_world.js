@@ -1924,19 +1924,30 @@ window.draw = function() {
     if (window._prevOnSurface === undefined) window._prevOnSurface = _onSurface;
     if (window._prevOnSurface !== _onSurface) {
         window._lightCanvasDirty = true;
+        window._slDirty = true; // también fuerza rebuild de luces estáticas
         window._prevOnSurface = _onSurface;
     }
-    // Throttle: cada 4 frames. En frames intermedios se reutiliza resultado anterior.
+
+    // === LUZ DINÁMICA ===
+    // Throttle: cada 6 frames en superficie, cada 4 bajo tierra
     const _lcFrame = window.game.frameCount || 0;
-    const _skipLight = (_lcFrame % 4 !== 0) && window._lightCanvasDirty === false;
+    const _lcThrottle = _onSurface ? 6 : 4;
+    const _skipLight = (_lcFrame % _lcThrottle !== 0) && window._lightCanvasDirty === false;
+
     if (window.lightCtx && !_skipLight) {
         window._lightCanvasDirty = false;
-        const _lz = window.game.zoom || 1; const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
-        function _wts(wx, wy) { return [(wx - _iCamX - _lW/2)*_lz + _lW/2, (wy - _iCamY - _lH/2)*_lz + _lH/2]; }
+        const _lz = window.game.zoom || 1;
+        const _lW = window._canvasLogicW, _lH = window._canvasLogicH;
 
-        // ── Oscuridad ambiental ────────────────────────────────────────────────
+        // _wts: world→screen usando la cámara actual
+        function _wts(wx, wy) {
+            return [(wx - _iCamX - _lW/2)*_lz + _lW/2,
+                    (wy - _iCamY - _lH/2)*_lz + _lH/2];
+        }
+
+        // ── Oscuridad ambiental ────────────────────────────────────────────
         let targetDarkness = darkness * 0.65;
-        if (window.getGroundY && window.getTerrainCol && window.player) {
+        if (window.getTerrainCol && window.player) {
             const _bs    = window.game.blockSize;
             const _pCol  = Math.floor((window.player.x + window.player.width/2) / _bs);
             const _pCD   = window.getTerrainCol(_pCol);
@@ -1951,144 +1962,150 @@ window.draw = function() {
         window._ugDarknessSmooth += (targetDarkness - window._ugDarknessSmooth) * 0.06;
         const ambientDarkness = window._ugDarknessSmooth;
 
-        // Si la oscuridad es casi nula (pleno día en superficie), skip todo el lightCanvas
         if (ambientDarkness < 0.05) {
-            // no-op, canvas ya tiene la imagen anterior que es casi transparente
+            // pleno día — no hacer nada, canvas anterior es casi transparente
         } else {
             window.lightCtx.clearRect(0, 0, _lW, _lH);
-            window.lightCtx.fillStyle = `rgba(5, 5, 10, ${ambientDarkness})`;
+            window.lightCtx.fillStyle = `rgba(5,5,10,${ambientDarkness})`;
             window.lightCtx.fillRect(0, 0, _lW, _lH);
             window.lightCtx.globalCompositeOperation = 'destination-out';
 
-            const _fc = window.game.frameCount || 0;
-            const _tf = 0.9 + Math.sin(_fc * 0.21) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04;
+            // ── 1. Luces estáticas (antorchas, hogueras, plantas, gólems) ──────
+            // Se reconstruyen en coordenadas de PANTALLA solo cuando el jugador
+            // se mueve >4 bloques O cada 120 frames (plantas no se mueven).
+            const _bs = window.game.blockSize;
+            const _slMoveX = Math.abs((window._slCamX||0) - _iCamX);
+            const _slMoveY = Math.abs((window._slCamY||0) - _iCamY);
+            const _slNeedRebuild = !window._staticLightCanvas
+                || _slMoveX > _bs * 4 || _slMoveY > _bs * 4
+                || (window._slDirty)
+                || (_lcFrame % 120 === 0);
+            window._slDirty = false;
 
-            if (!window.player.isDead) {
-                let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
-                const hasTorch = (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit;
-                if (hasTorch) {
-                    let pGlowSize = 260 * _tf * _lz;
-                    let pGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, pGlowSize);
-                    pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
-                    window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, pGlowSize, 0, Math.PI*2); window.lightCtx.fill();
-                } else if (!_onSurface) {
-                    // Glow de emergencia: radio amplio para que el jugador siempre sea visible sin antorcha
-                    const bodyGlowR = 110 * _lz;
-                    let bGrad = window.lightCtx.createRadialGradient(px, py, 0, px, py, bodyGlowR);
-                    bGrad.addColorStop(0,   'rgba(200, 220, 255, 0.85)');
-                    bGrad.addColorStop(0.35,'rgba(170, 200, 240, 0.55)');
-                    bGrad.addColorStop(0.65,'rgba(140, 170, 220, 0.20)');
-                    bGrad.addColorStop(1,   'rgba(120, 150, 200, 0)');
-                    window.lightCtx.fillStyle = bGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px, py, bodyGlowR, 0, Math.PI*2); window.lightCtx.fill();
-                }
-            }
-            if (window.game.isMultiplayer) {
-                Object.values(window.otherPlayers).forEach(p => {
-                    if (p.id !== window.socket?.id && !p.isDead && (p.activeTool === 'torch' || p.activeTool === 'torch_item') && p.torchLit) {
-                        const _tf2 = 0.9 + Math.sin(_fc * 0.19 + (p.x||0)*0.001) * 0.1;
-                        let pGlowSize2 = 260 * _tf2 * _lz;
-                        let [cx, cy] = _wts(p.x + (p.width||20)/2, p.y + (p.height||56)/2);
-                        let pGrad = window.lightCtx.createRadialGradient(cx, cy, 0, cx, cy, pGlowSize2);
-                        pGrad.addColorStop(0, 'rgba(255, 180, 50, 0.9)'); pGrad.addColorStop(0.4, 'rgba(255, 150, 30, 0.6)'); pGrad.addColorStop(1, 'rgba(255, 120, 0, 0)');
-                        window.lightCtx.fillStyle = pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(cx, cy, pGlowSize2, 0, Math.PI*2); window.lightCtx.fill();
-                    }
-                });
-            }
-
-            // ── Luces estáticas cacheadas ──────────────────────────────────────
-            const _slThresh = bs * 3;  // era bs: reconstruía en cada paso, ahora cada 3 bloques
-            const _camMX = Math.abs((window._slCamX||0) - _iCamX);
-            const _camMY = Math.abs((window._slCamY||0) - _iCamY);
-            const _slDirty = !window._staticLightCanvas || _camMX > _slThresh || _camMY > _slThresh || (_lcFrame % 180 === 0);
-            if (_slDirty) {
+            if (_slNeedRebuild) {
                 window._slCamX = _iCamX; window._slCamY = _iCamY;
                 if (!window._staticLightCanvas) {
                     window._staticLightCanvas = document.createElement('canvas');
-                    window._staticLightCanvas.width = _lW; window._staticLightCanvas.height = _lH;
+                    window._staticLightCanvas.width = _lW;
+                    window._staticLightCanvas.height = _lH;
                     window._staticLightCtx = window._staticLightCanvas.getContext('2d');
                 }
                 const _slc = window._staticLightCtx;
                 _slc.clearRect(0, 0, _lW, _lH);
+
+                // Bloques con luz (antorchas, hogueras)
                 for (const b of window.blocks) {
+                    const [bsx, bsy] = _wts(b.x + _bs*0.5, b.y + _bs*0.5);
+                    if (bsx < -300 || bsx > _lW+300 || bsy < -300 || bsy > _lH+300) continue;
                     if (b.type === 'campfire' && b.isBurning) {
-                        const [bx,by]=_wts(b.x+15,b.y+15); const glow=260*_lz;
-                        const cg=_slc.createRadialGradient(bx,by,0,bx,by,glow);
-                        cg.addColorStop(0,'rgba(255,200,100,0.9)');cg.addColorStop(0.4,'rgba(255,160,50,0.6)');cg.addColorStop(1,'rgba(255,130,0,0)');
-                        _slc.fillStyle=cg;_slc.beginPath();_slc.arc(bx,by,glow,0,Math.PI*2);_slc.fill();
+                        const glow = 260*_lz;
+                        const cg = _slc.createRadialGradient(bsx,bsy,0,bsx,bsy,glow);
+                        cg.addColorStop(0,'rgba(255,200,100,0.9)'); cg.addColorStop(0.4,'rgba(255,160,50,0.6)'); cg.addColorStop(1,'rgba(255,130,0,0)');
+                        _slc.fillStyle=cg; _slc.beginPath(); _slc.arc(bsx,bsy,glow,0,Math.PI*2); _slc.fill();
                     } else if (b.type === 'placed_torch') {
-                        const [tx,ty]=_wts(b.x+(window.game.blockSize||30)*0.5,b.y+(window.game.blockSize||30)*0.3); const tg2=165*_lz;
-                        const tg=_slc.createRadialGradient(tx,ty,0,tx,ty,tg2);
-                        tg.addColorStop(0,'rgba(255,200,80,0.85)');tg.addColorStop(0.4,'rgba(255,150,20,0.55)');tg.addColorStop(1,'rgba(255,100,0,0)');
-                        _slc.fillStyle=tg;_slc.beginPath();_slc.arc(tx,ty,tg2,0,Math.PI*2);_slc.fill();
+                        const tg2 = 165*_lz;
+                        const tg = _slc.createRadialGradient(bsx,bsy,0,bsx,bsy,tg2);
+                        tg.addColorStop(0,'rgba(255,200,80,0.85)'); tg.addColorStop(0.4,'rgba(255,150,20,0.55)'); tg.addColorStop(1,'rgba(255,100,0,0)');
+                        _slc.fillStyle=tg; _slc.beginPath(); _slc.arc(bsx,bsy,tg2,0,Math.PI*2); _slc.fill();
                     }
                 }
-                const _sCol=[[40,180,80],[40,80,220],[140,40,220]];
-                const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
-                // Solo entidades cercanas al jugador para el light
-                const _lLim = _lW * 0.7;
-                for (const _e2 of (window.entities||[])) {
-                    if (!_e2.inCave) continue;
-                    const [_ex,_ey]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
-                    if (_ex < -_lLim || _ex > _lW+_lLim || _ey < -_lLim || _ey > _lH+_lLim) continue;
-                    if (_e2.type==='slime') {
-                        const [sx,sy]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
-                        const sc2=_sCol[(_e2.slimeColor||0)%3];
-                        const sg2=_slc.createRadialGradient(sx,sy,0,sx,sy,35*_lz);
-                        sg2.addColorStop(0,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0.45)`);sg2.addColorStop(1,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0)`);
-                        _slc.fillStyle=sg2;_slc.beginPath();_slc.arc(sx,sy,35*_lz,0,Math.PI*2);_slc.fill();
-                    } else if (_e2.type==='golem') {
-                        const [gx2,gy2]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.25); const gR2=90*_lz;
-                        const gg2=_slc.createRadialGradient(gx2,gy2,0,gx2,gy2,gR2);
-                        gg2.addColorStop(0,'rgba(80,200,255,0.55)');gg2.addColorStop(0.4,'rgba(40,140,255,0.20)');gg2.addColorStop(1,'rgba(0,100,255,0)');
-                        _slc.fillStyle=gg2;_slc.beginPath();_slc.arc(gx2,gy2,gR2,0,Math.PI*2);_slc.fill();
-                    } else if (_e2.type==='brood_mother'&&_e2.bossPhase===3) {
-                        const [bm2x,bm2y]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.5); const br2=70*_lz;
-                        const bg2=_slc.createRadialGradient(bm2x,bm2y,0,bm2x,bm2y,br2);
-                        bg2.addColorStop(0,'rgba(255,30,0,0.25)');bg2.addColorStop(1,'rgba(255,0,0,0)');
-                        _slc.fillStyle=bg2;_slc.beginPath();_slc.arc(bm2x,bm2y,br2,0,Math.PI*2);_slc.fill();
+
+                // Entidades luminosas en cueva (gólems, slimes, brood mother)
+                if (!_onSurface) {
+                    const _sCol=[[40,180,80],[40,80,220],[140,40,220]];
+                    for (const _e2 of (window.entities||[])) {
+                        if (!_e2.inCave) continue;
+                        const [_ex,_ey]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height/2);
+                        if (_ex < -300 || _ex > _lW+300) continue;
+                        if (_e2.type==='slime') {
+                            const sc2=_sCol[(_e2.slimeColor||0)%3];
+                            const sg2=_slc.createRadialGradient(_ex,_ey,0,_ex,_ey,35*_lz);
+                            sg2.addColorStop(0,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0.45)`); sg2.addColorStop(1,`rgba(${sc2[0]},${sc2[1]},${sc2[2]},0)`);
+                            _slc.fillStyle=sg2; _slc.beginPath(); _slc.arc(_ex,_ey,35*_lz,0,Math.PI*2); _slc.fill();
+                        } else if (_e2.type==='golem') {
+                            const [gx2,gy2]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.25);
+                            const gR2=90*_lz;
+                            const gg2=_slc.createRadialGradient(gx2,gy2,0,gx2,gy2,gR2);
+                            gg2.addColorStop(0,'rgba(80,200,255,0.55)'); gg2.addColorStop(0.4,'rgba(40,140,255,0.20)'); gg2.addColorStop(1,'rgba(0,100,255,0)');
+                            _slc.fillStyle=gg2; _slc.beginPath(); _slc.arc(gx2,gy2,gR2,0,Math.PI*2); _slc.fill();
+                        } else if (_e2.type==='brood_mother' && _e2.bossPhase===3) {
+                            const [bm2x,bm2y]=_wts(_e2.x+_e2.width/2,_e2.y+_e2.height*0.5);
+                            const bg2=_slc.createRadialGradient(bm2x,bm2y,0,bm2x,bm2y,70*_lz);
+                            bg2.addColorStop(0,'rgba(255,30,0,0.25)'); bg2.addColorStop(1,'rgba(255,0,0,0)');
+                            _slc.fillStyle=bg2; _slc.beginPath(); _slc.arc(bm2x,bm2y,70*_lz,0,Math.PI*2); _slc.fill();
+                        }
                     }
-                }
-                // Plants: solo las cercanas (evitar iterar cientos de plantas)
-                const _pCX3 = window.player.x + window.player.width/2;
-                const _pCY3 = window.player.y + window.player.height/2;
-                const _plantRad = 800;
-                for (const _cp of (window.cavePlants||[])) {
-                    if (Math.abs(_cp.x - _pCX3) > _plantRad || Math.abs(_cp.y - _pCY3) > _plantRad) continue;
-                    if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
-                    const [plx2,ply2]=_wts(_cp.x,_cp.y+(window.game.blockSize||30)-8);
-                    const pR2=(_cp.type==='shroom'?45:30)*_lz;
-                    const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
-                    const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
-                    pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`);pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
-                    _slc.fillStyle=pg3;_slc.beginPath();_slc.arc(plx2,ply2,pR2,0,Math.PI*2);_slc.fill();
+
+                    // Plantas de cueva — solo las visibles en pantalla + buffer de 200px
+                    const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
+                    for (const _cp of (window.cavePlants||[])) {
+                        if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
+                        const [plx2,ply2]=_wts(_cp.x, _cp.y+_bs-8);
+                        if (plx2 < -200 || plx2 > _lW+200 || ply2 < -200 || ply2 > _lH+200) continue;
+                        const pR2=(_cp.type==='shroom'?45:30)*_lz;
+                        const [pr2,pg2,pb2]=_pCol2[(_cp.variant||0)%3];
+                        const pg3=_slc.createRadialGradient(plx2,ply2,0,plx2,ply2,pR2);
+                        pg3.addColorStop(0,`rgba(${pr2},${pg2},${pb2},0.55)`); pg3.addColorStop(1,`rgba(${pr2},${pg2},${pb2},0)`);
+                        _slc.fillStyle=pg3; _slc.beginPath(); _slc.arc(plx2,ply2,pR2,0,Math.PI*2); _slc.fill();
+                    }
                 }
             }
-            window.lightCtx.drawImage(window._staticLightCanvas, 0, 0);
 
-            // ── Rayos de luz (solo subterráneo, throttle cada 6 frames) ──
-            if (!_onSurface && ambientDarkness > 0.1 && (_lcFrame % 6 === 0)) {
-                const _bs2 = window.game.blockSize;
-                const _shaftAlpha = Math.min(0.55, ambientDarkness * 0.75) * (1 - darkness);
+            // Compensar desplazamiento de cámara desde el último rebuild del canvas estático
+            const _driftX = (_iCamX - (window._slCamX||_iCamX)) * _lz;
+            const _driftY = (_iCamY - (window._slCamY||_iCamY)) * _lz;
+            window.lightCtx.drawImage(window._staticLightCanvas, -_driftX, -_driftY);
+
+            // ── 2. Glow del jugador (se recalcula cada rebuild del lightCanvas) ─
+            if (!window.player.isDead) {
+                const _fc = window.game.frameCount || 0;
+                const _tf = 0.9 + Math.sin(_fc * 0.21) * 0.06 + Math.sin(_fc * 0.13 + 1.4) * 0.04;
+                let [px, py] = _wts(window.player.x + window.player.width/2, window.player.y + window.player.height/2);
+                const hasTorch = (window.player.activeTool === 'torch' || window.player.activeTool === 'torch_item') && window.player.torchLit;
+                if (hasTorch) {
+                    const pGlowSize = 260 * _tf * _lz;
+                    const pGrad = window.lightCtx.createRadialGradient(px,py,0,px,py,pGlowSize);
+                    pGrad.addColorStop(0,'rgba(255,180,50,0.9)'); pGrad.addColorStop(0.4,'rgba(255,150,30,0.6)'); pGrad.addColorStop(1,'rgba(255,120,0,0)');
+                    window.lightCtx.fillStyle=pGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px,py,pGlowSize,0,Math.PI*2); window.lightCtx.fill();
+                } else if (!_onSurface) {
+                    const bodyGlowR = 110 * _lz;
+                    const bGrad = window.lightCtx.createRadialGradient(px,py,0,px,py,bodyGlowR);
+                    bGrad.addColorStop(0,'rgba(200,220,255,0.85)'); bGrad.addColorStop(0.35,'rgba(170,200,240,0.55)');
+                    bGrad.addColorStop(0.65,'rgba(140,170,220,0.20)'); bGrad.addColorStop(1,'rgba(120,150,200,0)');
+                    window.lightCtx.fillStyle=bGrad; window.lightCtx.beginPath(); window.lightCtx.arc(px,py,bodyGlowR,0,Math.PI*2); window.lightCtx.fill();
+                }
+            }
+            if (window.game.isMultiplayer) {
+                Object.values(window.otherPlayers).forEach(p => {
+                    if (p.id === window.socket?.id || p.isDead) return;
+                    if ((p.activeTool === 'torch' || p.activeTool === 'torch_item') && p.torchLit) {
+                        const _fc2 = window.game.frameCount || 0;
+                        const gs2 = 260 * _lz;
+                        const [cx,cy] = _wts(p.x+(p.width||20)/2, p.y+(p.height||56)/2);
+                        const pg2 = window.lightCtx.createRadialGradient(cx,cy,0,cx,cy,gs2);
+                        pg2.addColorStop(0,'rgba(255,180,50,0.9)'); pg2.addColorStop(0.4,'rgba(255,150,30,0.6)'); pg2.addColorStop(1,'rgba(255,120,0,0)');
+                        window.lightCtx.fillStyle=pg2; window.lightCtx.beginPath(); window.lightCtx.arc(cx,cy,gs2,0,Math.PI*2); window.lightCtx.fill();
+                    }
+                });
+            }
+
+            // ── 3. Rayos de luz subterráneos (throttle cada 12 frames, sin gradientes) ─
+            if (!_onSurface && ambientDarkness > 0.15 && (_lcFrame % 12 === 0)) {
+                const _shaftAlpha = Math.min(0.35, ambientDarkness * 0.5) * (1 - darkness);
                 if (_shaftAlpha > 0.02 && window.getUGCellV && window.getTerrainCol) {
                     const _pCX2 = window.player.x + window.player.width / 2;
-                    // Reducido a 5 columnas a cada lado (era 8)
-                    for (let _sc = Math.floor((_pCX2 - _bs2*5)/_bs2); _sc <= Math.floor((_pCX2 + _bs2*5)/_bs2); _sc++) {
+                    for (let _sc = Math.floor((_pCX2 - _bs*4)/_bs); _sc <= Math.floor((_pCX2 + _bs*4)/_bs); _sc++) {
                         const _scd = window.getTerrainCol(_sc); if (!_scd||_scd.type==='hole') continue;
                         let _sd=0;
-                        // Max 15 filas de aire (era 30)
-                        for (let _sr=0;_sr<15;_sr++) {
-                            if (window.getUGCellV(_sc,_sr)!=='air') break;
-                            _sd=_sr+1;
-                        }
+                        for (let _sr=0;_sr<12;_sr++) { if (window.getUGCellV(_sc,_sr)!=='air') break; _sd=_sr+1; }
                         if (_sd<2) continue;
-                        const _shX=_sc*_bs2, _shTY=_scd.topY, _shBY=_scd.topY+_sd*_bs2;
-                        const [_slx,_sly]=_wts(_shX,_shTY); const [_slx2,_sly2]=_wts(_shX+_bs2,_shBY);
-                        const _df=Math.max(0,1-Math.abs(_sc*_bs2+_bs2/2-_pCX2)/(_bs2*5));
+                        const _df=Math.max(0,1-Math.abs(_sc*_bs+_bs/2-_pCX2)/(_bs*4));
                         if (_df<0.05) continue;
-                        const _sA=_shaftAlpha*_df;
-                        const _sG=window.lightCtx.createLinearGradient(_slx,_sly,_slx,_sly2);
-                        _sG.addColorStop(0,`rgba(220,230,255,${_sA})`);_sG.addColorStop(0.6,`rgba(180,200,255,${_sA*0.4})`);_sG.addColorStop(1,'rgba(150,180,255,0)');
-                        window.lightCtx.fillStyle=_sG; window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
+                        const [_slx,_sly]=_wts(_sc*_bs, _scd.topY);
+                        const [_slx2,_sly2]=_wts(_sc*_bs+_bs, _scd.topY+_sd*_bs);
+                        // Rect plano en vez de gradiente lineal
+                        window.lightCtx.fillStyle=`rgba(200,220,255,${(_shaftAlpha*_df*0.6).toFixed(3)})`;
+                        window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
                     }
                 }
             }

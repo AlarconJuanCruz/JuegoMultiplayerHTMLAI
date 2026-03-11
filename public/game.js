@@ -2014,8 +2014,8 @@ function updateCamera(dt) {
     const _lerpY = 1 - Math.pow(1 - 0.08, dt / (1000/60)); // framerate-independent lerp
     window.game.zoom += (window.game.zoomTarget - window.game.zoom) * Math.min(1, 0.12 * dt / (1000/60));
     window.camera.x = window.player.x + window.player.width/2 - _W/2;
-    if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.62;
-    window.camera._targetY += (window.player.y + window.player.height - _H*0.62 - window.camera._targetY) * _lerpY;
+    if (window.camera._targetY === undefined) window.camera._targetY = window.player.y + window.player.height - _H*0.72;
+    window.camera._targetY += (window.player.y + window.player.height - _H*0.72 - window.camera._targetY) * _lerpY;
     window.camera.y = window.camera._targetY;
     if (window.camera.x < (window.game.shoreX||0) - _W/2) window.camera.x = (window.game.shoreX||0) - _W/2;
     if (window.player.x + _W/2 > window.game.exploredRight) { window.generateWorldSector(window.game.exploredRight, window.game.exploredRight + window.game.chunkSize); window.game.exploredRight += window.game.chunkSize; }
