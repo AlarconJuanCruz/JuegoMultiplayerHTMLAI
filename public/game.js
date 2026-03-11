@@ -1129,8 +1129,8 @@ function update() {
 
         window.game.frameCount++;
         // Exploración: cada 20 frames en superficie, cada 12 bajo tierra
-        const _expInterval = (window.player.y > (window.game.baseGroundLevel||510)) ? 12 : 20;
-        if (window.game.frameCount % _expInterval === 0 && window.updateExploration) window.updateExploration();
+        // Exploración FOG desactivada temporalmente
+        // if (window.game.frameCount % _expInterval === 0 && window.updateExploration) window.updateExploration();
         // Actualizar mapa si está abierto
         if (window._mapOpen && window._mapDirty && window.renderMap) window.renderMap();
         if (window.game.screenShake > 0) window.game.screenShake--;

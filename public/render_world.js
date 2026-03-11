@@ -386,7 +386,7 @@ window.draw = function() {
         if (window.getUGCellV && window.getTerrainCol && (!_onSurface || window._hasSurfaceHoles)) {
             const C       = window.ctx;
             const bottomYu= _iCamY + H / z + bs * 4;
-            const _fogEnabled = !!window._caveExplored;
+            const _fogEnabled = false; // FOG DESACTIVADO
 
             const UG_COL = { dirt:'#5c3d22', stone:'#5a5a6a', coal:'#2a2a30', sulfur:'#7a6a10', diamond:'#1a6068', bedrock:'#1a1a1a' };
             const BG_DARK = '#141210', BG_VAR = '#181512';
@@ -459,22 +459,20 @@ window.draw = function() {
                 window._tCacheBufEnd   = bEndCol;
                 window._tCacheOffX     = _offX;
                 window._tCacheOffY     = bOffY;
-                window._tCacheExplore  = _fogEnabled ? window._caveExplored.size : 0;
                 window._tCacheMine     = window._mineStamp || 0;
             }
 
             const _snapOffY = Math.floor(_iCamY / (bs * SNAP_V)) * (bs * SNAP_V) - bs * CACHE_BUF_V;
             // Stamp throttleado: actualiza cada 30 frames para no rebuildar el cache
             // en cada step de exploración (cada 6 frames). El fog se nota en <0.5s.
-            if ((window.game.frameCount||0) % 30 === 0 && _fogEnabled) window._tCacheExploreSt = window._caveExplored.size;
-            const _expCount = window._tCacheExploreSt || 0;
+            if ((window.game.frameCount||0) % 30 === 0) window._tCacheExploreSt = 0;
+            const _expCount = 0; // fog desactivado
             const _mStamp   = window._mineStamp || 0;
             const _outH = startCol < (window._tCacheBufStart||0) + 3
                        || endCol   > (window._tCacheBufEnd||0)   - 3;
             const _needRebuild = !window._terrainCache || _outH
-                || window._tCacheOffY    !== _snapOffY
-                || window._tCacheExplore !== _expCount
-                || window._tCacheMine    !== _mStamp;
+                || window._tCacheOffY  !== _snapOffY
+                || window._tCacheMine  !== _mStamp;
 
             if (_needRebuild) {
                 _buildTerrainCache(startCol - CACHE_BUF_H, endCol + CACHE_BUF_H, _snapOffY);
@@ -559,7 +557,7 @@ window.draw = function() {
         // LUT de 16 valores: cero Math.sin por cristal por frame.
         if (window.caveCrystals?.length > 0 && !_onSurface) {
             if (!window._cryLUT) { window._cryLUT = new Float32Array(16); for (let i=0;i<16;i++) window._cryLUT[i]=Math.sin(i/16*Math.PI*2); }
-            const C=window.ctx, _cFrame=window.game.frameCount, _fogEnabledC=!!window._caveExplored, _lut=window._cryLUT;
+            const C=window.ctx, _cFrame=window.game.frameCount, _fogEnabledC=false, _lut=window._cryLUT;
             const _palS=['rgba(200,235,255,0.75)','rgba(60,160,255,0.80)','rgba(180,80,255,0.85)'];
             const _palM=['rgba(180,220,255,0.60)','rgba(40,140,230,0.70)','rgba(160,60,240,0.75)'];
             const _cf2 = _cFrame >> 1; // actualiza a 30fps visualmente — suficiente para cristales
@@ -729,7 +727,7 @@ window.draw = function() {
                 for (const _cp of window.cavePlants) {
                     if (_cp.x + bs < _pcOffX || _cp.x > _pcOffX + _pcW) continue;
                     if (_onSurface && _cp.y > _surfCutY) continue;
-                    if (window._caveExplored && !window._caveExplored.has(`${_cp.col}_${_cp.row}`)) continue;
+                    if (window._onSurface && _cp.y > _surfCutY) continue;
                     const cx = _cp.x - _pcOffX, cy = _cp.y - _pcOffY;
                     if (cy + bs < 0 || cy > _pcH) continue;
                     const _brightness = 0.65 + _cp.seed * 0.35;
@@ -2039,7 +2037,6 @@ window.draw = function() {
                     // Plantas de cueva — solo las visibles en pantalla + buffer de 200px
                     const _pCol2=[[40,80,255],[40,220,80],[170,40,240]];
                     for (const _cp of (window.cavePlants||[])) {
-                        if (!window._caveExplored?.has(`${_cp.col}_${_cp.row}`)) continue;
                         const [plx2,ply2]=_wts(_cp.x, _cp.y+_bs-8);
                         if (plx2 < -200 || plx2 > _lW+200 || ply2 < -200 || ply2 > _lH+200) continue;
                         const pR2=(_cp.type==='shroom'?45:30)*_lz;
