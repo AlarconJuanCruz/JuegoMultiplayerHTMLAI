@@ -1808,12 +1808,20 @@ function update() {
                 continue;
             }
 
-            if (pr.y >= _prGY || pr.x < window.game.shoreX) {
+            // Determinar si la flecha está underground (bajo la superficie de terreno)
+            const _prCol  = Math.floor(pr.x / bs);
+            const _prCD   = window.getTerrainCol ? window.getTerrainCol(_prCol) : null;
+            const _prSurfY = (_prCD && _prCD.type !== 'hole') ? _prCD.topY : _prGY;
+            const _prUnderground = pr.y > _prSurfY + 4;
+
+            // Colisión con suelo de SUPERFICIE — solo si la flecha no está underground
+            if (!_prUnderground && (pr.y >= _prGY || pr.x < window.game.shoreX)) {
                 if (isMyArrow && !pr.isEnemy && Math.random() < 0.5) { const sa={id:Math.random().toString(36).substring(2,9),x:pr.x,y:_prGY,angle:pr.angle,life:18000}; window.stuckArrows.push(sa); window.sendWorldUpdate('spawn_stuck_arrow',sa); }
                 else if (isMyArrow && !pr.isEnemy && window.playSound) window.playSound('arrow_break');
                 window.spawnParticles(pr.x,pr.y,'#557A27',3); window.projectiles.splice(i,1); continue;
             }
 
+            // Colisión con bloques colocados
             let hitBlock = null;
             for (const b of window.blocks) {
                 const bh = b.type==='door'?bs*2:bs;
@@ -1825,6 +1833,19 @@ function update() {
                 if (isMyArrow && !pr.isEnemy && Math.random() < 0.5) { const sa={id:Math.random().toString(36).substring(2,9),x:pr.x,y:pr.y,angle:pr.angle,blockX:hitBlock.x,blockY:hitBlock.y,life:18000}; window.stuckArrows.push(sa); window.sendWorldUpdate('spawn_stuck_arrow',sa); if(window.playSound) window.playSound('arrow_stick'); }
                 else if (isMyArrow && !pr.isEnemy && window.playSound) window.playSound('arrow_break');
                 window.spawnParticles(pr.x,pr.y,'#C19A6B',5); window.projectiles.splice(i,1); continue;
+            }
+
+            // Colisión con celdas UG (cueva) — solo cuando underground
+            if (_prUnderground && window.getUGCellV && _prCD && _prCD.type !== 'hole') {
+                const _prRow = Math.floor((pr.y - _prCD.topY) / bs);
+                if (_prRow >= 0) {
+                    const _prMat = window.getUGCellV(_prCol, _prRow);
+                    if (_prMat && _prMat !== 'air') {
+                        if (isMyArrow && !pr.isEnemy && window.playSound) window.playSound('arrow_break');
+                        window.spawnParticles(pr.x, pr.y, '#8B7355', 4);
+                        window.projectiles.splice(i, 1); continue;
+                    }
+                }
             }
 
             if (pr.isEnemy) {

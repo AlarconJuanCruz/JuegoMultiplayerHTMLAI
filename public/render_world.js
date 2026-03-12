@@ -1718,20 +1718,12 @@ window.draw = function() {
                         if (simY >= gY) { hitX = simX; hitY = gY; break; }
                     }
                 } else {
-                    // ── SUPERFICIE: usar getGroundY + UG cells ────────────────
+                    // ── SUPERFICIE: usar getGroundY ────────────────────────────
+                    // NO checar celdas UG aquí: la fila 0 es piedra sólida pegada
+                    // a la superficie y bloquearía la guía sobre cualquier colina.
+                    // getGroundY ya cubre el techo de terreno correctamente.
                     const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
                     if (simY >= gY) { hitX = simX; hitY = gY; break; }
-                    if (window.getUGCellV && window.getTerrainCol) {
-                        const _sc = Math.floor(simX / bs);
-                        const _cd = window.getTerrainCol(_sc);
-                        if (_cd && _cd.type !== 'hole') {
-                            const _sr = Math.floor((simY - _cd.topY) / bs);
-                            if (_sr >= 0) {
-                                const _m = window.getUGCellV(_sc, _sr);
-                                if (_m && _m !== 'air') { blocked = true; }
-                            }
-                        }
-                    }
                 }
             }
 
