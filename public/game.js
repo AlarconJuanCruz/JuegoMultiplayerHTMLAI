@@ -609,7 +609,7 @@ window.tryHitBlock = function(pCX, pCY, dmg, meleeRange) {
         b.hp -= dmg; window.setHit(b); window.spawnParticles(window.mouseWorldX, window.mouseWorldY, '#ff4444', 5);
         if (window.playSound) window.playSound('hit_block');
         if (b.hp <= 0) window.destroyBlockLocally(b); else window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg });
-        window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+        window.player.meleeCooldown = Math.max(16, 38 - Math.floor((window.player.stats.agi||0) * 3));
         return true;
     }
     return false;
@@ -631,7 +631,7 @@ window.tryHitRock = function(pCX, pCY, dmg, meleeRange) {
             window.sendWorldUpdate('destroy_rock', { x: r.x }); window.spawnParticles(rCX, rFY-r.height+15, '#888', 20, 1.5);
             let ni = { id: Math.random().toString(36).substring(2,9), x:rCX, y:rFY-r.height+15, vx:(Math.random()-0.5)*3, vy:-1.5, type:'stone', amount:15+Math.floor(Math.random()*10), life:1.0 }; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item', {item:ni}); window.rocks.splice(i, 1); window.gainXP(25);
         } else window.sendWorldUpdate('hit_rock', { x: r.x, dmg });
-        window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+        window.player.meleeCooldown = Math.max(16, 38 - Math.floor((window.player.stats.agi||0) * 3));
         return true;
     }
     return false;
@@ -658,7 +658,7 @@ window.tryHitTree = function(pCX, pCY, dmg, meleeRange) {
                 let ni = { id: Math.random().toString(36).substring(2,9), x:tCX, y:tFootY-30, vx:(Math.random()-0.5)*3, vy:-1.5, type:'wood', amount:10, life:1.0 }; window.droppedItems.push(ni); window.sendWorldUpdate('drop_item',{item:ni}); t.isStump = true; t.hp = 50; t.maxHp = 50; window.sendWorldUpdate('stump_tree', { x: t.x, regrowthCount: t.regrowthCount, grownDay: t.grownDay }); window.gainXP(15);
             }
         } else window.sendWorldUpdate('hit_tree', { x: t.x, dmg });
-        window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+        window.player.meleeCooldown = Math.max(16, 38 - Math.floor((window.player.stats.agi||0) * 3));
         return true;
     }
     return false;
@@ -671,7 +671,7 @@ window.attemptAction = function() {
     if (window.player.activeTool === 'molotov' && window.player.isCharging) return;
     if ((window.player.meleeCooldown || 0) > 0) return;
 
-    window.player.attackFrame = 28;
+    window.player.attackFrame = 18;
     const pCX = window.player.x + window.player.width/2, pCY = window.player.y + window.player.height/2;
     const baseDmg = typeof window.getMeleeDamage === 'function' ? window.getMeleeDamage() : (window.player.baseDamage[window.player.activeTool] || 9);
     const tool = window.player.activeTool;
@@ -684,7 +684,7 @@ window.attemptAction = function() {
     let rockDmg   = isHammer ? 0 : (tool==='pickaxe' ? Math.floor(baseDmg*3) : 1);
     let blockDmg  = isHammer ? 0 : (tool==='sword' ? Math.max(1, Math.floor(baseDmg*0.2)) : baseDmg);
 
-    window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+    window.player.meleeCooldown = Math.max(16, 38 - Math.floor((window.player.stats.agi||0) * 3));
 
     if (entityDmg > 0 && window.tryHitEntity(pCX, pCY, entityDmg, meleeRange)) actionDone = true;
 
@@ -1059,7 +1059,7 @@ window.addEventListener('mousedown', (e) => {
             if ((window.player.inventory.wood||0) < woodCost) { window.spawnDamageText(b.x+window.game.blockSize/2, b.y+bh/2-20, '¡Sin madera!', '#ffaa00'); break; }
             b.hp = Math.min(b.maxHp, b.hp + healAmt); window.player.inventory.wood -= woodCost; window.setHit(b); window.spawnParticles(b.x+window.game.blockSize/2, b.y+bh/2, '#D2B48C', 8); window.spawnDamageText(b.x+window.game.blockSize/2, b.y+bh/2-16, `+${healAmt} 🔨`, '#7ec850');
             window.sendWorldUpdate('hit_block', { x: b.x, y: b.y, dmg: -healAmt }); if (window.playSound) window.playSound('build'); if (window.updateUI) window.updateUI();
-            window.player.meleeCooldown = Math.max(45, 90 - Math.floor((window.player.stats.agi||0) * 6));
+            window.player.meleeCooldown = Math.max(16, 38 - Math.floor((window.player.stats.agi||0) * 3));
             repaired = true; break;
         }
         if (!repaired && window.game.frameCount % 20 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY-10, 'Nada que reparar', '#888');
