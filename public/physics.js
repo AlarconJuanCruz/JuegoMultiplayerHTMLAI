@@ -73,15 +73,14 @@ window.checkBlockCollisions = function (axis) {
             continue;
         }
 
-        const checkX = axis === 'y' ? p.x + 2   : p.x;
-        const checkW = axis === 'y' ? p.width - 4 : p.width;
+        const checkX = axis === 'y' ? p.x + 2   : p.x + 1;
+        const checkW = axis === 'y' ? p.width - 4 : p.width - 2;
         if (!window.checkRectIntersection(checkX, p.y, checkW, p.height, b.x, b.y, bs, itemHeight)) continue;
 
         if (axis === 'x') {
-            // Sin step-over: el jugador debe saltar explícitamente para subir cualquier bloque.
-            if (p.vx > 0)      { p.x = b.x - p.width - 0.1; hitWallX = true; }
-            else if (p.vx < 0) { p.x = b.x + bs + 0.1;      hitWallX = true; }
-            p.vx = 0;
+            // Mismo inset que UG (1px cada lado) → comportamiento uniforme
+            if (p.vx > 0)      { p.x = b.x - p.width - 0.1; p.vx = 0; hitWallX = true; }
+            else if (p.vx < 0) { p.x = b.x + bs + 0.1;      p.vx = 0; hitWallX = true; }
         } else {
             if (p.vy > 0) { p.y = b.y - p.height; p.vy = 0; p.isGrounded = true; }
             else if (p.vy < 0) {
@@ -116,16 +115,14 @@ window.checkBlockCollisions = function (axis) {
 
     // ── 2. Colisión con celdas UG (terreno subterráneo generado/minado) ─────────
     //
-    // DISEÑO:
-    //   • Gate: columna CENTRAL del jugador.  Si los pies están en superficie, omitir.
-    //   • Eje Y cayendo: aterrizar cuando los pies cruzan el techo de la celda.
-    //     Solo si los pies están ≤ bs+vy debajo del techo (evita snap de celdas lejanas).
-    //   • Eje Y subiendo: rebotar cuando la CABEZA (p.y) toca la base de una celda.
-    //     Condición: p.y < cellY + bs (cabeza está por encima de la base de la celda).
-    //   • Eje X: bloquear si la celda cubre el torso (cellY < pFeetY - 2).
-    //     Ignora celdas de suelo para no bloquear el movimiento horizontal.
+    // DISEÑO UNIFICADO (igual que bloques sólidos colocados):
+    //   Eje X: inset de 1px cada lado → permite pasar por agujeros de 1 bloque (30px)
+    //          con un jugador de 24px sin quedar atrapado en las paredes laterales.
+    //          Exclusión de celda-suelo: cellY >= pFeetY - bs*0.5 (15px, no 2px).
+    //   Eje Y cayendo: usar inset de 2px (20px efectivo) para evitar snap en esquinas.
+    //                  Solo aterriza si los pies cruzan el techo de la celda.
+    //   Eje Y subiendo: rebotar exacto en la base de la celda-techo.
     //
-    // NOTA: los `return` tempranos ahora devuelven hitWallX (puede ser true desde sección 1/1.5)
     if (!window.getUGCellV || !window.getTerrainCol) return hitWallX;
 
     const _midCol = Math.floor((p.x + p.width * 0.5) / bs);
@@ -134,62 +131,113 @@ window.checkBlockCollisions = function (axis) {
     const _surfY  = _cdMid.topY;
 
     const pFeetY = p.y + p.height;
-    if (pFeetY <= _surfY + bs * 0.25) return hitWallX;  // en superficie, snap se encarga
+
+    // Gate de superficie: si los pies están en o sobre la superficie, el snap de terreno
+    // se encarga. Solo entrar en UG si estamos al menos parcialmente bajo la superficie.
+    if (pFeetY <= _surfY + bs * 0.15) return hitWallX;
 
     const UG_DEPTH = window.UG_MAX_DEPTH || 90;
-    const colL = Math.floor(p.x / bs);
-    const colR = Math.floor((p.x + p.width - 1) / bs);
 
-    for (let vc = colL; vc <= colR; vc++) {
-        const cd = window.getTerrainCol(vc);
-        if (!cd || cd.type === 'hole') continue;
-        const topY  = cd.topY;
-        const cellX = vc * bs;
+    if (axis === 'x') {
+        // ── Eje X: 1px inset por lado ───────────────────────────────────────────
+        // El jugador mide 24px, el bloque 30px → agujero de 1 bloque tiene 6px de holgura.
+        // Con 1px de inset (efectivo 22px) el jugador necesita estar >1px dentro de una pared
+        // para recibir empuje, eliminando el jitter al entrar/salir de agujeros de 1 bloque.
+        const _xL = p.x + 1;           // borde izquierdo efectivo
+        const _xR = p.x + p.width - 2; // borde derecho efectivo (ancho efectivo = p.width - 2)
+        const colL = Math.floor(_xL / bs);
+        const colR = Math.floor(_xR / bs);
 
-        const rowStart = Math.max(0, Math.floor((p.y - topY) / bs) - 1);
-        const rowEnd   = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs) + 1);
-        if (rowEnd < 0) continue;
+        for (let vc = colL; vc <= colR; vc++) {
+            const cd = window.getTerrainCol(vc);
+            if (!cd || cd.type === 'hole') continue;
+            const topY  = cd.topY;
+            const cellX = vc * bs;
 
-        for (let vr = rowStart; vr <= rowEnd; vr++) {
-            const mat = window.getUGCellV(vc, vr);
-            if (!mat || mat === 'air') continue;
+            const rowStart = Math.max(0, Math.floor((p.y       - topY) / bs) - 1);
+            const rowEnd   = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs));
+            if (rowEnd < 0) continue;
 
-            const cellY = topY + vr * bs;
-            // Ignorar celdas por encima de la superficie de la columna central
-            if (cellY < _surfY) continue;
+            for (let vr = rowStart; vr <= rowEnd; vr++) {
+                const mat = window.getUGCellV(vc, vr);
+                if (!mat || mat === 'air') continue;
 
-            if (axis === 'x') {
-                // Solo bloquear si la celda cubre el torso (no el suelo)
-                if (cellY >= pFeetY - 2) continue;
-                if (!window.checkRectIntersection(p.x, p.y, p.width, p.height, cellX, cellY, bs, bs)) continue;
-                // Sin step-over: el jugador debe saltar explícitamente.
-                if (p.vx > 0) { p.x = cellX - p.width - 0.1; p.vx = 0; hitWallX = true; }
-                else if (p.vx < 0) { p.x = cellX + bs + 0.1; p.vx = 0; hitWallX = true; }
+                const cellY = topY + vr * bs;
+                if (cellY < _surfY) continue; // por encima de la superficie
 
-            } else { // axis === 'y'
-                if (!window.checkRectIntersection(p.x + 2, p.y, p.width - 4, p.height, cellX, cellY, bs, bs)) continue;
+                // Excluir celdas-suelo: si el techo de la celda está dentro del
+                // bs*0.5 inferior del jugador, es una celda de piso — no bloquear X.
+                // Umbral ampliado de 2px → bs*0.5 (15px) para evitar que el borde
+                // superior de una pared adyacente al agujero bloquee al jugador al entrar.
+                if (cellY >= pFeetY - bs * 0.5) continue;
+
+                // Comprobar solapamiento real en X (usando los bordes efectivos)
+                const overlapX = (_xR > cellX) && (_xL < cellX + bs);
+                const overlapY = (p.y < cellY + bs) && (pFeetY > cellY);
+                if (!overlapX || !overlapY) continue;
+
+                // Empujar en la dirección de menor penetración
+                const penetR = (_xR) - cellX;           // penetración por la derecha del jugador
+                const penetL = (cellX + bs) - _xL;       // penetración por la izquierda del jugador
+                if (p.vx > 0 && penetR < penetL) {
+                    p.x = cellX - p.width - 0.1; p.vx = 0; hitWallX = true;
+                } else if (p.vx < 0 && penetL < penetR) {
+                    p.x = cellX + bs + 0.1; p.vx = 0; hitWallX = true;
+                } else if (p.vx > 0) {
+                    p.x = cellX - p.width - 0.1; p.vx = 0; hitWallX = true;
+                } else if (p.vx < 0) {
+                    p.x = cellX + bs + 0.1; p.vx = 0; hitWallX = true;
+                }
+            }
+        }
+
+    } else { // axis === 'y'
+        // ── Eje Y: inset 2px cada lado (20px efectivo) ──────────────────────────
+        // El inset evita que las esquinas de celdas adyacentes causen snap falso
+        // cuando el jugador está alineado con el borde de un bloque.
+        const _yXL = p.x + 2;
+        const _yXR = p.x + p.width - 3; // 19px efectivo → floor divide seguro
+        const colL = Math.floor(_yXL / bs);
+        const colR = Math.floor(_yXR / bs);
+
+        for (let vc = colL; vc <= colR; vc++) {
+            const cd = window.getTerrainCol(vc);
+            if (!cd || cd.type === 'hole') continue;
+            const topY  = cd.topY;
+            const cellX = vc * bs;
+
+            const rowStart = Math.max(0, Math.floor((p.y       - topY) / bs) - 1);
+            const rowEnd   = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs) + 1);
+            if (rowEnd < 0) continue;
+
+            for (let vr = rowStart; vr <= rowEnd; vr++) {
+                const mat = window.getUGCellV(vc, vr);
+                if (!mat || mat === 'air') continue;
+
+                const cellY = topY + vr * bs;
+                if (cellY < _surfY) continue;
+
+                // Comprobar solapamiento con el AABB insetado
+                const overlapX = (_yXR > cellX) && (_yXL < cellX + bs);
+                if (!overlapX) continue;
 
                 if (p.vy >= 0) {
-                    // Cayendo / en suelo: aterrizar encima de la celda.
-                    // Solo si los pies ya pasaron el techo de la celda.
-                    if (pFeetY < cellY - 1) continue;
+                    // Cayendo / en suelo — aterrizar si los pies cruzaron el techo de la celda
+                    if (pFeetY < cellY) continue;
+                    if (p.y >= cellY + bs) continue; // celda completamente bajo el cuerpo
                     p.y = cellY - p.height;
                     p.vy = 0;
                     p.isGrounded = true;
                 } else {
-                    // Subiendo: rebotar contra la BASE de la celda (techo).
-                    // Condición: la cabeza del jugador penetró la celda desde abajo.
-                    // p.y es la parte SUPERIOR del jugador. Si p.y >= cellY+bs, la celda
-                    // está completamente por debajo → no es techo, ignorar.
-                    if (p.y >= cellY + bs) continue;
-                    // Clamp exacto: colocar la cabeza justo en el borde inferior de la celda.
-                    // No usar +0.1 porque acumula error frame a frame cuando hay fricción de techo.
+                    // Subiendo — rebotar al golpear el techo (base inferior de la celda)
+                    if (p.y >= cellY + bs) continue; // celda completamente bajo la cabeza
                     p.y  = cellY + bs;
                     p.vy = 0;
                 }
             }
         }
     }
+
     return hitWallX;
 };
 

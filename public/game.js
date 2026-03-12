@@ -1452,6 +1452,52 @@ function update() {
             if (_isClimbing) window.player.isClimbing = false;
         }
 
+        // ── Step-down: suavizar caminar sobre cornisas ──────────────────────
+        // Si el jugador acaba de perder el suelo (coyoteTime alto) pero vy es pequeño,
+        // buscar suelo sólido dentro de 8px y snapear — evita la micro-caída al
+        // caminar sobre el borde de un bloque (UG o colocado).
+        if (!window.player.isGrounded && !_isClimbing && !window.player.isJumping
+            && window.player.coyoteTime >= 9   // casi recién perdió el suelo
+            && window.player.vy > 0 && window.player.vy < 8
+            && !_pIsOverHole) {
+            const _sdFoot = window.player.y + window.player.height;
+            const _sdMidX = window.player.x + window.player.width / 2;
+            // Comprobar bloques colocados sólidos dentro de 8px
+            let _sdSnap = false, _sdTargetY = 0;
+            for (const _sdb of window.blocks) {
+                if (_sdb.type === 'ladder' || (_sdb.type === 'door' && _sdb.open) ||
+                    _sdb.type === 'box' || _sdb.type === 'campfire' ||
+                    _sdb.type === 'bed' || _sdb.type === 'grave' ||
+                    _sdb.type === 'barricade' || _sdb.type === 'placed_torch' ||
+                    _sdb.type === 'stair') continue;
+                const _sdbh = _sdb.type === 'door' ? bs * 2 : bs;
+                if (_sdMidX < _sdb.x || _sdMidX > _sdb.x + bs) continue;
+                if (_sdb.y < _sdFoot || _sdb.y > _sdFoot + 8) continue;
+                _sdSnap = true; _sdTargetY = _sdb.y; break;
+            }
+            // Comprobar celdas UG sólidas dentro de 8px
+            if (!_sdSnap && window.getUGCellV && window.getTerrainCol) {
+                const _sdCol = Math.floor(_sdMidX / bs);
+                const _sdCD  = window.getTerrainCol(_sdCol);
+                if (_sdCD && _sdCD.type !== 'hole') {
+                    const _sdRow = Math.floor((_sdFoot - _sdCD.topY) / bs);
+                    if (_sdRow >= 0 && _sdRow < (window.UG_MAX_DEPTH || 50)) {
+                        const _sdMat = window.getUGCellV(_sdCol, _sdRow);
+                        if (_sdMat && _sdMat !== 'air') {
+                            const _sdCellY = _sdCD.topY + _sdRow * bs;
+                            if (_sdCellY >= _sdFoot && _sdCellY <= _sdFoot + 8) {
+                                _sdSnap = true; _sdTargetY = _sdCellY;
+                            }
+                        }
+                    }
+                }
+            }
+            if (_sdSnap) {
+                window.player.y = _sdTargetY - window.player.height;
+                window.player.vy = 0; window.player.isGrounded = true;
+            }
+        }
+
         // ── Muerte por caída en pozo ─────────────────────────────────────────
         if (!window.player.isDead && window.getTerrainCol) {
             const _pHoleCol = Math.floor((window.player.x + window.player.width / 2) / window.game.blockSize);
