@@ -125,10 +125,23 @@ window.checkBlockCollisions = function (axis) {
     //
     if (!window.getUGCellV || !window.getTerrainCol) return hitWallX;
 
-    const _midCol = Math.floor((p.x + p.width * 0.5) / bs);
-    const _cdMid  = window.getTerrainCol(_midCol);
-    if (!_cdMid || _cdMid.type === 'hole') return hitWallX;
-    const _surfY  = _cdMid.topY;
+    // _surfY: usar el topY MÁXIMO entre todas las columnas que cubre el jugador.
+    // Con la columna central sola, cuando el jugador está en el borde de un agujero,
+    // la columna central puede tener un topY distinto al de la columna sólida,
+    // haciendo que el gate excluya las colisiones justo donde más se necesitan.
+    const _colL0 = Math.floor(p.x / bs);
+    const _colR0 = Math.floor((p.x + p.width - 1) / bs);
+    let _surfY = 0;
+    for (let _vc0 = _colL0; _vc0 <= _colR0; _vc0++) {
+        const _cd0 = window.getTerrainCol(_vc0);
+        if (_cd0 && _cd0.type !== 'hole') _surfY = Math.max(_surfY, _cd0.topY);
+    }
+    if (_surfY === 0) {
+        // fallback: columna central
+        const _cdMid = window.getTerrainCol(Math.floor((p.x + p.width * 0.5) / bs));
+        if (!_cdMid || _cdMid.type === 'hole') return hitWallX;
+        _surfY = _cdMid.topY;
+    }
 
     const pFeetY = p.y + p.height;
 

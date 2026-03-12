@@ -1457,41 +1457,51 @@ function update() {
         // buscar suelo sólido dentro de 8px y snapear — evita la micro-caída al
         // caminar sobre el borde de un bloque (UG o colocado).
         if (!window.player.isGrounded && !_isClimbing && !window.player.isJumping
-            && window.player.coyoteTime >= 9   // casi recién perdió el suelo
+            && window.player.coyoteTime >= 9
             && window.player.vy > 0 && window.player.vy < 8
             && !_pIsOverHole) {
             const _sdFoot = window.player.y + window.player.height;
-            const _sdMidX = window.player.x + window.player.width / 2;
-            // Comprobar bloques colocados sólidos dentro de 8px
+            // Checar 3 puntos X: borde izquierdo, centro, borde derecho
+            const _sdXs = [
+                window.player.x + 2,
+                window.player.x + window.player.width / 2,
+                window.player.x + window.player.width - 3
+            ];
             let _sdSnap = false, _sdTargetY = 0;
-            for (const _sdb of window.blocks) {
+
+            // Bloques colocados sólidos
+            outer: for (const _sdb of window.blocks) {
                 if (_sdb.type === 'ladder' || (_sdb.type === 'door' && _sdb.open) ||
                     _sdb.type === 'box' || _sdb.type === 'campfire' ||
                     _sdb.type === 'bed' || _sdb.type === 'grave' ||
                     _sdb.type === 'barricade' || _sdb.type === 'placed_torch' ||
                     _sdb.type === 'stair') continue;
                 const _sdbh = _sdb.type === 'door' ? bs * 2 : bs;
-                if (_sdMidX < _sdb.x || _sdMidX > _sdb.x + bs) continue;
                 if (_sdb.y < _sdFoot || _sdb.y > _sdFoot + 8) continue;
-                _sdSnap = true; _sdTargetY = _sdb.y; break;
-            }
-            // Comprobar celdas UG sólidas dentro de 8px
-            if (!_sdSnap && window.getUGCellV && window.getTerrainCol) {
-                const _sdCol = Math.floor(_sdMidX / bs);
-                const _sdCD  = window.getTerrainCol(_sdCol);
-                if (_sdCD && _sdCD.type !== 'hole') {
-                    const _sdRow = Math.floor((_sdFoot - _sdCD.topY) / bs);
-                    if (_sdRow >= 0 && _sdRow < (window.UG_MAX_DEPTH || 50)) {
-                        const _sdMat = window.getUGCellV(_sdCol, _sdRow);
-                        if (_sdMat && _sdMat !== 'air') {
-                            const _sdCellY = _sdCD.topY + _sdRow * bs;
-                            if (_sdCellY >= _sdFoot && _sdCellY <= _sdFoot + 8) {
-                                _sdSnap = true; _sdTargetY = _sdCellY;
-                            }
-                        }
+                for (const _sdx of _sdXs) {
+                    if (_sdx >= _sdb.x && _sdx <= _sdb.x + bs) {
+                        _sdSnap = true; _sdTargetY = _sdb.y; break outer;
                     }
                 }
             }
+
+            // Celdas UG sólidas (checar los 3 puntos X)
+            if (!_sdSnap && window.getUGCellV && window.getTerrainCol) {
+                for (const _sdx of _sdXs) {
+                    const _sdCol = Math.floor(_sdx / bs);
+                    const _sdCD  = window.getTerrainCol(_sdCol);
+                    if (!_sdCD || _sdCD.type === 'hole') continue;
+                    const _sdRow = Math.floor((_sdFoot - _sdCD.topY) / bs);
+                    if (_sdRow < 0 || _sdRow >= (window.UG_MAX_DEPTH || 50)) continue;
+                    const _sdMat = window.getUGCellV(_sdCol, _sdRow);
+                    if (!_sdMat || _sdMat === 'air') continue;
+                    const _sdCellY = _sdCD.topY + _sdRow * bs;
+                    if (_sdCellY >= _sdFoot && _sdCellY <= _sdFoot + 8) {
+                        _sdSnap = true; _sdTargetY = _sdCellY; break;
+                    }
+                }
+            }
+
             if (_sdSnap) {
                 window.player.y = _sdTargetY - window.player.height;
                 window.player.vy = 0; window.player.isGrounded = true;

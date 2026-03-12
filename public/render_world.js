@@ -1568,25 +1568,8 @@ window.draw = function() {
             C.restore(); C.restore(); C.restore();
         }
 
-        // Barra de HP y nombre sobre cada entidad
-        // (worm, golem y brood_mother tienen su propia barra — skip para ellos)
-        if (ent.type !== 'worm' && ent.type !== 'golem' && ent.type !== 'brood_mother') {
-            const isHostile = ent.type !== 'chicken'; const timeSinceHit = Date.now() - (ent.lastHitTime || 0); const pct = Math.max(0, ent.hp / ent.maxHp);
-            const showBar = isHostile || (ent.hp < ent.maxHp && timeSinceHit < 3000);
-            if (showBar) {
-                let barAlpha = 1.0; if (pct >= 1 && timeSinceHit > 1500) barAlpha = Math.max(0, 1 - (timeSinceHit - 1500) / 1500); if (barAlpha <= 0) { } else {
-                C.save(); C.globalAlpha = barAlpha;
-                const barW = Math.min(Math.max(ent.width + 8, 24), 50); const barH = 5; const barX = ent.x + (ent.width - barW) / 2; const barY = ent.y - 13; const r4 = 2;
-                C.fillStyle = 'rgba(0,0,0,0.72)'; C.beginPath(); C.roundRect(barX - 1, barY - 1, barW + 2, barH + 2, r4 + 1); C.fill();
-                C.fillStyle = 'rgba(255,255,255,0.08)'; C.beginPath(); C.roundRect(barX, barY, barW, barH, r4); C.fill();
-                const hc = pct > 0.6 ? '#2ecc71' : pct > 0.3 ? '#f39c12' : '#e74c3c'; const fillW = Math.max(0, barW * pct);
-                if (fillW > 0) { C.fillStyle = hc; C.beginPath(); const rightR = fillW >= barW - 1 ? r4 : 1; C.roundRect(barX, barY, fillW, barH, [r4, rightR, rightR, r4]); C.fill(); C.fillStyle = 'rgba(255,255,255,0.2)'; C.fillRect(barX + 1, barY + 1, Math.max(0, fillW - 2), 1); }
-                if (timeSinceHit < 120) { C.fillStyle = `rgba(255,255,255,${0.5 * (1 - timeSinceHit / 120)})`; C.beginPath(); C.roundRect(barX, barY, barW, barH, r4); C.fill(); }
-                if (isHostile && (pct < 1 || timeSinceHit < 2000)) { C.font = 'bold 13px "VT323"'; C.fillStyle = 'rgba(255,255,255,0.9)'; C.textAlign = 'center'; C.shadowColor = 'rgba(0,0,0,0.9)'; C.shadowBlur = 3; C.fillText(ent.name || ent.type, barX + barW / 2, barY - 2); C.shadowBlur = 0; }
-                C.restore();
-                }
-            }
-        }
+        // Barra de HP: se dibuja en pasada post-lightCanvas (ver abajo)
+        // para que no quede oscurecida por el destination-out de la oscuridad de cueva.
 
         // ── Signo de interrogación: mob perdió de vista al jugador ─────────
         if ((ent._lostTimer || 0) > 0 && ent.type !== 'chicken') {
@@ -1673,47 +1656,131 @@ window.draw = function() {
 
     // === GUÍA DE TRAYECTORIA: arco ===
     if (window.player.activeTool === 'bow' && window.player.isAiming && window.player.isCharging && window.player.inventory.arrows > 0 && !window.player.isDead) {
-        const pCX = window.player.x + window.player.width / 2; const pCY = window.player.y + 6;
-        const dx = window.mouseWorldX - pCX; const dy = window.mouseWorldY - pCY; const angle = Math.atan2(dy, dx);
-        const power = 4 + (window.player.chargeLevel / 100) * 6; const grav = window.game.gravity * 0.25; const bs = window.game.blockSize;
-        let simX = pCX, simY = pCY; let simVx = Math.cos(angle) * power; let simVy = Math.sin(angle) * power;
-        const pts = []; let hitX = null, hitY = null;
-        for (let i = 0; i < 240; i++) {
+        const pCX = window.player.x + window.player.width / 2;
+        const pCY = window.player.y + 6;
+        const dx = window.mouseWorldX - pCX;
+        const dy = window.mouseWorldY - pCY;
+        const angle = Math.atan2(dy, dx);
+        const power = 4 + (window.player.chargeLevel / 100) * 6;
+        const grav  = window.game.gravity * 0.25;
+        const bs    = window.game.blockSize;
+
+        // Fracción de guía visible según nivel (nivel 1 = 12%, nivel 20 = 100%)
+        const _lvl       = window.player.level || 1;
+        const _guideFrac = Math.min(1.0, 0.06 + _lvl * 0.047);  // 0→1 en ~20 niveles
+        const _maxSteps  = 240;
+        const _visSteps  = Math.ceil(_maxSteps * _guideFrac);
+
+        // Determinar si el jugador está bajo la superficie para evitar el bug de getGroundY
+        const _pMidColBow = Math.floor(pCX / bs);
+        const _pCDBow     = window.getTerrainCol ? window.getTerrainCol(_pMidColBow) : null;
+        const _surfYBow   = (_pCDBow && _pCDBow.type !== 'hole') ? _pCDBow.topY : (window.game.baseGroundLevel || 510);
+        const _underground = pCY > _surfYBow + 4;
+
+        let simX = pCX, simY = pCY;
+        let simVx = Math.cos(angle) * power;
+        let simVy = Math.sin(angle) * power;
+        const pts = [];
+        let hitX = null, hitY = null;
+
+        for (let i = 0; i < _maxSteps; i++) {
             simX += simVx; simVy += grav; simY += simVy;
             let blocked = false;
-            // Bloques colocados
+
+            // ── Bloques colocados ──────────────────────────────────────────
             for (const b of window.blocks) {
                 if (b.type === 'ladder' || (b.type === 'door' && b.open) || b.type === 'stair') continue;
                 const bh = b.type === 'door' ? bs * 2 : bs;
-                if (simX >= b.x && simX <= b.x + bs && simY >= b.y && simY <= b.y + bh) { blocked = true; break; }
+                if (simX >= b.x && simX <= b.x + bs && simY >= b.y && simY <= b.y + bh) {
+                    blocked = true; break;
+                }
             }
+
             if (!blocked) {
-                // Terreno de superficie
-                const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
-                if (simY >= gY) { hitX = simX; hitY = gY; break; }
-                // Bloques UG (cuevas y terreno subterráneo)
-                if (window.getUGCellV && window.getTerrainCol) {
-                    const _simCol = Math.floor(simX / bs);
-                    const _simCD  = window.getTerrainCol(_simCol);
-                    if (_simCD && _simCD.type !== 'hole') {
-                        const _simRow = Math.floor((simY - _simCD.topY) / bs);
-                        if (_simRow >= 0) {
-                            const _simMat = window.getUGCellV(_simCol, _simRow);
-                            if (_simMat && _simMat !== 'air') { blocked = true; }
+                if (_underground) {
+                    // ── UNDERGROUND: solo UG cells, NO getGroundY ─────────────
+                    // getGroundY devuelve topY (la superficie) cuando hay piedra sólida
+                    // en las primeras filas, causando que la simulación termine inmediatamente.
+                    if (window.getUGCellV && window.getTerrainCol) {
+                        const _sc = Math.floor(simX / bs);
+                        const _cd = window.getTerrainCol(_sc);
+                        if (_cd && _cd.type !== 'hole') {
+                            const _sr = Math.floor((simY - _cd.topY) / bs);
+                            if (_sr >= 0) {
+                                const _m = window.getUGCellV(_sc, _sr);
+                                if (_m && _m !== 'air') { blocked = true; }
+                            }
+                        }
+                    }
+                    // Detectar cuando la flecha sube y sale de la cueva a superficie
+                    if (!blocked && simY < _surfYBow) {
+                        const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
+                        if (simY >= gY) { hitX = simX; hitY = gY; break; }
+                    }
+                } else {
+                    // ── SUPERFICIE: usar getGroundY + UG cells ────────────────
+                    const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
+                    if (simY >= gY) { hitX = simX; hitY = gY; break; }
+                    if (window.getUGCellV && window.getTerrainCol) {
+                        const _sc = Math.floor(simX / bs);
+                        const _cd = window.getTerrainCol(_sc);
+                        if (_cd && _cd.type !== 'hole') {
+                            const _sr = Math.floor((simY - _cd.topY) / bs);
+                            if (_sr >= 0) {
+                                const _m = window.getUGCellV(_sc, _sr);
+                                if (_m && _m !== 'air') { blocked = true; }
+                            }
                         }
                     }
                 }
             }
+
             if (blocked) { hitX = simX; hitY = simY; break; }
-            if (i % 2 === 0) pts.push({ x: simX, y: simY });
+
+            // Solo guardar hasta _visSteps puntos (rango visible por nivel)
+            if (i < _visSteps && i % 2 === 0) pts.push({ x: simX, y: simY });
         }
-        if (!hitX && pts.length) { hitX = pts[pts.length-1].x; hitY = pts[pts.length-1].y; }
-        window.ctx.save(); window.ctx.lineWidth = 1.5; window.ctx.setLineDash([5, 6]);
-        window.ctx.beginPath(); window.ctx.moveTo(pCX, pCY); for (const p of pts) window.ctx.lineTo(p.x, p.y); if (hitX !== null) window.ctx.lineTo(hitX, hitY);
-        const grad = window.ctx.createLinearGradient(pCX, pCY, hitX || simX, hitY || simY); grad.addColorStop(0, 'rgba(255,220,100,0.90)'); grad.addColorStop(0.5, 'rgba(255,255,255,0.50)'); grad.addColorStop(1, 'rgba(255,255,255,0.05)');
-        window.ctx.strokeStyle = grad; window.ctx.stroke(); window.ctx.setLineDash([]);
-        if (hitX !== null) { window.ctx.beginPath(); window.ctx.arc(hitX, hitY, 4, 0, Math.PI * 2); window.ctx.fillStyle = 'rgba(255,200,80,0.65)'; window.ctx.fill(); window.ctx.strokeStyle = 'rgba(255,255,255,0.55)'; window.ctx.lineWidth = 1; window.ctx.stroke(); }
-        window.ctx.restore();
+
+        // Si no colisionó, el último punto visible es el final de la guía
+        if (hitX === null && pts.length) { hitX = pts[pts.length-1].x; hitY = pts[pts.length-1].y; }
+        // Si colisionó más allá del rango visible, recortar
+        if (hitX !== null && pts.length > 0) {
+            const _lastPt = pts[pts.length - 1];
+            const _dToHit = Math.hypot(hitX - pCX, hitY - pCY);
+            const _dToLast= Math.hypot(_lastPt.x - pCX, _lastPt.y - pCY);
+            if (_dToHit > _dToLast) { hitX = _lastPt.x; hitY = _lastPt.y; }
+        }
+
+        if (pts.length < 2 && hitX === null) { /* nada que dibujar */ }
+        else {
+            window.ctx.save();
+            window.ctx.lineWidth = 1.5;
+            window.ctx.setLineDash([5, 6]);
+            window.ctx.beginPath();
+            window.ctx.moveTo(pCX, pCY);
+            for (const p of pts) window.ctx.lineTo(p.x, p.y);
+            if (hitX !== null) window.ctx.lineTo(hitX, hitY);
+            const _gx1 = hitX ?? simX, _gy1 = hitY ?? simY;
+            const grad = window.ctx.createLinearGradient(pCX, pCY, _gx1, _gy1);
+            grad.addColorStop(0,   'rgba(255,220,100,0.90)');
+            grad.addColorStop(0.5, 'rgba(255,255,255,0.50)');
+            grad.addColorStop(1,   'rgba(255,255,255,0.05)');
+            window.ctx.strokeStyle = grad;
+            window.ctx.stroke();
+            window.ctx.setLineDash([]);
+            // Círculo de impacto solo si llegó a un bloque real (no recortado por nivel)
+            const _hitIsReal = _guideFrac >= 1.0 || (hitX !== null && hitX === pts[pts.length-1]?.x);
+            if (hitX !== null && _hitIsReal) {
+                window.ctx.beginPath();
+                window.ctx.arc(hitX, hitY, 4, 0, Math.PI * 2);
+                window.ctx.fillStyle = 'rgba(255,200,80,0.65)';
+                window.ctx.fill();
+                window.ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+                window.ctx.lineWidth = 1;
+                window.ctx.stroke();
+            }
+            window.ctx.restore();
+        }
     }
 
     // === GUÍA DE TRAYECTORIA: molotov (puntos naranja + círculo de área) ===
@@ -2092,6 +2159,50 @@ window.draw = function() {
     } else if (window.lightCtx && window.lightCanvas) {
         const _lW2 = window._canvasLogicW, _lH2 = window._canvasLogicH;
         window.ctx.drawImage(window.lightCanvas, 0, 0, _lW2, _lH2);
+    }
+
+    // === BARRAS DE HP DE ENTIDADES (post-lightCanvas, visibles en cuevas) ===
+    // Dibujadas aquí para que el destination-out del lightCanvas no las borre.
+    {
+        const _ncz2 = window.game.zoom || 1;
+        const _ncW2 = window._canvasLogicW, _ncH2 = window._canvasLogicH;
+        const _visL2 = window.camera.x - 60, _visR2 = window.camera.x + _ncW2 + 60;
+        window.ctx.save();
+        window.ctx.translate(_ncW2/2, _ncH2/2);
+        window.ctx.scale(_ncz2, _ncz2);
+        window.ctx.translate(-_ncW2/2, -_ncH2/2);
+        window.ctx.translate(-window.camera.x, -window.camera.y);
+
+        window.entities.forEach(ent => {
+            if (ent.x + ent.width < _visL2 || ent.x > _visR2) return;
+            if (_onSurface && ent.y > _surfCutY) return;
+            if (!_onSurface && !ent.inCave && ent.y < _surfCutY - bs * 4) return;
+            if (ent.type === 'worm' || ent.type === 'golem' || ent.type === 'brood_mother') return;
+
+            const C = window.ctx;
+            const isHostile = ent.type !== 'chicken';
+            const timeSinceHit = Date.now() - (ent.lastHitTime || 0);
+            const pct = Math.max(0, ent.hp / ent.maxHp);
+            const showBar = isHostile || (ent.hp < ent.maxHp && timeSinceHit < 3000);
+            if (!showBar) return;
+            let barAlpha = 1.0;
+            if (pct >= 1 && timeSinceHit > 1500) barAlpha = Math.max(0, 1 - (timeSinceHit - 1500) / 1500);
+            if (barAlpha <= 0) return;
+
+            C.save(); C.globalAlpha = barAlpha;
+            const barW = Math.min(Math.max(ent.width + 8, 24), 50); const barH = 5;
+            const barX = ent.x + (ent.width - barW) / 2; const barY = ent.y - 13; const r4 = 2;
+            C.fillStyle = 'rgba(0,0,0,0.82)'; C.beginPath(); C.roundRect(barX - 1, barY - 1, barW + 2, barH + 2, r4 + 1); C.fill();
+            C.fillStyle = 'rgba(255,255,255,0.08)'; C.beginPath(); C.roundRect(barX, barY, barW, barH, r4); C.fill();
+            const hc = pct > 0.6 ? '#2ecc71' : pct > 0.3 ? '#f39c12' : '#e74c3c';
+            const fillW = Math.max(0, barW * pct);
+            if (fillW > 0) { C.fillStyle = hc; C.beginPath(); const rightR = fillW >= barW - 1 ? r4 : 1; C.roundRect(barX, barY, fillW, barH, [r4, rightR, rightR, r4]); C.fill(); C.fillStyle = 'rgba(255,255,255,0.2)'; C.fillRect(barX + 1, barY + 1, Math.max(0, fillW - 2), 1); }
+            if (timeSinceHit < 120) { C.fillStyle = `rgba(255,255,255,${0.5 * (1 - timeSinceHit / 120)})`; C.beginPath(); C.roundRect(barX, barY, barW, barH, r4); C.fill(); }
+            if (isHostile && (pct < 1 || timeSinceHit < 2000)) { C.font = 'bold 13px "VT323"'; C.fillStyle = 'rgba(255,255,255,0.95)'; C.textAlign = 'center'; C.shadowColor = 'rgba(0,0,0,0.95)'; C.shadowBlur = 4; C.fillText(ent.name || ent.type, barX + barW / 2, barY - 2); C.shadowBlur = 0; }
+            C.restore();
+        });
+
+        window.ctx.restore();
     }
 
     // === NOMBRES/CHAT EN COORDENADAS MUNDO (con zoom aplicado) ===
