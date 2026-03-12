@@ -235,9 +235,13 @@ window.checkBlockCollisions = function (axis) {
                 if (!overlapX) continue;
 
                 if (p.vy >= 0) {
-                    // Cayendo / en suelo — aterrizar si los pies cruzaron el techo de la celda
-                    if (pFeetY < cellY) continue;
-                    if (p.y >= cellY + bs) continue; // celda completamente bajo el cuerpo
+                    // Cayendo / en suelo — aterrizar si los pies cruzaron el techo de la celda.
+                    // CCD: también detectar cuando la velocidad alta hace que el jugador
+                    // "pase de largo" la celda en un solo tick (tunnel detection).
+                    const _prevFeetY = pFeetY - p.vy; // posición de pies antes del movimiento
+                    const _crossedFloor = (_prevFeetY <= cellY && pFeetY >= cellY);
+                    const _overlapping  = (pFeetY > cellY && p.y < cellY + bs);
+                    if (!_crossedFloor && !_overlapping) continue;
                     p.y = cellY - p.height;
                     p.vy = 0;
                     p.isGrounded = true;

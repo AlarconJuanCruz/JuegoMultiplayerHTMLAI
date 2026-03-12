@@ -993,7 +993,8 @@ window.draw = function() {
         // Ocultar entidades subterráneas cuando jugador está en superficie
         if (_onSurface && ent.y > _surfCutY) return;
         // Ocultar entidades de superficie cuando jugador está bajo tierra
-        if (!_onSurface && !ent.inCave && ent.y < _surfCutY - bs * 4) return;
+        // Condición correcta: si no tiene inCave, está en/sobre la superficie → ocultar
+        if (!_onSurface && !ent.inCave && ent.y < _surfCutY) return;
         const C = window.ctx; const H = ent.isHit; const ER = (ent.enragedFrames||0) > 0; const FR = ent.vx >= 0; const T = window.game.frameCount;
         // LOD: entidades a >320px del jugador usan flat colors (sin gradientes)
         const _eLODDist = Math.hypot((ent.x+ent.width/2) - (window.player.x+window.player.width/2),
@@ -2124,26 +2125,7 @@ window.draw = function() {
                 });
             }
 
-            // ── 3. Rayos de luz subterráneos (throttle cada 12 frames, sin gradientes) ─
-            if (!_onSurface && ambientDarkness > 0.15 && (_lcFrame % 12 === 0)) {
-                const _shaftAlpha = Math.min(0.35, ambientDarkness * 0.5) * (1 - darkness);
-                if (_shaftAlpha > 0.02 && window.getUGCellV && window.getTerrainCol) {
-                    const _pCX2 = window.player.x + window.player.width / 2;
-                    for (let _sc = Math.floor((_pCX2 - _bs*4)/_bs); _sc <= Math.floor((_pCX2 + _bs*4)/_bs); _sc++) {
-                        const _scd = window.getTerrainCol(_sc); if (!_scd||_scd.type==='hole') continue;
-                        let _sd=0;
-                        for (let _sr=0;_sr<12;_sr++) { if (window.getUGCellV(_sc,_sr)!=='air') break; _sd=_sr+1; }
-                        if (_sd<2) continue;
-                        const _df=Math.max(0,1-Math.abs(_sc*_bs+_bs/2-_pCX2)/(_bs*4));
-                        if (_df<0.05) continue;
-                        const [_slx,_sly]=_wts(_sc*_bs, _scd.topY);
-                        const [_slx2,_sly2]=_wts(_sc*_bs+_bs, _scd.topY+_sd*_bs);
-                        // Rect plano en vez de gradiente lineal
-                        window.lightCtx.fillStyle=`rgba(200,220,255,${(_shaftAlpha*_df*0.6).toFixed(3)})`;
-                        window.lightCtx.fillRect(_slx,_sly,_slx2-_slx,_sly2-_sly);
-                    }
-                }
-            }
+            // (rayos de luz subterráneos eliminados)
 
             window.lightCtx.globalCompositeOperation = 'source-over';
         }
@@ -2168,7 +2150,7 @@ window.draw = function() {
         window.entities.forEach(ent => {
             if (ent.x + ent.width < _visL2 || ent.x > _visR2) return;
             if (_onSurface && ent.y > _surfCutY) return;
-            if (!_onSurface && !ent.inCave && ent.y < _surfCutY - bs * 4) return;
+            if (!_onSurface && !ent.inCave && ent.y < _surfCutY) return;
             if (ent.type === 'worm' || ent.type === 'golem' || ent.type === 'brood_mother') return;
 
             const C = window.ctx;
