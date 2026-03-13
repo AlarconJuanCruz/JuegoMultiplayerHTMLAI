@@ -175,13 +175,17 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 }
                 // Re-aplicar celdas minadas DESPUÉS de applySeed para que no se pierdan.
                 // applySeed limpia _ugCellCache y _terrainColCache pero NO _minedCells.
-                // Aun así, guardamos una copia defensiva en _pendingMinedCells por si
-                // alguna ruta de código inesperada borra _minedCells antes de llegar aquí.
                 if (window._pendingMinedCells && Object.keys(window._pendingMinedCells).length > 0) {
                     Object.assign(window._minedCells, window._pendingMinedCells);
-                    window._ugCellCache     = {};
-                    window._terrainColCache = {};
-                    window._pendingMinedCells = null;
+                    // Limpiar todos los caches de render: applySeed puede haber dejado
+                    // _terrainCache/_staticLightCanvas con el terreno original sólido.
+                    window._ugCellCache        = {};
+                    window._terrainColCache    = {};
+                    window._terrainCache       = null;
+                    window._staticLightCanvas  = null;
+                    window._plantCanvas        = null;
+                    window._mineStamp          = (window._mineStamp || 0) + 1;
+                    window._pendingMinedCells  = null;
                 }
             });
 
@@ -219,8 +223,16 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
                 if (state.minedCells && typeof state.minedCells === 'object') {
                     window._minedCells         = Object.assign({}, state.minedCells);
                     window._pendingMinedCells  = Object.assign({}, state.minedCells);  // copia defensiva
-                    if (window._ugCellCache)     window._ugCellCache     = {};
-                    if (window._terrainColCache) window._terrainColCache = {};
+                    // Limpiar TODOS los caches que dependen del estado del terreno.
+                    // Sin esto, los caches de render (_terrainCache, _staticLightCanvas)
+                    // conservan la imagen del terreno sólido original y las celdas minadas
+                    // se ven como sólidas visualmente aunque la física las trate como aire.
+                    window._ugCellCache        = {};
+                    window._terrainColCache    = {};
+                    window._terrainCache       = null;   // canvas de render del terreno
+                    window._staticLightCanvas  = null;   // canvas de iluminación
+                    window._plantCanvas        = null;   // canvas de plantas subterráneas
+                    window._mineStamp          = (window._mineStamp || 0) + 1;
                 } else {
                     window._pendingMinedCells = null;
                 }
@@ -1256,9 +1268,13 @@ function update() {
             // antes de aplicarla para que vx no acumule los ~0.04-0.12px que causan
             // la micro-oscilación y la "vibración" visual contra bloques de superficie.
             const _wallDir = window.player._wallDir || 0;  // 1=derecha, -1=izquierda, 0=libre
-            const _pressingIntoWall = (_wallDir === 1 && window.keys?.d) || (_wallDir === -1 && window.keys?.a);
-            // Si el jugador quiere saltar MIENTRAS está contra una pared de 1 bloque,
-            // NO suprimimos vx — así puede saltar hacia adelante en lugar de subir en vertical.
+            // Anti-jitter SOLO en suelo: evita la micro-oscilación al presionar contra
+            // una pared estando parado. En el aire NO suprimimos vx para que el jugador
+            // pueda saltar sobre un bloque empujando hacia él — sin esto, checkBlockCollisions
+            // re-detecta la pared cada frame mientras el jugador asciende y pone vx=0,
+            // haciendo que el salto sea completamente vertical.
+            const _pressingIntoWall = !!(window.player.isGrounded &&
+                ((_wallDir === 1 && window.keys?.d) || (_wallDir === -1 && window.keys?.a)));
             const _wantsJump = !!(window.keys?.jumpPressed && window.player.jumpKeyReleased &&
                                   window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead);
             if (_pressingIntoWall && !_wantsJump) {
