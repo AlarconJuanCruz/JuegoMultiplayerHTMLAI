@@ -1347,7 +1347,11 @@ function update() {
                 const _topY = _probeCD.topY;
                 const _foot = window.player.y + window.player.height;
                 const _rTop = Math.max(0, Math.floor((window.player.y - _topY) / _pbs));
-                const _rBot = Math.max(0, Math.floor((_foot - 2 - _topY) / _pbs));
+                // Excluir la fila-suelo: floor((_foot - topY) / bs) - 1.
+                // La fórmula anterior (_foot-2) incluía la fila de suelo cuando
+                // (_foot - topY) % bs >= 2, lo que ocurre durante caída/movimiento,
+                // causando que el suelo del túnel fuera detectado como pared.
+                const _rBot = Math.max(0, Math.floor((_foot - _topY) / _pbs) - 1);
                 for (let _r = _rTop; _r <= _rBot; _r++) {
                     if (window.getUGCellV(_probeCol, _r) !== 'air') return true;
                 }

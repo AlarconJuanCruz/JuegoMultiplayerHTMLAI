@@ -125,105 +125,123 @@ window.checkBlockCollisions = function (axis) {
     //
     if (!window.getUGCellV || !window.getTerrainCol) return hitWallX;
 
-    const pW      = p.width;   // 24px
-    const pH      = p.height;  // 40px
-    const pFeetY  = p.y + pH;
+    const pW     = p.width;   // 24 px
+    const pH     = p.height;  // 40 px
+    const pFeetY = p.y + pH;
 
-    // _surfY: topY MÁXIMO entre todas las columnas que cubre el jugador.
-    const _colL0 = Math.floor(p.x / bs);
-    const _colR0 = Math.floor((p.x + pW - 1) / bs);
-    let _surfY = -1;
-    for (let _c = _colL0; _c <= _colR0; _c++) {
-        const _d = window.getTerrainCol(_c);
-        if (_d && _d.type !== 'hole') _surfY = Math.max(_surfY, _d.topY);
+    // INSET 1 px cada lado → ancho efectivo 22 px.
+    // Jugador 24 px en bloque 30 px = 6 px de holgura; con inset = 8 px.
+    const _xL = p.x + 1;
+    const _xR = p.x + pW - 2;   // p.x + 22
+
+    const colL = Math.floor(_xL / bs);
+    const colR = Math.floor(_xR / bs);
+
+    // GATE — por columna, no por columna central.
+    // Si el jugador tiene parte de su cuerpo bajo la superficie de CUALQUIER
+    // columna que cubre, aplicar UG. Usar centro era el bug principal:
+    // al cambiar de columna central a una colina más alta el gate se disparaba
+    // incorrectamente y desactivaba la colisión UG aunque el jugador estuviera
+    // en una cueva profunda.
+    let _anyUG = false;
+    for (let _gc = colL; _gc <= colR; _gc++) {
+        const _gd = window.getTerrainCol(_gc);
+        if (_gd && _gd.type !== 'hole' && pFeetY > _gd.topY + 4) { _anyUG = true; break; }
     }
-    if (_surfY < 0) return hitWallX; // todo son holes → sin terreno UG
+    if (!_anyUG) return hitWallX;
 
-    // Gate: no aplicar UG si los pies están todavía en/sobre la superficie.
-    if (pFeetY <= _surfY + bs * 0.15) return hitWallX;
-
-    const UG_DEPTH = window.UG_MAX_DEPTH || 90;
+    const UG_DEPTH = window.UG_MAX_DEPTH || 50;
 
     // ────────────────────────────────────────────────────────────────────────────
-    //  EJE X — empuje lateral en paredes de cueva
+    //  EJE X — paredes laterales de cueva
     // ────────────────────────────────────────────────────────────────────────────
     if (axis === 'x') {
-        // Inset 1px por lado → ancho efectivo 22px.
-        // El agujero de 1 bloque (30px) da 8px de holgura con el jugador de 22px.
-        const _xL = p.x + 1;
-        const _xR = p.x + pW - 2;
 
-        for (let vc = Math.floor(_xL / bs); vc <= Math.floor((_xR - 0.01) / bs); vc++) {
+        for (let vc = colL; vc <= colR; vc++) {
             const cd = window.getTerrainCol(vc);
             if (!cd || cd.type === 'hole') continue;
             const topY  = cd.topY;
             const cellX = vc * bs;
 
-            // Filas que el cuerpo del jugador puede tocar.
-            // Excluimos la fila de suelo (cellY >= pFeetY - bs*0.45) para
-            // no bloquear X en esquinas de piso y permitir entrar en agujeros.
-            const rHead = Math.max(0, Math.floor((p.y      - topY) / bs));
-            const rFoot = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs));
-            if (rFoot < 0) continue;
+            // Sin solapamiento X real con esta columna
+            if (_xR <= cellX || _xL >= cellX + bs) continue;
 
-            for (let vr = rHead; vr <= rFoot; vr++) {
+            // Rango de filas que toca el cuerpo del jugador en esta columna.
+            const rTop = Math.max(0, Math.floor((p.y      - topY) / bs));
+            const rBot = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs));
+            if (rBot < 0) continue;
+
+            for (let vr = rTop; vr <= rBot; vr++) {
                 if (window.getUGCellV(vc, vr) === 'air') continue;
                 const cellY = topY + vr * bs;
-                if (cellY < _surfY) continue;
-                // Excluir celdas de suelo: parte inferior del AABB del jugador → no bloquear X
-                if (cellY >= pFeetY - bs * 0.45) continue;
-                // Solapamiento vertical real del cuerpo del jugador con la celda
-                if (p.y >= cellY + bs || pFeetY <= cellY) continue;
-                // Solapamiento horizontal
-                if (_xR <= cellX || _xL >= cellX + bs) continue;
 
-                // Empujar hacia fuera por la menor penetración
-                const pentR = _xR - cellX;
-                const pentL = cellX + bs - _xL;
-                if (p.vx >= 0) { p.x = cellX - pW - 0.5; p.vx = 0; hitWallX = true; }
-                else           { p.x = cellX + bs + 0.5; p.vx = 0; hitWallX = true; }
+                // Excluir celda-suelo: su techo está en el cuarto inferior del AABB.
+                // Esto permite caminar sobre bordes sin que el piso bloquee el eje X.
+                if (cellY >= pFeetY - bs * 0.5) continue;
+
+                // Solapamiento vertical real del cuerpo con la celda
+                if (p.y   >= cellY + bs) continue;  // celda completamente sobre la cabeza
+                if (pFeetY <= cellY)     continue;   // celda completamente bajo los pies
+
+                // Dirección del push: comparar centro del jugador con centro de celda.
+                // Funciona con vx=0 (caída vertical) y con vx≠0 (movimiento lateral).
+                const playerCX = p.x + pW * 0.5;
+                const cellCX   = cellX + bs * 0.5;
+
+                if (playerCX > cellCX) {
+                    // Jugador a la derecha de la celda → empujar a la derecha
+                    p.x = cellX + bs + 0.5;
+                } else {
+                    // Jugador a la izquierda de la celda → empujar a la izquierda
+                    p.x = cellX - pW - 0.5;
+                }
+                p.vx = 0;
+                hitWallX = true;
+                // CRÍTICO: romper el loop de columnas.
+                // Los valores _xL/_xR son anteriores al push; continuar con la
+                // siguiente columna usaría bordes obsoletos y podría causar un
+                // segundo push incorrecto.
+                vc = colR + 1; // fuerza salida del for externo
+                break;
             }
         }
 
     // ────────────────────────────────────────────────────────────────────────────
-    //  EJE Y — aterrizaje (suelo) y rebote (techo)
+    //  EJE Y — suelo (vy ≥ 0) y techo (vy < 0)
     // ────────────────────────────────────────────────────────────────────────────
     } else {
-        // Inset 1px por lado en X para Y también, evita snaps falsos en esquinas.
-        const _yXL = p.x + 1;
-        const _yXR = p.x + pW - 2;
 
-        // Posición de pies en el tick ANTERIOR (para CCD tunnel detection)
-        const _prevFeetY = pFeetY - p.vy;
+        // Posición anterior de pies y cabeza (CCD anti-tunneling)
+        const prevFeetY = pFeetY - p.vy;
 
-        for (let vc = Math.floor(_yXL / bs); vc <= Math.floor((_yXR - 0.01) / bs); vc++) {
+        for (let vc = colL; vc <= colR; vc++) {
             const cd = window.getTerrainCol(vc);
             if (!cd || cd.type === 'hole') continue;
             const topY  = cd.topY;
             const cellX = vc * bs;
 
-            if (_yXR <= cellX || _yXL >= cellX + bs) continue; // sin overlap X
+            // Sin solapamiento horizontal con esta columna
+            if (_xR <= cellX || _xL >= cellX + bs) continue;
 
             if (p.vy >= 0) {
-                // ── CAYENDO / EN SUELO: buscar celda de suelo ─────────────────
-                // Rango: desde la fila de la cabeza hasta la fila de los pies+1 (CCD).
-                const rHead = Math.max(0, Math.floor((p.y      - topY) / bs));
-                const rFoot = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs) + 1);
-                if (rFoot < 0) continue;
+                // ── CAYENDO / EN SUELO ──────────────────────────────────────
+                // CCD: barrer desde la fila de pies ANTERIOR hasta fila actual+1.
+                const scanFrom = Math.max(0, Math.floor((prevFeetY - topY) / bs));
+                const scanTo   = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs) + 1);
+                if (scanTo < 0) continue;
 
-                for (let vr = rHead; vr <= rFoot; vr++) {
+                for (let vr = scanFrom; vr <= scanTo; vr++) {
                     if (window.getUGCellV(vc, vr) === 'air') continue;
                     const cellY = topY + vr * bs;
-                    if (cellY < _surfY) continue;
 
-                    // Solo celdas que actúan como SUELO: su techo debe estar
-                    // a nivel de los pies del jugador (no encima de la cabeza).
-                    if (cellY < p.y) continue; // celda completamente por encima de la cabeza → no es suelo
+                    // La celda-suelo debe estar a la altura de los pies o debajo,
+                    // nunca encima de la cabeza del jugador.
+                    if (cellY < p.y) continue;
 
-                    // CCD: los pies cruzaron el techo de la celda este tick
-                    const crossed  = _prevFeetY <= cellY && pFeetY >= cellY;
-                    // Overlap directo: pies dentro de la celda
-                    const overlap  = pFeetY > cellY && pFeetY <= cellY + bs && p.y < cellY + bs;
+                    // CCD: los pies cruzaron el techo de la celda en este tick
+                    const crossed = prevFeetY <= cellY && pFeetY >= cellY;
+                    // Overlap: pies ya dentro del bloque (estado inicial o lag)
+                    const overlap = pFeetY > cellY && p.y < cellY + bs;
                     if (!crossed && !overlap) continue;
 
                     p.y = cellY - pH;
@@ -233,26 +251,22 @@ window.checkBlockCollisions = function (axis) {
                 }
 
             } else {
-                // ── SUBIENDO: buscar celda de techo ───────────────────────────
-                // Rango: desde la fila por encima de la cabeza hasta la fila de los pies.
-                // CRÍTICO: no incluir filas por DEBAJO de los pies (evita confundir
-                // celdas de suelo con techos y teletransportar al jugador hacia abajo).
-                const rHead = Math.max(0, Math.floor((p.y      - topY) / bs) - 1);
-                const rFoot = Math.min(UG_DEPTH - 1, Math.floor((pFeetY - topY) / bs));
-                if (rFoot < 0) continue;
+                // ── SUBIENDO: detectar celda-techo ──────────────────────────
+                // Solo chequear la fila exacta de la cabeza y la fila anterior.
+                // Con jumpPower=-7.2 y bloque=30px el jugador nunca salta más de
+                // un bloque por tick, así que CCD de techo no es necesario.
+                const headRow  = Math.floor((p.y - topY) / bs);
+                const scanFrom = Math.max(0, headRow - 1);
+                const scanTo   = Math.min(UG_DEPTH - 1, headRow);
 
-                for (let vr = rHead; vr <= rFoot; vr++) {
+                for (let vr = scanFrom; vr <= scanTo; vr++) {
                     if (window.getUGCellV(vc, vr) === 'air') continue;
                     const cellY = topY + vr * bs;
-                    if (cellY < _surfY) continue;
 
-                    // Solo celdas que actúan como TECHO: deben estar por encima o a
-                    // nivel de los pies. Celdas al nivel de suelo se ignoran.
-                    if (cellY >= pFeetY) continue; // celda completamente por debajo de los pies → no es techo
-
-                    // La base de la celda (cellY + bs) debe solapar con la cabeza
-                    if (cellY + bs <= p.y) continue; // celda completamente por encima de la cabeza
-                    if (p.y >= cellY + bs) continue;  // redundante pero explícito
+                    // La celda-techo debe solapar con la zona de la cabeza.
+                    // NO incluir celdas que están completamente bajo los pies.
+                    if (cellY + bs <= p.y) continue;  // celda encima de la cabeza (no toca)
+                    if (cellY      >= pFeetY) continue; // celda bajo los pies → no es techo
 
                     p.y  = cellY + bs;
                     p.vy = 0;
