@@ -914,6 +914,24 @@ window.draw = function() {
                 }
                 C.strokeStyle = '#3a2210'; C.lineWidth = 1.5; C.strokeRect(b.x+0.5, b.y+0.5, bs-1, bs-1);
                 if (b.maxHp) drawCracks(C, b.x, b.y, bs, bs, b.hp/b.maxHp);
+            } else if (b.type === 'stone_block') {
+                const C = window.ctx; const bs = window.game.blockSize;
+                C.fillStyle = b.isHit ? '#ff6666' : '#7a7a7a';
+                C.fillRect(b.x, b.y, bs, bs);
+                if (!b.isHit) {
+                    // Cara superior clara
+                    C.fillStyle = 'rgba(255,255,255,0.13)'; C.fillRect(b.x, b.y, bs, 4);
+                    // Cara inferior oscura
+                    C.fillStyle = 'rgba(0,0,0,0.25)'; C.fillRect(b.x, b.y+bs-5, bs, 5);
+                    // Cara lateral derecha oscura
+                    C.fillStyle = 'rgba(0,0,0,0.12)'; C.fillRect(b.x+bs-4, b.y, 4, bs);
+                    // Veta diagonal para dar textura de granito
+                    C.strokeStyle = 'rgba(180,180,180,0.18)'; C.lineWidth = 1;
+                    C.beginPath(); C.moveTo(b.x+4, b.y+2); C.lineTo(b.x+bs-4, b.y+bs-4); C.stroke();
+                    C.beginPath(); C.moveTo(b.x+10, b.y+2); C.lineTo(b.x+bs-2, b.y+bs-10); C.stroke();
+                }
+                C.strokeStyle = '#555'; C.lineWidth = 2; C.strokeRect(b.x, b.y, bs, bs);
+                if (b.maxHp) drawCracks(C, b.x, b.y, bs, bs, b.hp/b.maxHp);
             } else if (b.type === 'placed_torch') {
                 const C = window.ctx; const bs = window.game.blockSize;
                 const tx = b.x + bs*0.5, ty = b.y + bs*0.7;
@@ -1622,7 +1640,7 @@ window.draw = function() {
         let valid;
         if (window.player.placementMode === 'ladder_item') {
             const lGY2 = window.getGroundY ? window.getGroundY(gridX + bs2/2) : window.game.groundLevel; const alreadyHere2 = window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - gridY) < 1);
-            valid = !alreadyHere2 && (Math.abs((gridY + bs2) - lGY2) <= 2 || window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2) || window.blocks.some(b => b.type === 'block' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2));
+            valid = !alreadyHere2 && (Math.abs((gridY + bs2) - lGY2) <= 2 || window.blocks.some(b => b.type === 'ladder' && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2) || window.blocks.some(b => (b.type === 'block'||b.type==='stone_block'||b.type==='dirt_block') && Math.abs(b.x - gridX) < 1 && Math.abs(b.y - (gridY + bs2)) < 2));
         } else { valid = window.isValidPlacement(gridX, gridY, bs2, bs2, true, false); }
         let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.3)';
         window.ctx.globalAlpha = 0.6;
@@ -1643,8 +1661,14 @@ window.draw = function() {
         let offsetY = window.game.groundLevel % window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX / window.game.blockSize) * window.game.blockSize;
         const gridY = Math.floor((window.mouseWorldY - offsetY) / window.game.blockSize) * window.game.blockSize + offsetY;
-        const isDoor = window.player.buildMode === 'door'; const isStair = window.player.buildMode === 'stair'; const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize; const bs = window.game.blockSize;
-        let valid = window.isValidPlacement(gridX, gridY, bs, itemHeight, true, true); let validColor = valid ? '#00FF00' : '#FF0000'; let validFill = valid ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.3)';
+        const isDoor = window.player.buildMode === 'door'; const isStair = window.player.buildMode === 'stair';
+        const isDirt = window.player.buildMode === 'dirt_block'; const isStone = window.player.buildMode === 'stone_block';
+        const itemHeight = isDoor ? window.game.blockSize * 2 : window.game.blockSize; const bs = window.game.blockSize;
+        let valid = window.isValidPlacement(gridX, gridY, bs, itemHeight, true, true);
+        let validColor = valid ? '#00FF00' : '#FF0000';
+        // Colorear el ghost según tipo de material
+        const _ghostBase = isDirt ? 'rgba(92,61,34,' : isStone ? 'rgba(120,120,120,' : 'rgba(193,154,107,';
+        let validFill = valid ? (_ghostBase + '0.35)') : 'rgba(255,0,0,0.3)';
         window.ctx.save(); window.ctx.globalAlpha = 0.6; window.ctx.strokeStyle = validColor; window.ctx.lineWidth = 2; window.ctx.setLineDash([4, 2]);
         if (isStair) {
             const fr = !window.player.stairMirror; window.ctx.beginPath();
@@ -1652,7 +1676,13 @@ window.draw = function() {
             else { window.ctx.moveTo(gridX, gridY + bs); window.ctx.lineTo(gridX + bs, gridY + bs); window.ctx.lineTo(gridX, gridY); }
             window.ctx.closePath(); window.ctx.fillStyle = validFill; window.ctx.fill(); window.ctx.stroke();
         } else { window.ctx.strokeRect(gridX, gridY, bs, itemHeight); window.ctx.fillStyle = validFill; window.ctx.fillRect(gridX, gridY, bs, itemHeight); }
-        window.ctx.setLineDash([]); window.ctx.globalAlpha = 1.0; window.ctx.restore();
+        // Label del modo actual encima del cursor
+        const _modeLabel = isDirt ? '🟫 Tierra' : isStone ? '⬜ Piedra' : isDoor ? '🚪 Puerta' : isStair ? '📐 Escalón' : '🪵 Madera';
+        window.ctx.setLineDash([]); window.ctx.globalAlpha = 0.85;
+        window.ctx.font = 'bold 11px "VT323", monospace'; window.ctx.textAlign = 'center';
+        window.ctx.fillStyle = '#000'; window.ctx.fillText(_modeLabel, gridX + bs/2 + 1, gridY - 5);
+        window.ctx.fillStyle = valid ? '#ffe' : '#faa'; window.ctx.fillText(_modeLabel, gridX + bs/2, gridY - 6);
+        window.ctx.globalAlpha = 1.0; window.ctx.restore();
     }
 
     // === GUÍA DE TRAYECTORIA: arco ===
@@ -1662,7 +1692,7 @@ window.draw = function() {
         const dx = window.mouseWorldX - pCX;
         const dy = window.mouseWorldY - pCY;
         const angle = Math.atan2(dy, dx);
-        const power = 4 + (window.player.chargeLevel / 100) * 6;
+        const power = 8 + (window.player.chargeLevel / 100) * 12;
         const grav  = window.game.gravity * 0.25;
         const bs    = window.game.blockSize;
 
@@ -1686,6 +1716,11 @@ window.draw = function() {
 
         for (let i = 0; i < _maxSteps; i++) {
             simX += simVx; simVy += grav; simY += simVy;
+
+            // Guardar punto ANTES de chequear colisión para que el último punto
+            // visible siempre esté justo antes de la pared, no dentro de ella.
+            if (i < _visSteps && i % 2 === 0) pts.push({ x: simX, y: simY });
+
             let blocked = false;
 
             // ── Bloques colocados ──────────────────────────────────────────
@@ -1700,8 +1735,6 @@ window.draw = function() {
             if (!blocked) {
                 if (_underground) {
                     // ── UNDERGROUND: solo UG cells, NO getGroundY ─────────────
-                    // getGroundY devuelve topY (la superficie) cuando hay piedra sólida
-                    // en las primeras filas, causando que la simulación termine inmediatamente.
                     if (window.getUGCellV && window.getTerrainCol) {
                         const _sc = Math.floor(simX / bs);
                         const _cd = window.getTerrainCol(_sc);
@@ -1713,25 +1746,17 @@ window.draw = function() {
                             }
                         }
                     }
-                    // Detectar cuando la flecha sube y sale de la cueva a superficie
                     if (!blocked && simY < _surfYBow) {
                         const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
                         if (simY >= gY) { hitX = simX; hitY = gY; break; }
                     }
                 } else {
-                    // ── SUPERFICIE: usar getGroundY ────────────────────────────
-                    // NO checar celdas UG aquí: la fila 0 es piedra sólida pegada
-                    // a la superficie y bloquearía la guía sobre cualquier colina.
-                    // getGroundY ya cubre el techo de terreno correctamente.
                     const gY = window.getGroundY ? window.getGroundY(simX) : window.game.groundLevel;
                     if (simY >= gY) { hitX = simX; hitY = gY; break; }
                 }
             }
 
             if (blocked) { hitX = simX; hitY = simY; break; }
-
-            // Solo guardar hasta _visSteps puntos (rango visible por nivel)
-            if (i < _visSteps && i % 2 === 0) pts.push({ x: simX, y: simY });
         }
 
         // Si no colisionó, el último punto visible es el final de la guía

@@ -597,7 +597,12 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
             const _eColC = Math.floor((ent.x + ent.width*0.5) / window.game.blockSize);
             const _eCDc  = window.getTerrainCol ? window.getTerrainCol(_eColC) : null;
             const _eTopC = (_eCDc && _eCDc.type !== 'hole') ? _eCDc.topY : (window.game.baseGroundLevel||510);
-            if ((ent.y + ent.height) < _eTopC + window.game.blockSize * 1.5 && _gYc < (window.game.baseGroundLevel||510) + 500) {
+            const _eFeetC = ent.y + ent.height;
+            // Solo snapear entidades que están CERCA de la superficie.
+            // Si _eFeetC > _eTopC + blockSize*2, la entidad está en una cueva:
+            // no aplicar snap de superficie (teletransportaría a la entidad arriba).
+            const _eIsUG = _eFeetC > _eTopC + window.game.blockSize * 2;
+            if (!_eIsUG && _eFeetC < _eTopC + window.game.blockSize * 1.5 && _gYc < (window.game.baseGroundLevel||510) + 500) {
                 ent.y = _gYc - ent.height; ent.vy = 0;
             }
             continue;

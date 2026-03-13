@@ -510,7 +510,7 @@ window.addEventListener('keydown', (e) => {
                 if (window.eatFood) window.eatFood(15, 30);
             }
         }
-        if (e.key === 'r' || e.key === 'R') { if (window.player.activeTool === 'hammer') { const modes = ['block','door','stair','dirt_block'], idx = modes.indexOf(window.player.buildMode); window.player.buildMode = modes[(idx+1)%modes.length]; let lbl = window.player.buildMode === 'stair' ? `Escalón (${window.player.stairMirror?'◀':'▶'})` : window.player.buildMode === 'dirt_block' ? '🪨 Bloque de Tierra' : window.player.buildMode; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Modo: ${lbl}`, '#fff'); } }
+        if (e.key === 'r' || e.key === 'R') { if (window.player.activeTool === 'hammer') { const modes = ['block','door','stair','dirt_block','stone_block'], idx = modes.indexOf(window.player.buildMode); window.player.buildMode = modes[(idx+1)%modes.length]; let lbl = window.player.buildMode === 'stair' ? `Escalón (${window.player.stairMirror?'◀':'▶'})` : window.player.buildMode === 'dirt_block' ? '🪨 Bloque Tierra' : window.player.buildMode === 'stone_block' ? '⬜ Bloque Piedra' : window.player.buildMode; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Modo: ${lbl}`, '#fff'); } }
         if (e.key === 't' || e.key === 'T') { if (window.player.activeTool === 'hammer' && window.player.buildMode === 'stair') { window.player.stairMirror = !window.player.stairMirror; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, `Escalón: ${window.player.stairMirror?'◀ izq':'▶ der'}`, '#aaddff'); } }
         if (e.key === 'z' || e.key === 'Z') { window.game.zoomTarget = 1.0; window.spawnDamageText(window.player.x+window.player.width/2, window.player.y-20, 'Zoom: 1.0×', '#aaddff'); }
         if (e.key === '+' || e.key === '=') window.game.zoomTarget = Math.min(window.game.maxZoom, (window.game.zoomTarget||1) + 0.15);
@@ -816,12 +816,19 @@ window.attemptAction = function() {
 
                         // Spawnar item físico que cae con gravedad (se recoge con Y)
                         const dropId = Math.random().toString(36).substring(2, 9);
+                        // Si el bloque roto está bajo la superficie, lanzar el drop hacia abajo.
+                        // vy negativo (hacia arriba) haría que el ítem atravesara el techo de la cueva
+                        // y getGroundY lo snapearía a la superficie. Underground → vy positivo.
+                        const _isCellUG = (window.getTerrainCol && (() => {
+                            const _cd = window.getTerrainCol(mCol);
+                            return _cd && _cd.type !== 'hole' && cellWCY > _cd.topY + 4;
+                        })());
                         const dropItem = {
                             id: dropId,
                             x: cellWCX - 6 + (Math.random()-0.5)*8,
                             y: cellWCY - 4,
                             vx: (Math.random()-0.5) * 2.5,
-                            vy: -2.5 - Math.random() * 1.5,
+                            vy: _isCellUG ? (1.5 + Math.random()) : (-2.5 - Math.random() * 1.5),
                             type: effectiveDrop,
                             amount: dropAmt,
                             life: 1.0
@@ -880,27 +887,37 @@ window.attemptAction = function() {
     if (!actionDone && tool === 'hammer') {
         const bs = window.game.blockSize;
         const gridX = Math.floor(window.mouseWorldX/bs)*bs, gridY = Math.floor(window.mouseWorldY/bs)*bs;
-        const isDoorMode = window.player.buildMode === 'door', isStairMode = window.player.buildMode === 'stair';
-        const isDirtMode = window.player.buildMode === 'dirt_block';
-        const itemHeight = isDoorMode ? bs*2 : bs;
-        const woodCost = isDoorMode ? 4 : (isDirtMode ? 0 : 2);
-        const dirtCost = isDirtMode ? 2 : 0;
+        const isDoorMode  = window.player.buildMode === 'door';
+        const isStairMode = window.player.buildMode === 'stair';
+        const isDirtMode  = window.player.buildMode === 'dirt_block';
+        const isStoneMode = window.player.buildMode === 'stone_block';
+        const itemHeight  = isDoorMode ? bs*2 : bs;
+        // Costos de materiales por tipo de bloque
+        const woodCost  = isDoorMode ? 4 : (isDirtMode || isStoneMode ? 0 : 2);
+        const dirtCost  = isDirtMode  ? 2 : 0;
+        const stoneCost = isStoneMode ? 3 : 0;
         if (Math.hypot(pCX-(gridX+bs/2), pCY-(gridY+itemHeight/2)) <= window.player.miningRange) {
-            const hasWood = (window.player.inventory.wood || 0) >= woodCost;
-            const hasDirt = (window.player.inventory.dirt  || 0) >= dirtCost;
-            if ((woodCost === 0 || hasWood) && (dirtCost === 0 || hasDirt)) {
+            const hasWood  = (window.player.inventory.wood  || 0) >= woodCost;
+            const hasDirt  = (window.player.inventory.dirt  || 0) >= dirtCost;
+            const hasStone = (window.player.inventory.stone || 0) >= stoneCost;
+            if ((woodCost === 0 || hasWood) && (dirtCost === 0 || hasDirt) && (stoneCost === 0 || hasStone)) {
                 if (window.isValidPlacement(gridX, gridY, bs, itemHeight, true, true)) {
-                    let newB = { x: gridX, y: gridY, type: isDoorMode?'door':(isStairMode?'stair':(isDirtMode?'dirt_block':'block')), open: false, hp: isDirtMode?80:300, maxHp: isDirtMode?80:300, isHit: false };
+                    // HP por tipo: tierra=80 (frágil), madera=300, piedra=600 (resistente)
+                    const bType = isDoorMode ? 'door' : isStairMode ? 'stair' : isDirtMode ? 'dirt_block' : isStoneMode ? 'stone_block' : 'block';
+                    const bHp   = isDirtMode ? 80 : isStoneMode ? 600 : 300;
+                    let newB = { x: gridX, y: gridY, type: bType, open: false, hp: bHp, maxHp: bHp, isHit: false };
                     if (isStairMode) newB.facingRight = !window.player.stairMirror;
                     window.blocks.push(newB); window.sendWorldUpdate('place_block', { block: newB });
-                    if (woodCost > 0) window.player.inventory.wood -= woodCost;
-                    if (dirtCost > 0) window.player.inventory.dirt = Math.max(0, (window.player.inventory.dirt||0) - dirtCost);
-                    window.spawnParticles(gridX+15, gridY+15, isDirtMode?'#7a5230':'#D2B48C', 5, 0.5);
+                    if (woodCost  > 0) window.player.inventory.wood  = Math.max(0, (window.player.inventory.wood ||0) - woodCost);
+                    if (dirtCost  > 0) window.player.inventory.dirt  = Math.max(0, (window.player.inventory.dirt ||0) - dirtCost);
+                    if (stoneCost > 0) window.player.inventory.stone = Math.max(0, (window.player.inventory.stone||0) - stoneCost);
+                    const pCol = isStoneMode ? '#aaa' : isDirtMode ? '#7a5230' : '#D2B48C';
+                    window.spawnParticles(gridX+15, gridY+15, pCol, 5, 0.5);
                     if (window.playSound) window.playSound('build'); if (window.updateUI) window.updateUI();
                     window.player.meleeCooldown = 8;
                 } else if (window.game.frameCount % 30 === 0) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY-10, "Lugar Inválido", '#ffaa00');
             } else {
-                const missing = !hasWood ? `¡Faltan ${woodCost} madera!` : `¡Faltan ${dirtCost} tierra!`;
+                const missing = stoneCost > 0 && !hasStone ? `¡Faltan ${stoneCost} piedra!` : !hasWood ? `¡Faltan ${woodCost} madera!` : `¡Faltan ${dirtCost} tierra!`;
                 if (!window._noMatCooldown || window.game.frameCount - window._noMatCooldown > 20) { window._noMatCooldown = window.game.frameCount; window.spawnDamageText(window.mouseWorldX, window.mouseWorldY-10, missing, '#ff6b6b'); if (window.playSound) window.playSound('arrow_break'); }
             }
         }
@@ -932,9 +949,9 @@ window.addEventListener('mousedown', (e) => {
                 if (type === 'ladder') {
                     const lGY = window.getGroundY ? window.getGroundY(gridX+bs2/2) : window.game.groundLevel;
                     const lGroundGridY = Math.ceil(lGY/bs2)*bs2;
-                    validPlace = !window.checkRectIntersection(gridX,gridY,bs2,bs2,window.player.x,window.player.y,window.player.width,window.player.height) && !window.blocks.some(b=>b.type==='ladder'&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-gridY)<1) && ((gridY+bs2)>=lGroundGridY || window.blocks.some(b=>b.type==='ladder'&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-(gridY+bs2))<2) || window.blocks.some(b=>(b.type==='block'||b.type==='stair')&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-(gridY+bs2))<2)) && Math.hypot((window.player.x+window.player.width/2)-(gridX+bs2/2),(window.player.y+window.player.height/2)-(gridY+bs2/2)) <= window.player.miningRange+60;
+                    validPlace = !window.checkRectIntersection(gridX,gridY,bs2,bs2,window.player.x,window.player.y,window.player.width,window.player.height) && !window.blocks.some(b=>b.type==='ladder'&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-gridY)<1) && ((gridY+bs2)>=lGroundGridY || window.blocks.some(b=>b.type==='ladder'&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-(gridY+bs2))<2) || window.blocks.some(b=>(b.type==='block'||b.type==='stone_block'||b.type==='dirt_block'||b.type==='stair')&&Math.abs(b.x-gridX)<1&&Math.abs(b.y-(gridY+bs2))<2)) && Math.hypot((window.player.x+window.player.width/2)-(gridX+bs2/2),(window.player.y+window.player.height/2)-(gridY+bs2/2)) <= window.player.miningRange+60;
                 } else if (type === 'turret') {
-                    const blockBelow = window.blocks.some(b => b.type==='block' && Math.abs(b.x-gridX)<bs2-1 && Math.abs(b.y-(gridY+bs2))<4);
+                    const blockBelow = window.blocks.some(b => (b.type==='block'||b.type==='stone_block'||b.type==='dirt_block') && Math.abs(b.x-gridX)<bs2-1 && Math.abs(b.y-(gridY+bs2))<4);
                     const noOverlap  = !window.blocks.some(b => Math.abs(b.x-gridX)<bs2-1 && Math.abs(b.y-gridY)<bs2-1);
                     const inRange    = Math.hypot((window.player.x+window.player.width/2)-(gridX+bs2/2),(window.player.y+window.player.height/2)-(gridY+bs2/2)) <= (window.player.miningRange||150)+40;
                     if (!blockBelow) window.spawnDamageText(window.mouseWorldX, window.mouseWorldY-10, 'Necesita un bloque debajo', '#ffaa00');
@@ -1091,7 +1108,7 @@ window.addEventListener('mouseup', (e) => {
         if (e.button === 0 && window.player.isCharging) {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
-                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + 6, angle = Math.atan2(window.mouseWorldY-pCY, window.mouseWorldX-pCX), power = 4 + (window.player.chargeLevel/100)*6;
+                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + 6, angle = Math.atan2(window.mouseWorldY-pCY, window.mouseWorldX-pCX), power = 8 + (window.player.chargeLevel/100)*12;
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false, owner: window.socket?.id };
                 window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if (window.playSound) window.playSound('arrow_shoot'); if (window.useTool) window.useTool();
             }
@@ -1550,8 +1567,13 @@ function update() {
 
         // Salto
         if (window.keys?.jumpPressed && window.player.jumpKeyReleased && window.player.coyoteTime > 0 && !window.player.isJumping && !window.player.isDead && !_isClimbing) {
-            const jumpPower = Math.abs(window.player.jumpPower), headroom = Math.ceil((jumpPower*jumpPower) / (2*0.5));
-            window.player.vy = (window.hasCeilingAbove && window.hasCeilingAbove(headroom)) ? Math.max(window.player.jumpPower, -3) : window.player.jumpPower;
+            // hasCeilingAbove: solo reducir potencia si hay techo pegado a la cabeza (< 6px).
+            // Antes se usaba el headroom completo del arco (52px), lo que hacía que con
+            // 1 bloque libre encima (30px) el salto quedara en vy=-3 — casi nulo.
+            // Ahora el jugador siempre salta a plena potencia; checkBlockCollisions('y')
+            // se encarga de detenerlo si golpea el techo durante la subida.
+            const _headTouching = window.hasCeilingAbove && window.hasCeilingAbove(6);
+            window.player.vy = _headTouching ? Math.max(window.player.jumpPower, -3) : window.player.jumpPower;
             window.player.isJumping = true; window.player.coyoteTime = 0; window.player.jumpKeyReleased = false;
             // Si estaba pegado a una pared presionando hacia ella, dar impulso horizontal
             // inmediato para que el salto vaya hacia adelante (no recto hacia arriba)
@@ -1643,7 +1665,7 @@ function update() {
                 if (window.game.frameCount % 5 === 0) window.spawnParticles(b.x+15, b.y+10, '#e67e22', 1, 0.5);
                 if (b.meat > 0) { b.cookTimer++; if (b.cookTimer > 300) { b.meat--; b.cooked++; b.cookTimer = 0; if (window.currentCampfire===b && window.renderCampfireUI) window.renderCampfireUI(); } }
                 if (window.game.isRaining) {
-                    const hasRoof = window.blocks.some(r => (r.type==='block'||r.type==='door') && r.x===b.x && r.y<b.y);
+                    const hasRoof = window.blocks.some(r => (r.type==='block'||r.type==='stone_block'||r.type==='dirt_block'||r.type==='door') && r.x===b.x && r.y<b.y);
                     if (!hasRoof) { b.rainExtinguishTimer = (b.rainExtinguishTimer||0)+1; if (b.rainExtinguishTimer > 150) { b.isBurning = false; b.rainExtinguishTimer = 0; window.spawnParticles(b.x+15,b.y+15,'#aaaaaa',10,0.5); if (window.currentCampfire===b&&window.renderCampfireUI) window.renderCampfireUI(); window.sendWorldUpdate('update_campfire',{x:b.x,y:b.y,wood:b.wood,meat:b.meat,cooked:b.cooked,isBurning:false}); } }
                     else b.rainExtinguishTimer = 0;
                 } else b.rainExtinguishTimer = 0;
@@ -1764,11 +1786,40 @@ function update() {
                 }
             } else {
                 item.vy += window.game.gravity * 0.5; item.x += item.vx; item.y += item.vy; item.vx *= 0.95;
-                const _iGY = window.getGroundY ? window.getGroundY(item.x) : window.game.groundLevel;
-                if (item.y+s >= _iGY) { item.y = _iGY-s; item.vy *= -0.5; item.vx *= 0.8; }
+
+                // Colisión con suelo: distinguir superficie vs underground.
+                // getGroundY siempre devuelve la primera fila sólida (puede ser superficie)
+                // → si el ítem está en una cueva, se teletransportaría a la superficie.
+                const _iCol  = Math.floor(item.x / bs);
+                const _iCD   = window.getTerrainCol ? window.getTerrainCol(_iCol) : null;
+                const _iTopY = (_iCD && _iCD.type !== 'hole') ? _iCD.topY : null;
+                const _itemUnderground = _iTopY !== null && item.y > _iTopY + 4;
+
+                if (_itemUnderground) {
+                    // Colisión con celdas UG directamente bajo el ítem
+                    if (window.getUGCellV && _iCD) {
+                        const _iRow = Math.floor((item.y + (window.itemDefs[item.type]?.size||10) - _iTopY) / bs);
+                        if (_iRow >= 0 && _iRow < (window.UG_MAX_DEPTH||50)) {
+                            const _iMat = window.getUGCellV(_iCol, _iRow);
+                            if (_iMat && _iMat !== 'air') {
+                                const _iCellY = _iTopY + _iRow * bs;
+                                item.y = _iCellY - (window.itemDefs[item.type]?.size||10);
+                                item.vy *= -0.4; item.vx *= 0.7;
+                            }
+                        }
+                    }
+                } else {
+                    const _iGY = window.getGroundY ? window.getGroundY(item.x) : window.game.groundLevel;
+                    if (item.y + (window.itemDefs[item.type]?.size||10) >= _iGY) {
+                        item.y = _iGY - (window.itemDefs[item.type]?.size||10);
+                        item.vy *= -0.5; item.vx *= 0.8;
+                    }
+                }
+
                 for (const b of window.blocks) {
                     if ((b.type==='door'&&b.open)||b.type==='box'||b.type==='campfire'||b.type==='bed'||b.type==='barricade'||b.type==='placed_torch') continue;
                     const bh = b.type==='door'?bs*2:bs;
+                    const s = window.itemDefs[item.type]?.size||10;
                     if (window.checkRectIntersection(item.x,item.y,s,s,b.x,b.y,bs,bh)&&item.vy>0&&item.y+s-item.vy<=b.y) { item.y = b.y-s; item.vy *= -0.5; item.vx *= 0.8; }
                 }
                 if (d < 60 && !window.player.isDead) { anyItemHovered = true; window.player.nearbyItem = item; }
@@ -1812,10 +1863,31 @@ function update() {
             const _prGY = window.getGroundY ? window.getGroundY(pr.x) : window.game.groundLevel;
 
             if (pr.isMolotov) {
-                let hitGround = pr.y >= _prGY, hitBlockM = null;
+                // Detectar si el molotov está underground (igual que las flechas)
+                const _molCol  = Math.floor(pr.x / bs);
+                const _molCD   = window.getTerrainCol ? window.getTerrainCol(_molCol) : null;
+                const _molSurfY = (_molCD && _molCD.type !== 'hole') ? _molCD.topY : _prGY;
+                const _molUG   = pr.y > _molSurfY + 4;
+
+                let hitGround = false;
+                if (_molUG) {
+                    // Underground: colisión con celdas UG bajo el molotov
+                    if (window.getUGCellV && _molCD && _molCD.type !== 'hole') {
+                        const _molRow = Math.floor((pr.y - _molCD.topY) / bs);
+                        if (_molRow >= 0 && _molRow < (window.UG_MAX_DEPTH||50)) {
+                            const _molMat = window.getUGCellV(_molCol, _molRow);
+                            if (_molMat && _molMat !== 'air') hitGround = true;
+                        }
+                    }
+                } else {
+                    // Superficie: usar getGroundY normalmente
+                    hitGround = pr.y >= _prGY;
+                }
+
+                let hitBlockM = null;
                 if (!hitGround) for (const b of window.blocks) { const bh=b.type==='door'?bs*2:bs; if(!b.open&&window.checkRectIntersection(pr.x-4,pr.y-4,10,10,b.x,b.y,bs,bh)){hitBlockM=b;break;} }
                 if (hitGround || hitBlockM || pr.life <= 0) {
-                    const impY = hitGround ? _prGY : (hitBlockM ? hitBlockM.y : pr.y);
+                    const impY = hitGround ? (_molUG ? pr.y : _prGY) : (hitBlockM ? hitBlockM.y : pr.y);
                     if (isMyArrow) {
                         // Jugador local: crear fuego y broadcast a todos
                         const fireParams = window.spawnMolotovFire(pr.x, impY, true);

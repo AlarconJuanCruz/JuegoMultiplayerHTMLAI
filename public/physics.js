@@ -3,6 +3,14 @@
 // window.trees, window.rocks, window.otherPlayers, window.getGroundY,
 // window.checkRectIntersection
 
+// Helper: ¿Es este bloque un bloque sólido construible (no pasable)?
+// Centraliza el chequeo para que agregar nuevos tipos solo requiera cambiar aquí.
+window.isSolidBlock = function(b) {
+    if (!b) return false;
+    return b.type === 'block' || b.type === 'dirt_block' || b.type === 'stone_block' ||
+           b.type === 'door'  || b.type === 'stair';
+};
+
 // ─── Colisiones jugador ────────────────────────────────────────────────────────
 
 /**
@@ -692,7 +700,7 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
         if (isOnGround && window.getTerrainIsFlat) {
             const isFlat = window.getTerrainIsFlat(x + w / 2);
             const hasBlockBelow = window.blocks.some(b =>
-                (b.type === 'block' || b.type === 'stair') &&
+                (b.type === 'block' || b.type === 'dirt_block' || b.type === 'stone_block' || b.type === 'stair') &&
                 Math.abs(b.x - x) < bs - 1 &&
                 Math.abs(b.y - (y + h)) < 4
             );
@@ -744,7 +752,7 @@ window.isValidPlacement = function (x, y, w, h, requireAdjacency = true, isStruc
                 y + h >= groundGridY ||
                 adjacentTerrainSupport ||
                 window.blocks.some(b =>
-                    (b.type === 'block' || b.type === 'ladder' || b.type === 'stair') &&
+                    (b.type === 'block' || b.type === 'dirt_block' || b.type === 'stone_block' || b.type === 'ladder' || b.type === 'stair') &&
                     Math.abs(b.x - x) < 1 &&
                     Math.abs(b.y - (y + h)) < bs / 2
                 );
