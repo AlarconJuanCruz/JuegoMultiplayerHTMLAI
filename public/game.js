@@ -1108,7 +1108,7 @@ window.addEventListener('mouseup', (e) => {
         if (e.button === 0 && window.player.isCharging) {
             if (window.player.chargeLevel > 5 && window.player.inventory.arrows > 0) {
                 window.player.inventory.arrows--;
-                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + 6, angle = Math.atan2(window.mouseWorldY-pCY, window.mouseWorldX-pCX), power = 8 + (window.player.chargeLevel/100)*12;
+                let pCX = window.player.x + window.player.width/2, pCY = window.player.y + 6, angle = Math.atan2(window.mouseWorldY-pCY, window.mouseWorldX-pCX), power = 14 + (window.player.chargeLevel/100)*14;
                 let newArrow = { x: pCX, y: pCY, vx: Math.cos(angle)*power, vy: Math.sin(angle)*power, life: 250, damage: window.getBowDamage(), isEnemy: false, owner: window.socket?.id };
                 window.projectiles.push(newArrow); window.sendWorldUpdate('spawn_projectile', newArrow); if (window.playSound) window.playSound('arrow_shoot'); if (window.useTool) window.useTool();
             }

@@ -260,9 +260,16 @@ window.checkBlockCollisions = function (axis) {
 
             } else {
                 // ── SUBIENDO: detectar celda-techo ──────────────────────────
-                // Solo chequear la fila exacta de la cabeza y la fila anterior.
-                // Con jumpPower=-7.2 y bloque=30px el jugador nunca salta más de
-                // un bloque por tick, así que CCD de techo no es necesario.
+                // Solapamiento horizontal mínimo: 4 px.
+                // Con inset=1px el jugador puede tocar una PARED lateral con solo
+                // 1-2px de overlap. Esa celda de pared a altura de cabeza pasaba el
+                // check de overlap del loop exterior y se detectaba como techo →
+                // p.y se empujaba hacia ABAJO → salto completamente bloqueado.
+                // Exigir ≥ 4px de solapamiento horizontal filtra esas celdas-pared
+                // sin afectar techos reales (que solapan 10-22px con el centro del player).
+                const _ceilOverlap = Math.min(_xR, cellX + bs) - Math.max(_xL, cellX);
+                if (_ceilOverlap < 4) continue;
+
                 const headRow  = Math.floor((p.y - topY) / bs);
                 const scanFrom = Math.max(0, headRow - 1);
                 const scanTo   = Math.min(UG_DEPTH - 1, headRow);
@@ -271,10 +278,8 @@ window.checkBlockCollisions = function (axis) {
                     if (window.getUGCellV(vc, vr) === 'air') continue;
                     const cellY = topY + vr * bs;
 
-                    // La celda-techo debe solapar con la zona de la cabeza.
-                    // NO incluir celdas que están completamente bajo los pies.
-                    if (cellY + bs <= p.y) continue;  // celda encima de la cabeza (no toca)
-                    if (cellY      >= pFeetY) continue; // celda bajo los pies → no es techo
+                    if (cellY + bs <= p.y) continue;  // celda completamente sobre la cabeza
+                    if (cellY      >= pFeetY) continue; // celda bajo los pies
 
                     p.y  = cellY + bs;
                     p.vy = 0;
@@ -314,20 +319,25 @@ window.hasCeilingAbove = function (margin) {
     }
 
     // Bloques UG (techo de cueva)
+    // IMPORTANTE: usar un chequeo estricto — solo contar si el borde INFERIOR de la
+    // celda techo está ENCIMA de la cabeza del jugador (cellY+bs < p.y) y dentro del
+    // margen. La intersección de rectángulos es incorrecta porque cuenta celdas cuyo
+    // borde inferior está DEBAJO de la cabeza (overlap estático en túneles estrechos),
+    // causando que el salto se reduzca a -3 aunque haya espacio libre encima.
     if (window.getUGCellV && window.getTerrainCol) {
         const colL = Math.floor((p.x + 2) / bs);
         const colR = Math.floor((p.x + p.width - 3) / bs);
         for (let vc = colL; vc <= colR; vc++) {
             const cd = window.getTerrainCol(vc);
             if (!cd || cd.type === 'hole') continue;
-            // Fila del techo: la celda justo encima de la cabeza del jugador
-            const rowHead = Math.floor((cy - cd.topY) / bs);
-            const rowCheck = Math.max(0, rowHead);
-            for (let vr = rowCheck; vr <= rowCheck + Math.ceil(ch / bs) + 1; vr++) {
+            const rowHead = Math.max(0, Math.floor((p.y - cd.topY) / bs) - 1);
+            for (let vr = rowHead; vr <= rowHead + Math.ceil(margin / bs) + 1; vr++) {
                 const mat = window.getUGCellV(vc, vr);
                 if (!mat || mat === 'air') continue;
                 const cellY = cd.topY + vr * bs;
-                if (window.checkRectIntersection(cx, cy, cw, ch, vc * bs, cellY, bs, bs)) return true;
+                // Borde inferior de la celda debe estar ESTRICTAMENTE por encima de la
+                // cabeza del jugador (cellY+bs < p.y) y dentro del margen buscado.
+                if (cellY + bs < p.y && cellY + bs >= p.y - margin) return true;
             }
         }
     }
