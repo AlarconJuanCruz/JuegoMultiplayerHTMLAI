@@ -417,6 +417,12 @@ window.draw = function() {
                         }
                         const mat = window.getUGCellV(col, row);
                         if (mat === 'air') {
+                            // Filas 0-2 son la capa de tierra superficial (dirt rows).
+                            // Si están minadas (air), deben ser TRANSPARENTES — el cielo
+                            // del fondo se ve a través. Las cuevas reales empiezan en row 4+,
+                            // así que nunca habrá aire natural aquí.
+                            // Filas 3+: dibujar fondo oscuro de cueva normalmente.
+                            if (row < 3) { CC.clearRect(cx, cy, dW, cH); continue; }
                             const v = ((col*374761393^row*1103515245)>>>0)/0xFFFFFFFF;
                             CC.fillStyle = v > 0.55 ? BG_VAR : BG_DARK; CC.fillRect(cx, cy, dW, cH);
                             if (row%4===0){ CC.fillStyle='rgba(0,0,0,0.35)'; CC.fillRect(cx,cy,dW,1); }
