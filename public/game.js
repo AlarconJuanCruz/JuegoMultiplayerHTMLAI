@@ -1460,21 +1460,32 @@ function update() {
         // la superficie original (_surfTopYG). Si hay celdas minadas debajo de la
         // superficie, _pGroundY > _surfTopYG → snap se desactiva y UG toma control.
         // Esto elimina el solapamiento entre los dos sistemas.
+        //
+        // MULTI-PUNTO: verificar borde izquierdo, centro y borde derecho del jugador.
+        // Con solo el centro, si el jugador entra a un agujero por el borde, el centro
+        // cae sobre columna sólida → _groundIsOriginalSurface=true → snap lo saca.
+        // Tomamos el groundY MÁXIMO de los 3 puntos: si cualquier punto está sobre
+        // un agujero minado, el mayor groundY hace que _groundIsOriginalSurface=false.
         const _pMidColG  = Math.floor((window.player.x + window.player.width/2) / window.game.blockSize);
         const _pColDataG = window.getTerrainCol ? window.getTerrainCol(_pMidColG) : null;
         const _surfTopYG = (_pColDataG && _pColDataG.type !== 'hole')
                            ? _pColDataG.topY : (window.game.baseGroundLevel || 510);
-        const _pGroundY  = window.getGroundY
-                           ? window.getGroundY(window.player.x + window.player.width/2)
-                           : window.game.groundLevel;
+        const _snapXs = [
+            window.player.x + 2,
+            window.player.x + window.player.width / 2,
+            window.player.x + window.player.width - 3
+        ];
+        // Tomar el groundY máximo entre los 3 puntos: si alguno cae en agujero minado,
+        // ese groundY sube → ya no coincide con _surfTopYG → snap queda inactivo.
+        const _pGroundY = window.getGroundY
+            ? Math.max(..._snapXs.map(sx => window.getGroundY(sx)))
+            : window.game.groundLevel;
         const _pIsOverHole = _pGroundY > (window.game.baseGroundLevel || 510) + 500;
         const footY = window.player.y + window.player.height;
 
         // Solo snap si el suelo real ES la superficie original (no hay mining debajo)
         // Tolerancia de 4px para errores de float entre topY del jugador y getGroundY
         // GUARD DE PROFUNDIDAD: no snap si los pies están más de 1 bloque bajo la superficie.
-        // Sin este guard, el snap disparaba cuando el jugador underground empujaba su columna
-        // central a una no-minada (footY >> topY pero _groundIsOriginalSurface = true → teleport).
         const _snapDepthOK = footY < _surfTopYG + window.game.blockSize * 1.1;
         const _groundIsOriginalSurface = Math.abs(_pGroundY - _surfTopYG) < 4;
         if (_groundIsOriginalSurface && _snapDepthOK && !_pIsOverHole && footY > _pGroundY && window.player.vy >= 0) {

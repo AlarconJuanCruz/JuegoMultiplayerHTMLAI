@@ -2318,7 +2318,10 @@ window.draw = function() {
     }
 
     // === LLUVIA (gotas simplificadas, Q≠low) ===
-    if (window.game.isRaining && Q !== 'low') {
+    // Rain only on surface — when underground getGroundY returns surface topY which
+    // maps to the middle of the visible area in cave view, making drops appear to fall
+    // through rock walls. Simply skip rain rendering entirely when underground.
+    if (window.game.isRaining && Q !== 'low' && _onSurface) {
         const C = window.ctx;
         const RAIN_COUNT = Q === 'high' ? 160 : 100; // reducido de 350/220
         if (!window._rainDrops || window._rainDrops.length !== RAIN_COUNT) {

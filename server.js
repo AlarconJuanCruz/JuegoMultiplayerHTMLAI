@@ -86,8 +86,14 @@ setInterval(() => {
 // ── Limpieza de salas vacías (cada 60s) ───────────────────────────────────────
 setInterval(() => {
     for (const [id, room] of Object.entries(rooms)) {
+        // La sala global NUNCA se elimina de memoria.
+        // Si se borrara, al reconectar se llamaría loadRoomState que lee el
+        // archivo — pero saveRoomState es async/debounced y puede no haber
+        // flusheado aún los últimos minedCells, perdiendo celdas recientes.
+        // Mantenerla en memoria garantiza que el estado en RAM siempre es el más reciente.
+        if (room.name === '__global__') { saveRoomStateNow(room); continue; }
         if (Object.keys(room.players).length === 0) {
-            saveRoomState(room); // usa _persistKey(room) → key correcto
+            saveRoomStateNow(room);
             delete rooms[id];
             console.log(`[rooms] Sala ${id} guardada y eliminada por inactividad`);
         }

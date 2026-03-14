@@ -601,7 +601,7 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
             // Solo snapear entidades que están CERCA de la superficie.
             // Si _eFeetC > _eTopC + blockSize*2, la entidad está en una cueva:
             // no aplicar snap de superficie (teletransportaría a la entidad arriba).
-            const _eIsUG = _eFeetC > _eTopC + window.game.blockSize * 2;
+            const _eIsUG = ent.inCave || _eFeetC > _eTopC + window.game.blockSize * 2;
             if (!_eIsUG && _eFeetC < _eTopC + window.game.blockSize * 1.5 && _gYc < (window.game.baseGroundLevel||510) + 500) {
                 ent.y = _gYc - ent.height; ent.vy = 0;
             }
@@ -628,12 +628,12 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
         if (window.checkEntityUGCollisions) window.checkEntityUGCollisions(ent, 'y');
 
         const entGY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
-        // Solo snap superficial cuando la entidad está cerca de la superficie.
-        // Bajo tierra, la gravedad y checkEntityCollisions la mantienen en el suelo de la cueva.
+        // Solo snap superficial cuando la entidad está cerca de la superficie Y no es de cueva.
+        // inCave entities viven underground: snap a entGY (superficie) las teletransportaría afuera.
         const _eCol = Math.floor((ent.x + ent.width * 0.5) / window.game.blockSize);
         const _eCD  = window.getTerrainCol ? window.getTerrainCol(_eCol) : null;
         const _eTopY = (_eCD && _eCD.type !== 'hole') ? _eCD.topY : (window.game.baseGroundLevel || 510);
-        const _eFeetNear = (ent.y + ent.height) < _eTopY + window.game.blockSize * 1.5;
+        const _eFeetNear = !ent.inCave && (ent.y + ent.height) < _eTopY + window.game.blockSize * 1.5;
         if (_eFeetNear) {
             if (ent.y + ent.height >= entGY)      { ent.y = entGY - ent.height; ent.vy = 0; }
             else if (ent.vy >= 0 && ent.y + ent.height >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
