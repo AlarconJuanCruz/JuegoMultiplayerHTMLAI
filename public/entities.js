@@ -624,6 +624,15 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
 
         ent.vy += window.game.gravity;
         ent.y  += ent.vy;
+        // Entidades de cueva no pueden salir al exterior saltando.
+        // Sin este guard, la IA (jump para esquivar obstáculos) podría subirlas
+        // por encima del topY de la columna → la entidad sale a la superficie.
+        if (ent.inCave && window.getTerrainCol) {
+            const _entCapCol = Math.floor((ent.x + ent.width * 0.5) / window.game.blockSize);
+            const _entCapCD  = window.getTerrainCol(_entCapCol);
+            const _entCapTopY = (_entCapCD && _entCapCD.type !== 'hole') ? _entCapCD.topY : (window.game.baseGroundLevel || 510);
+            if (ent.y < _entCapTopY) { ent.y = _entCapTopY; if (ent.vy < 0) ent.vy = 0; }
+        }
         window.checkEntityCollisions(ent, 'y');
         if (window.checkEntityUGCollisions) window.checkEntityUGCollisions(ent, 'y');
 

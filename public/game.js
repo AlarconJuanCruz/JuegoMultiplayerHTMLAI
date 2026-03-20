@@ -129,7 +129,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
             // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
             // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
-            window._CLIENT_VERSION = 36;  // ← debe coincidir con SERVER_VERSION en server.js
+            window._CLIENT_VERSION = 37;  // ← debe coincidir con SERVER_VERSION en server.js
             window.socket.on('serverVersion', (v) => {
                 if (v !== window._CLIENT_VERSION) {
                     console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
@@ -1392,9 +1392,15 @@ function update() {
                 : window.player.x - 2;
             const _probeCol = Math.floor(_probeX / _pbs);
             const _probeCD  = window.getTerrainCol ? window.getTerrainCol(_probeCol) : null;
-            // Pared de terreno (acantilado de superficie)
+            // Pared de terreno (acantilado de superficie):
+            // Solo aplica cuando el jugador está cerca de la superficie (pies a ≤1.5 bloques del topY).
+            // Underground, el topY de la columna adyacente siempre es menor que los pies del jugador
+            // → sin este guard, _terrainWall=true aunque el jugador esté 2+ bloques bajo tierra,
+            // manteniendo _wallDir activo → vx=0 → el jugador no puede moverse en la cueva.
+            const _feetDepth = (window.player.y + window.player.height) - (_probeCD ? _probeCD.topY : 0);
             const _terrainWall = _probeCD && _probeCD.type !== 'hole' &&
-                _probeCD.topY < (window.player.y + window.player.height) - _pbs * 0.85;
+                _probeCD.topY < (window.player.y + window.player.height) - _pbs * 0.85 &&
+                _feetDepth <= _pbs * 1.5;
             // Pared de celda UG (cueva)
             const _ugWall = !_terrainWall && !!window.getUGCellV && (() => {
                 if (!_probeCD || _probeCD.type === 'hole') return false;
