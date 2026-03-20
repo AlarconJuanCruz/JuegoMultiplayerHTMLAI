@@ -1014,7 +1014,7 @@ window.draw = function() {
         }
     });
 
-    if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { if (typeof window.drawCharacter === 'function') window.drawCharacter(p, false); } }); }
+    if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
 
     // Jugador: interpolar posición visual para suavizar a alta tasa de frames
     if (!window.player.inBackground) {
@@ -1024,13 +1024,7 @@ window.draw = function() {
             window.player.x = window.player._prevX + (_pRealX - window.player._prevX) * _ra2;
             window.player.y = window.player._prevY + (_pRealY - window.player._prevY) * _ra2;
         }
-        if (typeof window.drawCharacter === 'function') {
-            window.drawCharacter(window.player, true);
-        } else {
-            // Fallback: rectángulo simple si render_character.js aún no cargó
-            window.ctx.fillStyle = '#4488ff';
-            window.ctx.fillRect(window.player.x, window.player.y, window.player.width, window.player.height);
-        }
+        window.drawCharacter(window.player, true);
         window.player.x = _pRealX;
         window.player.y = _pRealY;
     }
