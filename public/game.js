@@ -111,6 +111,21 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
 
             window.socket.on('disconnect', () => { alert("⚠ Conexión perdida. La partida se reiniciará."); window.location.reload(); });
 
+            // Render.com tiene cold-start: el servidor puede tardar 30-60s en despertar.
+            // Si el socket no conecta en ese tiempo, mostrar aviso en vez de pantalla en blanco.
+            const _connTimeout = setTimeout(() => {
+                if (!window.socket.connected) {
+                    const _sInfo = window.getEl('server-info');
+                    if (_sInfo) { _sInfo.style.background = 'rgba(255,80,30,0.85)'; }
+                    if (window.addGlobalMessage) window.addGlobalMessage('⚠️ El servidor tarda en responder (cold start). Reintentando…', '#f0a020');
+                }
+            }, 15000);
+            window.socket.on('connect', () => clearTimeout(_connTimeout));
+            window.socket.on('connect_error', (err) => {
+                console.warn('[socket] connect_error:', err.message);
+                if (window.addGlobalMessage) window.addGlobalMessage(`⚠️ Sin conexión: ${err.message}`, '#ff4444');
+            });
+
             // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
             // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
             // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
@@ -118,8 +133,14 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             window.socket.on('serverVersion', (v) => {
                 if (v !== window._CLIENT_VERSION) {
                     console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
-                    // Forzar recarga ignorando caché del navegador
-                    window.location.reload(true);
+                    // Proteger contra reload loop: si ya recargamos hace menos de 5s, no volver a recargar
+                    const _lastReload = parseInt(sessionStorage.getItem('_lastVersionReload') || '0');
+                    if (Date.now() - _lastReload > 5000) {
+                        sessionStorage.setItem('_lastVersionReload', Date.now());
+                        window.location.reload(true);
+                    } else {
+                        console.warn('[versión] Reload loop detectado — omitiendo recarga automática');
+                    }
                 }
             });
             window.socket.on('currentPlayers', (srvPlayers) => { window.otherPlayers = srvPlayers; let pCount = window.getEl('sv-players'); if (pCount) pCount.innerText = Object.keys(srvPlayers).length; });

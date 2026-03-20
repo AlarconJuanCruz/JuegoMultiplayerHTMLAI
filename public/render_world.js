@@ -337,23 +337,41 @@ window.draw = function() {
         const _dStart  = (window.game.desertStart || 2600) + window.game.shoreX; const _dWidth = window.game.desertWidth || 800;
 
         // Patrones de textura dirt y sand (se crean una vez)
-        if (!window._dirtPattern && window.sprites.tile_dirt.complete && window.sprites.tile_dirt.naturalWidth > 0) {
+        if (!window._dirtPattern && window.sprites.tile_dirt.complete && window.sprites.tile_dirt.naturalWidth > 0 && !window.sprites.tile_dirt._failed) {
             const tc = document.createElement('canvas'); tc.width = 64; tc.height = 64; tc.getContext('2d').drawImage(window.sprites.tile_dirt, 0, 0); window._dirtPattern = window.ctx.createPattern(tc, 'repeat');
         }
-        if (!window._sandPattern && window.sprites.tile_sand_base.complete && window.sprites.tile_sand_base.naturalWidth > 0) {
+        if (!window._sandPattern && window.sprites.tile_sand_base.complete && !window.sprites.tile_sand_base._failed && window.sprites.tile_sand_base.naturalWidth > 0) {
             const sc = document.createElement('canvas'); sc.width = 64; sc.height = 64; sc.getContext('2d').drawImage(window.sprites.tile_sand_base, 0, 0); window._sandPattern = window.ctx.createPattern(sc, 'repeat');
+        } else if (!window._sandPattern && window.sprites.tile_sand_base._failed) {
+            // Sprite no disponible: usar color sólido como patrón
+            window._sandPattern = '#d4a853';
         }
 
         function colDesert(cx) { if (cx > _dStart + _dWidth) return 1; if (cx > _dStart) return (cx - _dStart) / _dWidth; return 0; }
 
         // Dibuja un tramo sólido [colA,colB]: dirt + arena + degradé profundidad
+        // effectiveTopY: baja por celdas minadas (air) para encontrar la primera sólida.
+        // Sin esto, el fill de dirt se dibuja desde topY aunque rows 0-2 estén minados
+        // → se ve el patrón verde/tierra como fondo en los agujeros de superficie.
+        function _effectiveTopY(col, d) {
+            if (!window.getUGCellV || window.getUGCellV(col, 0) !== 'air') return d.topY;
+            // Buscar primera fila sólida (máximo 3 filas — la dirt layer superficial)
+            for (let r = 1; r <= 3; r++) {
+                if (window.getUGCellV(col, r) !== 'air') return d.topY + r * bs;
+            }
+            // Todas las filas superficiales minadas: devolver un valor muy bajo para
+            // que el fill quede completamente oculto por el terrain cache underground.
+            return d.topY + 4 * bs;
+        }
+
         function drawSolidSegment(colA, colB) {
             window.ctx.save(); window.ctx.beginPath(); window.ctx.moveTo(colA * bs, bottomY);
             for (let col = colA; col <= colB + 1; col++) {
                 const d = window.getTerrainCol ? window.getTerrainCol(col) : { topY: base, type: 'flat' }; const x = col * bs; if (d.type === 'hole') break;
-                if (d.type === 'ramp_r') { const nd = window.getTerrainCol ? window.getTerrainCol(col + 1) : d; const nY = (nd && nd.type !== 'hole') ? nd.topY : d.topY + bs; window.ctx.lineTo(x, d.topY); window.ctx.lineTo(x + bs, nY); }
-                else if (d.type === 'ramp_l') { const pd = window.getTerrainCol ? window.getTerrainCol(col - 1) : d; const pY = (pd && pd.type !== 'hole') ? pd.topY : d.topY + bs; window.ctx.lineTo(x, pY); window.ctx.lineTo(x + bs, d.topY); }
-                else { window.ctx.lineTo(x, d.topY); window.ctx.lineTo(x + bs, d.topY); }
+                const eTopY = _effectiveTopY(col, d);
+                if (d.type === 'ramp_r') { const nd = window.getTerrainCol ? window.getTerrainCol(col + 1) : d; const nY = (nd && nd.type !== 'hole') ? _effectiveTopY(col+1, nd) : eTopY + bs; window.ctx.lineTo(x, eTopY); window.ctx.lineTo(x + bs, nY); }
+                else if (d.type === 'ramp_l') { const pd = window.getTerrainCol ? window.getTerrainCol(col - 1) : d; const pY = (pd && pd.type !== 'hole') ? _effectiveTopY(col-1, pd) : eTopY + bs; window.ctx.lineTo(x, pY); window.ctx.lineTo(x + bs, eTopY); }
+                else { window.ctx.lineTo(x, eTopY); window.ctx.lineTo(x + bs, eTopY); }
             }
             window.ctx.lineTo((colB + 1) * bs, bottomY); window.ctx.closePath(); window.ctx.clip();
             window.ctx.fillStyle = window._dirtPattern || '#3d2412'; window.ctx.fillRect(colA * bs, window.camera.y - 400, (colB - colA + 2) * bs, bottomY - window.camera.y + 500);
@@ -996,7 +1014,7 @@ window.draw = function() {
         }
     });
 
-    if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { window.drawCharacter(p, false); } }); }
+    if (window.game.isMultiplayer) { Object.values(window.otherPlayers).forEach(p => { if (p.id !== window.socket?.id && p.x > _visLeft - 50 && p.x < _visRight + 150) { if (typeof window.drawCharacter === 'function') window.drawCharacter(p, false); } }); }
 
     // Jugador: interpolar posición visual para suavizar a alta tasa de frames
     if (!window.player.inBackground) {
@@ -1006,7 +1024,13 @@ window.draw = function() {
             window.player.x = window.player._prevX + (_pRealX - window.player._prevX) * _ra2;
             window.player.y = window.player._prevY + (_pRealY - window.player._prevY) * _ra2;
         }
-        window.drawCharacter(window.player, true);
+        if (typeof window.drawCharacter === 'function') {
+            window.drawCharacter(window.player, true);
+        } else {
+            // Fallback: rectángulo simple si render_character.js aún no cargó
+            window.ctx.fillStyle = '#4488ff';
+            window.ctx.fillRect(window.player.x, window.player.y, window.player.width, window.player.height);
+        }
         window.player.x = _pRealX;
         window.player.y = _pRealY;
     }

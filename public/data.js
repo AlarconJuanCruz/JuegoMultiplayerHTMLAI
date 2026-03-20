@@ -26,21 +26,23 @@ window.sprites = {
 
 (function loadSprites() {
     const s = window.sprites;
-    s.tree_oak.src            = 'assets/tree_oak.png';
-    s.tree_pine.src           = 'assets/tree_pine.png';
-    s.tree_birch.src          = 'assets/tree_birch.png';
-    s.tree_stump.src          = 'assets/tree_stump.png';
-    s.rock_full.src           = 'assets/rock_full.png';
-    s.rock_damaged.src        = 'assets/rock_damaged.png';
-    s.tile_grass_top.src      = 'assets/tile_grass_top.png';
-    s.tile_dirt.src           = 'assets/tile_dirt.png';
-    s.tile_sand_top.src       = 'assets/tile_sand_top.png';
-    s.tile_sand_base.src      = 'assets/tile_sand_base.png';
-    s.bg_mountains_back.src   = 'assets/bg_mountains_back.png';
-    s.bg_mountains_mid.src    = 'assets/bg_mountains_mid.png';
-    s.sprite_sun.src          = 'assets/sprite_sun.png';
-    s.sprite_moon.src         = 'assets/sprite_moon.png';
-    s.sprite_cloud.src        = 'assets/sprite_cloud.png';
+    // Marcar sprites fallidos para que el código de render use fallbacks de color
+    function _safe(img) { img.onerror = () => { img._failed = true; }; return img; }
+    _safe(s.tree_oak).src            = 'assets/tree_oak.png';
+    _safe(s.tree_pine).src           = 'assets/tree_pine.png';
+    _safe(s.tree_birch).src          = 'assets/tree_birch.png';
+    _safe(s.tree_stump).src          = 'assets/tree_stump.png';
+    _safe(s.rock_full).src           = 'assets/rock_full.png';
+    _safe(s.rock_damaged).src        = 'assets/rock_damaged.png';
+    _safe(s.tile_grass_top).src      = 'assets/tile_grass_top.png';
+    _safe(s.tile_dirt).src           = 'assets/tile_dirt.png';
+    _safe(s.tile_sand_top).src       = 'assets/tile_sand_top.png';
+    _safe(s.tile_sand_base).src      = 'assets/tile_sand_base.png';
+    _safe(s.bg_mountains_back).src   = 'assets/bg_mountains_back.png';
+    _safe(s.bg_mountains_mid).src    = 'assets/bg_mountains_mid.png';
+    _safe(s.sprite_sun).src          = 'assets/sprite_sun.png';
+    _safe(s.sprite_moon).src         = 'assets/sprite_moon.png';
+    _safe(s.sprite_cloud).src        = 'assets/sprite_cloud.png';
 })();
 
 // ─── HiDPI ────────────────────────────────────────────────────────────────────
