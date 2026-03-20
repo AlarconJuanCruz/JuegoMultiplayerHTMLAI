@@ -129,7 +129,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
             // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
             // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
-            window._CLIENT_VERSION = 33;  // ← debe coincidir con SERVER_VERSION en server.js
+            window._CLIENT_VERSION = 34;  // ← debe coincidir con SERVER_VERSION en server.js
             window.socket.on('serverVersion', (v) => {
                 if (v !== window._CLIENT_VERSION) {
                     console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
