@@ -9,7 +9,7 @@ const { Server } = require('socket.io');
 // Incrementar este número cada vez que se despliega una actualización importante
 // de client-side (game.js, render_world.js, physics.js, etc.) para que los clientes
 // con caché vieja detecten el mismatch y hagan reload automático.
-const SERVER_VERSION = 35;  // ← bump this on every deploy
+const SERVER_VERSION = 36;  // ← bump this on every deploy
 
 const app    = express();
 const server = http.createServer(app);

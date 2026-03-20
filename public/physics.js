@@ -154,7 +154,16 @@ window.checkBlockCollisions = function (axis) {
     let _anyUG = false;
     for (let _gc = colL; _gc <= colR; _gc++) {
         const _gd = window.getTerrainCol(_gc);
-        if (_gd && _gd.type !== 'hole' && pFeetY > _gd.topY + 4) { _anyUG = true; break; }
+        if (!_gd || _gd.type === 'hole') continue;
+        // Condición estándar: pies bajo la superficie
+        if (pFeetY > _gd.topY + 4) { _anyUG = true; break; }
+        // Condición adicional: row 0 minado Y jugador cerca de la superficie.
+        // Sin esto, al pararse sobre el primer bloque sólido post-minado (pFeetY = topY+bs),
+        // el gate no activa porque el chequeo normal require pFeetY > topY+4 que es topY+30 > topY+4 → true...
+        // Pero sí hay el caso de transición donde pFeetY = topY exacto (acaba de pisar la columna).
+        if (pFeetY >= _gd.topY - 4 && window.getUGCellV && window.getUGCellV(_gc, 0) === 'air') {
+            _anyUG = true; break;
+        }
     }
     if (!_anyUG) return hitWallX;
 

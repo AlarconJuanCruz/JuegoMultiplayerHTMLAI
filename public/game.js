@@ -129,7 +129,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
             // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
             // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
-            window._CLIENT_VERSION = 35;  // ← debe coincidir con SERVER_VERSION en server.js
+            window._CLIENT_VERSION = 36;  // ← debe coincidir con SERVER_VERSION en server.js
             window.socket.on('serverVersion', (v) => {
                 if (v !== window._CLIENT_VERSION) {
                     console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
@@ -1505,9 +1505,11 @@ function update() {
         const footY = window.player.y + window.player.height;
 
         // Solo snap si el suelo real ES la superficie original (no hay mining debajo)
-        // Tolerancia de 4px para errores de float entre topY del jugador y getGroundY
-        // GUARD DE PROFUNDIDAD: no snap si los pies están más de 1 bloque bajo la superficie.
-        const _snapDepthOK = footY < _surfTopYG + window.game.blockSize * 1.1;
+        // _snapDepthOK: el jugador debe estar AL NIVEL del suelo real (_pGroundY), no 1+ bloque debajo.
+        // Con la regla anterior (footY < _surfTopYG + bs*1.1), si el jugador estaba a row 1
+        // (topY+30) y caminaba hacia columna no-minada (_pGroundY=topY), el snap lo teletransportaba
+        // 30px arriba. Ahora: solo snapear si footY está a 4px o menos del _pGroundY real.
+        const _snapDepthOK = footY <= _pGroundY + 4;
         const _groundIsOriginalSurface = Math.abs(_pGroundY - _surfTopYG) < 4;
         if (_groundIsOriginalSurface && _snapDepthOK && !_pIsOverHole && footY > _pGroundY && window.player.vy >= 0) {
             window.player.y = _pGroundY - window.player.height;

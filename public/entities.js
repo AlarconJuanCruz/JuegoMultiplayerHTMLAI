@@ -629,14 +629,20 @@ window.updateEntities = function (isDay, isNight, isHoldingTorch, pCX, pCY) {
 
         const entGY = window.getGroundY ? window.getGroundY(ent.x + ent.width / 2) : window.game.groundLevel;
         // Solo snap superficial cuando la entidad está cerca de la superficie Y no es de cueva.
-        // inCave entities viven underground: snap a entGY (superficie) las teletransportaría afuera.
+        // La condición ahora es más estricta: los pies deben estar muy cerca de entGY (±8px),
+        // no solo "cerca del topY geométrico". Sin esto, entidades que suben por IA (vy negativo)
+        // podían entrar en la ventana _eTopY + bs*1.5 y recibir el snap de superficie.
         const _eCol = Math.floor((ent.x + ent.width * 0.5) / window.game.blockSize);
         const _eCD  = window.getTerrainCol ? window.getTerrainCol(_eCol) : null;
         const _eTopY = (_eCD && _eCD.type !== 'hole') ? _eCD.topY : (window.game.baseGroundLevel || 510);
-        const _eFeetNear = !ent.inCave && (ent.y + ent.height) < _eTopY + window.game.blockSize * 1.5;
+        const _eFeet = ent.y + ent.height;
+        // Solo snapear si: no es de cueva, pies muy cerca de entGY, Y entGY es la superficie real.
+        const _eFeetNear = !ent.inCave
+            && Math.abs(_eFeet - entGY) < 24
+            && entGY <= _eTopY + window.game.blockSize * 2;
         if (_eFeetNear) {
-            if (ent.y + ent.height >= entGY)      { ent.y = entGY - ent.height; ent.vy = 0; }
-            else if (ent.vy >= 0 && ent.y + ent.height >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
+            if (_eFeet >= entGY)      { ent.y = entGY - ent.height; ent.vy = 0; }
+            else if (ent.vy >= 0 && _eFeet >= entGY - 22) { ent.y = entGY - ent.height; ent.vy = 0; }
         }
 
         // isGrounded real: combina superficie Y celdas UG directamente bajo los pies
