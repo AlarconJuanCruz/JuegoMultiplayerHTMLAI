@@ -1880,6 +1880,8 @@ window.draw = function() {
             const frac = Math.max(0, 1 - (now2 - sm.born) / sm.lifetime);
             if (frac <= 0) { window.scorchMarks.splice(si, 1); continue; }
             if (sm.x + sm.w < _visLeft || sm.x > _visRight + 80) continue;
+            if (_onSurface && sm.y > _surfCutY) continue;
+            if (!_onSurface && sm.y < _surfCutY) continue;
             C.globalAlpha = frac * sm.alpha * 0.75;
             C.fillStyle = 'rgba(8,4,0,0.9)';
             C.beginPath(); C.ellipse(sm.x+sm.w*0.5, sm.y+sm.h*0.5, sm.w*0.52, sm.h*0.45, 0, 0, Math.PI*2); C.fill();
@@ -1892,27 +1894,21 @@ window.draw = function() {
         const C = window.ctx; const now3 = window.game.frameCount || 0;
         for (const fire of window.fires) {
             if (fire.x + fire.w + 60 < _visLeft || fire.x - 60 > _visRight) continue;
+            if (_onSurface && fire.y > _surfCutY) continue;
+            if (!_onSurface && fire.y < _surfCutY) continue;
             const lifeFrac = Math.max(0, fire.life / fire.maxLife); if (lifeFrac <= 0) continue;
             const cx = fire.x + fire.w / 2; const baseY = fire.y + fire.h;
             const flicker = 0.88 + Math.sin(fire.phase + now3 * 0.17) * 0.12;
             const alpha = Math.min(1, lifeFrac * 3) * fire.intensity * flicker;
             C.save();
-            // Capa exterior (naranja)
-            C.globalAlpha = alpha * 0.65;
-            C.fillStyle = '#ff4400';
+            C.globalAlpha = alpha * 0.65; C.fillStyle = '#ff4400';
             C.beginPath(); C.ellipse(cx, baseY - fire.h*0.45, fire.w*0.52*flicker, fire.h*0.52, 0, 0, Math.PI*2); C.fill();
-            // Capa media (amarillo-naranja)
-            C.globalAlpha = alpha * 0.75;
-            C.fillStyle = '#ff8800';
+            C.globalAlpha = alpha * 0.75; C.fillStyle = '#ff8800';
             C.beginPath(); C.ellipse(cx, baseY - fire.h*0.35, fire.w*0.34*flicker, fire.h*0.38, 0, 0, Math.PI*2); C.fill();
-            // Núcleo (amarillo brillante)
-            C.globalAlpha = alpha * 0.85;
-            C.fillStyle = '#ffee44';
+            C.globalAlpha = alpha * 0.85; C.fillStyle = '#ffee44';
             C.beginPath(); C.ellipse(cx, baseY - fire.h*0.22, fire.w*0.18*flicker, fire.h*0.22, 0, 0, Math.PI*2); C.fill();
-            // Brasa ocasional (sin Math.random — usar frameCount)
             if ((now3 + (fire.x|0)) % 4 === 0) {
-                C.globalAlpha = alpha * 0.9;
-                C.fillStyle = '#fff8aa';
+                C.globalAlpha = alpha * 0.9; C.fillStyle = '#fff8aa';
                 const ex = cx + Math.sin(now3*0.3+fire.phase)*fire.w*0.2;
                 C.beginPath(); C.arc(ex, baseY - fire.h*(0.4+Math.abs(Math.sin(now3*0.07+fire.phase))*0.3), 1.5, 0, Math.PI*2); C.fill();
             }
@@ -1923,6 +1919,8 @@ window.draw = function() {
     // Flechas clavadas en el terreno
     window.stuckArrows.forEach(sa => {
         if (sa.x + 20 > _visLeft && sa.x - 20 < _visRight + 60) {
+            if (_onSurface && sa.y > _surfCutY) return;
+            if (!_onSurface && sa.y < _surfCutY) return;
             window.ctx.save(); window.ctx.translate(sa.x, sa.y); window.ctx.rotate(sa.angle);
             window.ctx.fillStyle = '#eee'; window.ctx.fillRect(-15, -1, 20, 2); window.ctx.fillStyle = '#666'; window.ctx.fillRect(5, -2, 4, 4); window.ctx.fillStyle = '#fff'; window.ctx.fillRect(-17, -2, 4, 4);
             window.ctx.restore();
@@ -1933,6 +1931,8 @@ window.draw = function() {
     if (window.particles.length > 0) {
         const _pByColor = {};
         for (const p of window.particles) {
+            if (_onSurface && p.y > _surfCutY) continue;
+            if (!_onSurface && p.y < _surfCutY) continue;
             const _k = p.color + '|' + Math.round(Math.max(0,Math.min(1,p.life))*10);
             if (!_pByColor[_k]) _pByColor[_k] = { color: p.color, alpha: Math.max(0,Math.min(1,p.life)), pts: [] };
             _pByColor[_k].pts.push(p);
@@ -1945,11 +1945,13 @@ window.draw = function() {
         window.ctx.globalAlpha = 1;
     }
 
-    // Polvo al correr — siempre medium (gradientes de polvo son caros y poco visibles)
+    // Polvo al correr
     if (window.dustParticles && window.dustParticles.length > 0) {
         const C = window.ctx; C.save();
         window.dustParticles.forEach(d => {
             const alpha = d.life * d.alpha * 0.55; if (alpha <= 0.02) return;
+            if (_onSurface && d.y > _surfCutY) return;
+            if (!_onSurface && d.y < _surfCutY) return;
             const g = d.gray;
             C.globalAlpha = alpha;
             C.fillStyle = `rgb(${g},${g},${g})`;
