@@ -129,7 +129,7 @@ window.startGame = function(multiplayer, ip = null, roomId = null) {
             // ── Verificación de versión: si el servidor tiene versión distinta, recargar ──
             // Esto garantiza que todos los clientes usen la misma versión de los archivos JS.
             // Cuando despliegues una actualización, incrementa SERVER_VERSION en server.js.
-            window._CLIENT_VERSION = 37;  // ← debe coincidir con SERVER_VERSION en server.js
+            window._CLIENT_VERSION = 38;  // ← debe coincidir con SERVER_VERSION en server.js
             window.socket.on('serverVersion', (v) => {
                 if (v !== window._CLIENT_VERSION) {
                     console.warn(`[versión] Servidor v${v} ≠ Cliente v${window._CLIENT_VERSION} → recargando…`);
@@ -1407,13 +1407,17 @@ function update() {
                 const _topY = _probeCD.topY;
                 const _foot = window.player.y + window.player.height;
                 const _rTop = Math.max(0, Math.floor((window.player.y - _topY) / _pbs));
-                // Excluir la fila-suelo: floor((_foot - topY) / bs) - 1.
-                // La fórmula anterior (_foot-2) incluía la fila de suelo cuando
-                // (_foot - topY) % bs >= 2, lo que ocurre durante caída/movimiento,
-                // causando que el suelo del túnel fuera detectado como pared.
                 const _rBot = Math.max(0, Math.floor((_foot - _topY) / _pbs) - 1);
                 for (let _r = _rTop; _r <= _rBot; _r++) {
-                    if (window.getUGCellV(_probeCol, _r) !== 'air') return true;
+                    if (window.getUGCellV(_probeCol, _r) !== 'air') {
+                        // Excluir celdas cuyo techo está al nivel o debajo de los pies:
+                        // son suelo, no pared. Sin esto, después de un step-up el probe
+                        // detecta el dirt de la columna adyacente como "pared" aunque el
+                        // jugador esté parado encima de él (en la superficie).
+                        const _cellTopY = _topY + _r * _pbs;
+                        if (_cellTopY >= _foot) continue;
+                        return true;
+                    }
                 }
                 return false;
             })();

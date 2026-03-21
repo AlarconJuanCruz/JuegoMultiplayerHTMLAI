@@ -193,32 +193,45 @@ window.checkBlockCollisions = function (axis) {
                 const cellY = topY + vr * bs;
 
                 // Excluir celda-suelo: su techo está en el cuarto inferior del AABB.
-                // Esto permite caminar sobre bordes sin que el piso bloquee el eje X.
                 if (cellY >= pFeetY - bs * 0.5) continue;
 
                 // Solapamiento vertical real del cuerpo con la celda
-                if (p.y   >= cellY + bs) continue;  // celda completamente sobre la cabeza
-                if (pFeetY <= cellY)     continue;   // celda completamente bajo los pies
+                if (p.y   >= cellY + bs) continue;
+                if (pFeetY <= cellY)     continue;
+
+                // ── Step-up para rows de tierra superficial (0-2) ──────────────
+                // Cuando el jugador está en un agujero minado de 1-2 bloques y camina
+                // hacia una columna no-minada adyacente, en vez de bloquearlo en X,
+                // subirlo a la superficie de esa columna (como subir un escalón).
+                // Sin esto el jugador queda atrapado para siempre: la fila de dirt
+                // adyacente detecta una "pared" aunque sea salida al exterior.
+                if (vr < 3) {
+                    // Encontrar la fila más superficial sólida de esta columna
+                    let _stepRow = vr;
+                    while (_stepRow > 0 && window.getUGCellV(vc, _stepRow - 1) !== 'air') _stepRow--;
+                    const _stepFeetY = topY + _stepRow * bs;
+                    const _stepDelta = pFeetY - _stepFeetY;
+                    // Solo si el step-up es de ≤2 bloques Y sería hacia arriba
+                    if (_stepDelta > 0 && _stepDelta <= bs * 2 + 4) {
+                        p.y = _stepFeetY - pH;
+                        if (p.vy > 0) p.vy = 0;
+                        p.isGrounded = true;
+                        continue; // X no bloqueado — el jugador sube
+                    }
+                }
 
                 // Dirección del push: comparar centro del jugador con centro de celda.
-                // Funciona con vx=0 (caída vertical) y con vx≠0 (movimiento lateral).
                 const playerCX = p.x + pW * 0.5;
                 const cellCX   = cellX + bs * 0.5;
 
                 if (playerCX > cellCX) {
-                    // Jugador a la derecha de la celda → empujar a la derecha
                     p.x = cellX + bs + 0.5;
                 } else {
-                    // Jugador a la izquierda de la celda → empujar a la izquierda
                     p.x = cellX - pW - 0.5;
                 }
                 p.vx = 0;
                 hitWallX = true;
-                // CRÍTICO: romper el loop de columnas.
-                // Los valores _xL/_xR son anteriores al push; continuar con la
-                // siguiente columna usaría bordes obsoletos y podría causar un
-                // segundo push incorrecto.
-                vc = colR + 1; // fuerza salida del for externo
+                vc = colR + 1;
                 break;
             }
         }
